@@ -4,6 +4,9 @@ tinysound has no dependencies other than the C-standard library (memset, memcmp,
 
 Please view the header tinysound.h for detailed documentation. For now here's a quick example of loading in some sounds and playing them:
 
+    #define TS_IMPLEMENTATION
+    #include "tinysound.h"
+    
     void LowLevelAPI( tsContext* ctx )
     {
         // load a couple sounds
