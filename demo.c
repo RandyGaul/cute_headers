@@ -3,8 +3,8 @@
 
 void LowLevelAPI( tsContext* ctx )
 {
-	tsLoadedound airlock = tsLoadWAV( "airlock.wav" );
-	tsLoadedound jump = tsLoadWAV( "jump.wav" );
+	tsLoadedSound airlock = tsLoadWAV( "airlock.wav" );
+	tsLoadedSound jump = tsLoadWAV( "jump.wav" );
 	tsPlayingSound s0 = tsMakePlayingSound( &airlock );
 	tsPlayingSound s1 = tsMakePlayingSound( &jump );
 	tsLoopSound( &s0, 1 );
@@ -45,9 +45,9 @@ float Time( )
 
 void HighLevelAPI( tsContext* ctx )
 {
-	tsLoadedound airlock = tsLoadWAV( "airlock.wav" );
-	tsLoadedound rupee1 = tsLoadWAV( "LTTP_Rupee1.wav" );
-	tsLoadedound rupee2 = tsLoadWAV( "LTTP_Rupee2.wav" );
+	tsLoadedSound airlock = tsLoadWAV( "airlock.wav" );
+	tsLoadedSound rupee1 = tsLoadWAV( "LTTP_Rupee1.wav" );
+	tsLoadedSound rupee2 = tsLoadWAV( "LTTP_Rupee2.wav" );
 	tsPlaySoundDef def0 = tsMakeDef( &airlock );
 	tsPlaySoundDef def1 = tsMakeDef( &rupee1 );
 	tsPlaySoundDef def2 = tsMakeDef( &rupee2 );

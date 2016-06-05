@@ -141,7 +141,7 @@ typedef struct
 	int sample_count;
 	int channel_count;
 	int16_t* channels[ 2 ];
-} tsLoadedound;
+} tsLoadedSound;
 
 // represents an instance of a tsLoadedSound, can be played through
 // the tsContext
@@ -155,7 +155,7 @@ typedef struct tsPlayingSound
 	float pan0;
 	float pan1;
 	int sample_index;
-	tsLoadedound* loaded_sound;
+	tsLoadedSound* loaded_sound;
 	struct tsPlayingSound* next;
 } tsPlayingSound;
 
@@ -163,9 +163,9 @@ typedef struct tsPlayingSound
 struct tsContext;
 typedef struct tsContext tsContext;
 
-// The returned struct will contain a null pointer in tsLoadedound::channel[ 0 ]
+// The returned struct will contain a null pointer in tsLoadedSound::channel[ 0 ]
 // in the case of errors. Read g_tsErrorReason string for details on what happened.
-tsLoadedound tsLoadWAV( const char* path );
+tsLoadedSound tsLoadWAV( const char* path );
 
 // playing_pool_count -- 0 to setup low-level API, non-zero to size the internal
 // memory pool for tsPlayingSound instances
@@ -200,7 +200,7 @@ void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay_in_seconds );
 
 // LOW-LEVEL API
-tsPlayingSound tsMakePlayingSound( tsLoadedound* loaded );
+tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
 void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
 
 // HIGH-LEVEL API
@@ -212,11 +212,11 @@ typedef struct
 	float volume_right;
 	float pan;
 	float delay;
-	tsLoadedound* loaded;
+	tsLoadedSound* loaded;
 } tsPlaySoundDef;
 
 tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
-tsPlaySoundDef tsMakeDef( tsLoadedound* sound );
+tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
 
 #define TINYSOUND_H
 #endif
@@ -434,7 +434,7 @@ static char* tsNext( char* data )
 #define CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto err; } } while ( 0 )
 #define ASSERT( X ) do { if ( !(X) ) *(int*)0 = 0; } while ( 0 )
 
-tsLoadedound tsLoadWAV( const char* path )
+tsLoadedSound tsLoadWAV( const char* path )
 {
 	#pragma pack( push, 1 )
 	typedef struct
@@ -459,7 +459,7 @@ tsLoadedound tsLoadWAV( const char* path )
 	} Fmt;
 	#pragma pack( pop )
 
-	tsLoadedound sound = { 0 };
+	tsLoadedSound sound = { 0 };
 	char* data = (char*)tsReadFileToMemory( path, 0 );
 	char* first = data;
 	CHECK( data, "Unable to read input file (file doesn't exist, or could not allocate heap memory." );
@@ -522,7 +522,7 @@ err:
 	return sound;
 }
 
-tsPlayingSound tsMakePlayingSound( tsLoadedound* loaded )
+tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded )
 {
 	tsPlayingSound playing;
 	playing.active = 0;
@@ -686,7 +686,7 @@ void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay_in_seconds )
 	sound->sample_index = -(int)(delay_in_seconds * (float)ctx->Hz);
 }
 
-tsPlaySoundDef tsMakeDef( tsLoadedound* sound )
+tsPlaySoundDef tsMakeDef( tsLoadedSound* sound )
 {
 	tsPlaySoundDef def;
 	def.paused = 0;
@@ -756,7 +756,7 @@ void tsMix( tsContext* ctx )
 	while ( *ptr )
 	{
 		tsPlayingSound* playing = *ptr;
-		tsLoadedound* loaded = playing->loaded_sound;
+		tsLoadedSound* loaded = playing->loaded_sound;
 		int16_t* cA = loaded->channels[ 0 ];
 		int16_t* cB = loaded->channels[ 1 ];
 		int mix_count = samples_to_write;

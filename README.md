@@ -10,8 +10,8 @@ Please view the header tinysound.h for detailed documentation. For now here's a 
     void LowLevelAPI( tsContext* ctx )
     {
         // load a couple sounds
-        tsLoadedound airlock = tsLoadWAV( "airlock.wav" );
-        tsLoadedound jump = tsLoadWAV( "jump.wav" );
+        tsLoadedSound airlock = tsLoadWAV( "airlock.wav" );
+        tsLoadedSound jump = tsLoadWAV( "jump.wav" );
     
         // make playable instances
         tsPlayingSound s0 = tsMakePlayingSound( &airlock );
