@@ -109,6 +109,25 @@
 	and struct types.
 */
 
+/*
+	Known Limitations:
+
+	* Windows only. Since I last checked the Steam survey over 95% of users ran Windows.
+		Since tinysound is for games there's just not a good reason me to personally spend
+		time on other platforms.
+	* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
+		guarantee it will work for all kinds of wav files, but it certainly does for the common
+		kind (and can be changed fairly easily if someone wanted to extend it).
+	* Only supports 16 bits per sample.
+	* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
+		to float, mix all samples, and write back to DirectSound as 16 bit integers. In
+		practice this works very well and clipping is not often a big problem.
+	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
+		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4rd
+		parameter (buffer scale in seconds).
+	* No SIMD support (for now).
+*/
+
 #if !defined( TINYSOUND_H )
 
 #include <stdint.h>
