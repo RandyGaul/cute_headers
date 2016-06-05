@@ -434,7 +434,7 @@ static char* tsNext( char* data )
 #define CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto err; } } while ( 0 )
 #define ASSERT( X ) do { if ( !(X) ) *(int*)0 = 0; } while ( 0 )
 
-static tsLoadedound tsLoadWAV( const char* path )
+tsLoadedound tsLoadWAV( const char* path )
 {
 	#pragma pack( push, 1 )
 	typedef struct
@@ -522,7 +522,7 @@ err:
 	return sound;
 }
 
-static tsPlayingSound tsMakePlayingSound( tsLoadedound* loaded )
+tsPlayingSound tsMakePlayingSound( tsLoadedound* loaded )
 {
 	tsPlayingSound playing;
 	playing.active = 0;
@@ -538,27 +538,27 @@ static tsPlayingSound tsMakePlayingSound( tsLoadedound* loaded )
 	return playing;
 }
 
-static int tsIsActive( tsPlayingSound* sound )
+int tsIsActive( tsPlayingSound* sound )
 {
 	return sound->active;
 }
 
-static void tsStopSound( tsPlayingSound* sound )
+void tsStopSound( tsPlayingSound* sound )
 {
 	sound->active = 0;
 }
 
-static void tsLoopSound( tsPlayingSound* sound, int zero_for_no_loop )
+void tsLoopSound( tsPlayingSound* sound, int zero_for_no_loop )
 {
 	sound->looped = zero_for_no_loop;
 }
 
-static void tsPauseSound( tsPlayingSound* sound, int one_for_paused )
+void tsPauseSound( tsPlayingSound* sound, int one_for_paused )
 {
 	sound->paused = one_for_paused;
 }
 
-static void tsSetPan( tsPlayingSound* sound, float pan )
+void tsSetPan( tsPlayingSound* sound, float pan )
 {
 	if ( pan > 1.0f ) pan = 1.0f;
 	else if ( pan < 0.0f ) pan = 0.0f;
@@ -568,7 +568,7 @@ static void tsSetPan( tsPlayingSound* sound, float pan )
 	sound->pan1 = right;
 }
 
-static void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
+void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 {
 	if ( volume_left < 0.0f ) volume_left = 0.0f;
 	if ( volume_right < 0.0f ) volume_right = 0.0f;
@@ -593,7 +593,7 @@ struct tsContext
 	tsPlayingSound* playing_free;
 };
 
-static tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count )
+tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count )
 {
 	int bps = sizeof( INT16 ) * 2;
 	int buffer_size = play_frequency_in_Hz * bps * num_buffered_seconds;
@@ -657,7 +657,7 @@ static tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int 
 	return ctx;
 }
 
-static void tsShutdownContext( tsContext* ctx )
+void tsShutdownContext( tsContext* ctx )
 {
 	ctx->buffer->lpVtbl->Release( ctx->buffer );
 	ctx->primary->lpVtbl->Release( ctx->primary );
@@ -665,7 +665,7 @@ static void tsShutdownContext( tsContext* ctx )
 	free( ctx );
 }
 
-static void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
+void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 {
 	// Cannot use tsPlayingSound if MaketsContext was passed non-zero for playing_pool_count
 	// since non-zero playing_pool_count means the context is doing some memory-management
@@ -680,13 +680,13 @@ static void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 }
 
 // NOTE: does not allow delay_in_seconds to be negative (clamps at 0)
-static void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay_in_seconds )
+void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay_in_seconds )
 {
 	if ( delay_in_seconds < 0.0f ) delay_in_seconds = 0.0f;
 	sound->sample_index = -(int)(delay_in_seconds * (float)ctx->Hz);
 }
 
-static tsPlaySoundDef tsMakeDef( tsLoadedound* sound )
+tsPlaySoundDef tsMakeDef( tsLoadedound* sound )
 {
 	tsPlaySoundDef def;
 	def.paused = 0;
@@ -699,7 +699,7 @@ static tsPlaySoundDef tsMakeDef( tsLoadedound* sound )
 	return def;
 }
 
-static tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
+tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 {
 	tsPlayingSound* playing = ctx->playing_free;
 	if ( !playing ) return 0;
@@ -716,7 +716,7 @@ static tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 	return playing;
 }
 
-static void tsMix( tsContext* ctx )
+void tsMix( tsContext* ctx )
 {
 	// compute bytes to be written to direct sound
 	DWORD play_cursor;
