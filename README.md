@@ -1,6 +1,6 @@
 tinysound is a single-header C API for manipulating and playing sounds through DirectSound. tinysound is mainly intended for use in games. DirectSound implies Windows support only. Why only Windows? Since I last checked the Steam survey over 95% of users were running a Windows operating system.
 
-tinysound has no dependencies other than the C-standard library (memset, memcmp, malloc, free, sqrtf, fopen, fclose) and dsound.dll/dsound.lib. tinysound does not even have to include <dsound.h> (details below)!
+tinysound has no dependencies other than the C-standard library (memset, memcmp, malloc, free, sqrtf, fopen, fclose) and dsound.dll/dsound.lib. tinysound does not even have to include dsound.h (details below)!
 
 Please view the header tinysound.h for detailed documentation. For now here's a quick example of loading in some sounds and playing them:
 
@@ -38,4 +38,4 @@ Just include tinysound.h into your project and you're good to go! Be sure to do 
     #define TS_IMPLEMENTATION
     #include "tinysound.h"
 
-Sometimes it is very annoying to have to include <dsound.h>, and in the event users do *not* want to include this file (for any reason, like compile times, or just preference) feel free to define TS_USE_DSOUND_HEADER as 0 inside of tinysound.h. This will remove the <dsound.h> header dependency by pulling in only the minimal necessary header symbols from <dsound.h> and <windows.h>.
+Sometimes it is very annoying to have to include dsound.h, and in the event users do *not* want to include this file (for any reason, like compile times, or just preference) feel free to define TS_USE_DSOUND_HEADER as 0 inside of tinysound.h. This will remove the dsound.h header dependency by pulling in only the minimal necessary header symbols from dsound.h and windows.h.
