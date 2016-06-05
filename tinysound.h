@@ -103,6 +103,8 @@
 	Usually he high-level API will be used, but if someone is *really* picky about
 	their memory usage, or wants more control, the low-level API can be used.
 
+	Be sure to link against dsound.dll (or dsound.lib).
+
 	Read the rest of the header for specific details on all available functions
 	and struct types.
 */
@@ -203,7 +205,7 @@ tsPlaySoundDef tsMakeDef( tsLoadedound* sound );
 #ifdef TS_IMPLEMENTATION
 
 #include <stdlib.h>	// malloc, free
-#include <math.h>	// sqrt, 
+#include <math.h>	// sqrt
 #include <stdio.h>	// fopen, fclose
 #include <string.h>	// memcmp, memset
 
