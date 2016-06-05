@@ -6,10 +6,15 @@ Please view the header tinysound.h for detailed documentation. For now here's a 
 
     void LowLevelAPI( tsContext* ctx )
     {
+        // load a couple sounds
         tsLoadedound airlock = tsLoadWAV( "airlock.wav" );
         tsLoadedound jump = tsLoadWAV( "jump.wav" );
+    
+        // make playable instances
         tsPlayingSound s0 = tsMakePlayingSound( &airlock );
         tsPlayingSound s1 = tsMakePlayingSound( &jump );
+    
+        // setup a loop and play it
         tsLoopSound( &s0, 1 );
         tsInsertSound( ctx, &s0 );
     
@@ -18,6 +23,7 @@ Please view the header tinysound.h for detailed documentation. For now here's a 
             if ( GetAsyncKeyState( VK_ESCAPE ) )
                 break;
     
+            // play the sound
             if ( GetAsyncKeyState( VK_SPACE ) )
                 tsInsertSound( ctx, &s1 );
     
@@ -30,6 +36,7 @@ Please view the header tinysound.h for detailed documentation. For now here's a 
         HWND hwnd = GetConsoleWindow( );
         tsContext* ctx = tsMakeContext( hwnd, 48100, 15, 1, 0 );
         LowLevelAPI( );
+        tsShutdownContext( ctx );
         return 0;
     }
 
