@@ -18,9 +18,13 @@
 */
 
 /*
-	tinsound.h - v1.0
+	tinysound.h - v1.01
 	Revision history:
 		1.0  (06/04/2016) initial release
+		1.01 (06/06/2016) load WAV from memory
+		                  separate portable and OS-specific code in tsMix
+		                  fixed bug causing audio glitches when sounds ended
+		                  added stb_vorbis loaders + demo example
 */
 
 /*
@@ -82,7 +86,7 @@
 			0 (last param) --  int, number of elements in tsPlayingSound pool
 	
 		We create a tsPlayingSound like so:
-		tsLoadedSound loaded = LoadWAV( "path_to_file/filename.wav" );
+		tsLoadedSound loaded = tsLoadWAV( "path_to_file/filename.wav" );
 		tsPlayingSound playing_sound = tsMakePlayingSound( &loaded );
 	
 		Mess around with various settings with the variou ts*** functions. Here's
@@ -165,7 +169,20 @@ typedef struct tsContext tsContext;
 
 // The returned struct will contain a null pointer in tsLoadedSound::channel[ 0 ]
 // in the case of errors. Read g_tsErrorReason string for details on what happened.
+// Calls tsReadMemWAV internally.
 tsLoadedSound tsLoadWAV( const char* path );
+
+// If stb_vorbis was included *before* tinysound go ahead and create
+// some functions for dealing with OGG files.
+#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
+void tsReadMemOGG( void* memory, int length, int* sample_rate, tsLoadedSound* sound );
+tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
+#endif
+
+// Reads a WAV file from memory. Still allocates memory for the tsLoadedSound since
+// WAV format will interlace stereo, and we need separate data streams to do SIMD
+// properly.
+void tsReadMemWAV( void* memory, tsLoadedSound* sound );
 
 // playing_pool_count -- 0 to setup low-level API, non-zero to size the internal
 // memory pool for tsPlayingSound instances
@@ -431,19 +448,14 @@ static char* tsNext( char* data )
 
 #pragma push_macro( "CHECK" )
 #pragma push_macro( "ASSERT" )
+#undef CHECK
+#undef ASSERT
 #define CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto err; } } while ( 0 )
 #define ASSERT( X ) do { if ( !(X) ) *(int*)0 = 0; } while ( 0 )
 
-tsLoadedSound tsLoadWAV( const char* path )
+void tsReadMemWAV( void* memory, tsLoadedSound* sound )
 {
 	#pragma pack( push, 1 )
-	typedef struct
-	{
-		uint32_t riff_id;
-		uint32_t size;
-		uint32_t wave_id;
-	} Header;
-
 	typedef struct
 	{
 		uint16_t wFormatTag;
@@ -459,15 +471,12 @@ tsLoadedSound tsLoadWAV( const char* path )
 	} Fmt;
 	#pragma pack( pop )
 
-	tsLoadedSound sound = { 0 };
-	char* data = (char*)tsReadFileToMemory( path, 0 );
+	char* data = (char*)memory;
 	char* first = data;
 	CHECK( data, "Unable to read input file (file doesn't exist, or could not allocate heap memory." );
 	CHECK( tsFourCC( "RIFF", data ), "Incorrect file header; is this a WAV file?" );
 	CHECK( tsFourCC( "WAVE", data + 8 ), "Incorrect file header; is this a WAV file?" );
 
-	Header hdr;
-	hdr = *(Header*)data;
 	data += 12;
 
 	CHECK( tsFourCC( "fmt ", data ), "fmt chunk not found." );
@@ -481,46 +490,102 @@ tsLoadedSound tsLoadWAV( const char* path )
 	data = tsNext( data );
 	CHECK( tsFourCC( "data", data ), "data chunk not found." );
 	int sample_size = *((uint32_t*)(data + 4));
-	sound.sample_count = sample_size / (fmt.nChannels * sizeof( uint16_t ));
-	sound.channel_count = fmt.nChannels;
+	sound->sample_count = sample_size / (fmt.nChannels * sizeof( uint16_t ));
+	sound->channel_count = fmt.nChannels;
 
-	switch ( fmt.nChannels )
+	switch ( sound->channel_count )
 	{
 	case 1:
-		sound.channels[ 0 ] = (int16_t*)malloc( sample_size );
-		sound.channels[ 1 ] = 0;
-		memcpy( sound.channels[ 0 ], data + 8, sample_size );
+		sound->channels[ 0 ] = (int16_t*)malloc( sample_size );
+		sound->channels[ 1 ] = 0;
+		memcpy( sound->channels[ 0 ], data + 8, sample_size );
 		break;
 
 	case 2:
 	{
 		int16_t* a = (int16_t*)malloc( sample_size );
-		int16_t* b = a + sound.sample_count;
+		int16_t* b = a + sound->sample_count;
 		int16_t* samples = (int16_t*)(data + 8);
 
-		for ( int i = 0, j = 0; i < sound.sample_count * 2; ++i, j += 2 )
+		for ( int i = 0, j = 0; i < sound->sample_count * 2; ++i, j += 2 )
 		{
 			a[ i ] = samples[ j ];
 			b[ i ] = samples[ j + 1 ];
 		}
 
-		sound.channels[ 0 ] = a;
-		sound.channels[ 1 ] = b;
+		sound->channels[ 0 ] = a;
+		sound->channels[ 1 ] = b;
 	}	break;
 
 	default:
 		CHECK( 0, "unsupported channel count (only support mono and stereo)." );
 	}
 
-	free( first );
-	return sound;
+	return;
 
 err:
-	free( sound.channels[ 0 ] );
-	free( first );
+	free( sound->channels[ 0 ] );
 	memset( &sound, 0, sizeof( sound ) );
+}
+
+tsLoadedSound tsLoadWAV( const char* path )
+{
+	tsLoadedSound sound = { 0 };
+	char* wav = (char*)tsReadFileToMemory( path, 0 );
+	tsReadMemWAV( wav, &sound );
+	free( wav );
 	return sound;
 }
+
+// If stb_vorbis was included *before* tinysound go ahead and create
+// some functions for dealing with OGG files.
+#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
+void tsReadMemOGG( void* memory, int length, int* sample_rate, tsLoadedSound* sound )
+{
+	int16_t* samples;
+	int channel_count;
+	int sample_count = stb_vorbis_decode_memory( (const unsigned char*)memory, length, &channel_count, sample_rate, &samples );
+
+	int16_t* a;
+    int16_t* b;
+
+	if ( channel_count == 1 )
+	{
+		a = samples;
+		b = 0;
+	}
+
+	else
+	{
+		a = (int16_t*)malloc( channel_count * sample_count * sizeof( int16_t ) );
+		b = a + sample_count;
+
+		for ( int i = 0, j = 0; i < sample_count * 2; ++i, j += 2 )
+		{
+			a[ i ] = samples[ j ];
+			b[ i ] = samples[ j + 1 ];
+		}
+
+		free( samples );
+	}
+
+	sound->sample_count = sample_count;
+	sound->channel_count = channel_count;
+	sound->channels[ 0 ] = a;
+	sound->channels[ 1 ] = b;
+}
+
+tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
+{
+	int length;
+	void* memory = tsReadFileToMemory( path, &length );
+	tsLoadedSound sound;
+	tsReadMemOGG( memory, length, sample_rate, &sound );
+	free( memory );
+
+	return sound;
+}
+#endif
 
 tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded )
 {
@@ -667,7 +732,7 @@ void tsShutdownContext( tsContext* ctx )
 
 void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 {
-	// Cannot use tsPlayingSound if MaketsContext was passed non-zero for playing_pool_count
+	// Cannot use tsPlayingSound if tsMakeContext was passed non-zero for playing_pool_count
 	// since non-zero playing_pool_count means the context is doing some memory-management
 	// for a playing sound pool. InsertSound assumes the pool does not exist, and is apart
 	// of the lower-level API (see top of this header for documentation details).
@@ -716,26 +781,91 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 	return playing;
 }
 
-void tsMix( tsContext* ctx )
+static void tsPosition( tsContext* ctx, int* bytes_to_lock, int* bytes_to_write )
 {
 	// compute bytes to be written to direct sound
 	DWORD play_cursor;
 	DWORD write_cursor;
 	ctx->buffer->lpVtbl->GetCurrentPosition( ctx->buffer, &play_cursor, &write_cursor );
 
-	DWORD bytes_to_lock = (ctx->running_index * ctx->bps) % ctx->buffer_size;
+	DWORD lock = (ctx->running_index * ctx->bps) % ctx->buffer_size;
 	DWORD target_cursor = (play_cursor + ctx->latency_samples * ctx->bps) % ctx->buffer_size;
-	DWORD bytes_to_write;
+	DWORD write;
 
-	if ( bytes_to_lock > target_cursor )
+	if ( lock > target_cursor )
 	{
-		bytes_to_write = (ctx->buffer_size - bytes_to_lock) + target_cursor;
+		write = (ctx->buffer_size - lock) + target_cursor;
 	}
 
 	else
 	{
-		bytes_to_write = target_cursor - bytes_to_lock;
+		write = target_cursor - lock;
 	}
+
+	*bytes_to_lock = lock;
+	*bytes_to_write = write;
+}
+
+static void tsMixDS( tsContext* ctx, float* floatA, float* floatB, int bytes_to_lock, int bytes_to_write )
+{
+	// copy mixer buffers to direct sound
+	void* region1;
+	DWORD size1;
+	void* region2;
+	DWORD size2;
+	HRESULT hr = ctx->buffer->lpVtbl->Lock( ctx->buffer, bytes_to_lock, bytes_to_write, &region1, &size1, &region2, &size2, 0 );
+
+	if ( hr == DSERR_BUFFERLOST )
+	{
+		ctx->buffer->lpVtbl->Restore( ctx->buffer );
+		hr = ctx->buffer->lpVtbl->Lock( ctx->buffer, bytes_to_lock, bytes_to_write, &region1, &size1, &region2, &size2, 0 );
+	}
+
+	if ( !SUCCEEDED( hr ) )
+		return;
+
+	unsigned running_index = ctx->running_index;
+	INT16* sample1 = (INT16*)region1;
+	DWORD sample1_count = size1 / ctx->bps;
+
+	for ( DWORD i = 0; i < sample1_count; ++i )
+	{
+		INT16 sampleA = (INT16)(*floatA++);
+		INT16 sampleB = (INT16)(*floatB++);
+		*sample1++ = sampleA;
+		*sample1++ = sampleB;
+		++running_index;
+	}
+
+	INT16* sample2 = (INT16*)region2;
+	DWORD sample2_count = size2 / ctx->bps;
+
+	for ( DWORD i = 0; i < sample2_count; ++i )
+	{
+		INT16 sampleA = (INT16)*floatA++;
+		INT16 sampleB = (INT16)*floatB++;
+		*sample2++ = sampleA;
+		*sample2++ = sampleB;
+		++running_index;
+	}
+
+	ctx->buffer->lpVtbl->Unlock( ctx->buffer, region1, size1, region2, size2 );
+	ctx->running_index = running_index;
+
+	// meager hack to fill out sound buffer before playing
+	static int first;
+	if ( !first )
+	{
+		ctx->buffer->lpVtbl->Play( ctx->buffer, 0, 0, DSBPLAY_LOOPING );
+		first = 1;
+	}
+}
+
+void tsMix( tsContext* ctx )
+{
+	int bytes_to_lock;
+	int bytes_to_write;
+	tsPosition( ctx, &bytes_to_lock, &bytes_to_write );
 
 	if ( !bytes_to_write )
 		return;
@@ -762,6 +892,7 @@ void tsMix( tsContext* ctx )
 		int mix_count = samples_to_write;
 		int offset = playing->sample_index;
 		int remaining = loaded->sample_count - offset;
+		ASSERT( remaining > 0 );
 		if ( remaining < mix_count ) mix_count = remaining;
 		float vA = playing->volume0 * playing->pan0;
 		float vB = playing->volume1 * playing->pan1;
@@ -796,6 +927,7 @@ void tsMix( tsContext* ctx )
 		if ( playing->paused )
 			goto get_next_playing_sound;
 
+		// NOTE: These loops are *very* SIMD ready.
 		switch ( loaded->channel_count )
 		{
 		case 2:
@@ -804,8 +936,8 @@ void tsMix( tsContext* ctx )
 			{
 				float A = (float)cA[ i + offset ];
 				float B = (float)cB[ i + offset ];
-				floatA[ i ] += A * vA;
-				floatB[ i ] += B * vB;
+				floatA[ i ] += A;
+				floatB[ i ] += B;
 			}
 		}	break;
 
@@ -813,8 +945,8 @@ void tsMix( tsContext* ctx )
 			for ( int i = delay_offset; i < mix_count - delay_offset; ++i )
 			{
 				float A = (float)cA[ i + offset ];
-				floatA[ i ] += A * vA;
-				floatB[ i ] += A * vB;
+				floatA[ i ] += A;
+				floatB[ i ] += A;
 			}
 			break;
 		}
@@ -840,6 +972,9 @@ void tsMix( tsContext* ctx )
 				playing->next = ctx->playing_free;
 				ctx->playing_free = playing;
 			}
+
+			// we already incremented next pointer, so don't do it again
+			continue;
 		}
 
 	get_next_playing_sound:
@@ -847,57 +982,7 @@ void tsMix( tsContext* ctx )
 		else break;
 	}
 
-	// copy mixer buffers to direct sound
-	void* region1;
-	DWORD size1;
-	void* region2;
-	DWORD size2;
-	HRESULT hr = ctx->buffer->lpVtbl->Lock( ctx->buffer, bytes_to_lock, bytes_to_write, &region1, &size1, &region2, &size2, 0 );
-
-	if ( hr == DSERR_BUFFERLOST )
-	{
-		ctx->buffer->lpVtbl->Restore( ctx->buffer );
-		hr = ctx->buffer->lpVtbl->Lock( ctx->buffer, bytes_to_lock, bytes_to_write, &region1, &size1, &region2, &size2, 0 );
-	}
-
-	if ( !SUCCEEDED( hr ) )
-		return;
-
-	unsigned running_index = ctx->running_index;
-	INT16* sample1 = (INT16*)region1;
-	DWORD sample1_count = size1 / ctx->bps;
-
-	for ( DWORD i = 0; i < sample1_count; ++i )
-	{
-		INT16 sampleA = (INT16)*floatA++;
-		INT16 sampleB = (INT16)*floatB++;
-		*sample1++ = sampleA;
-		*sample1++ = sampleB;
-		++running_index;
-	}
-
-	INT16* sample2 = (INT16*)region2;
-	DWORD sample2_count = size2 / ctx->bps;
-
-	for ( DWORD i = 0; i < sample2_count; ++i )
-	{
-		INT16 sampleA = (INT16)*floatA++;
-		INT16 sampleB = (INT16)*floatB++;
-		*sample2++ = sampleA;
-		*sample2++ = sampleB;
-		++running_index;
-	}
-
-	ctx->buffer->lpVtbl->Unlock( ctx->buffer, region1, size1, region2, size2 );
-	ctx->running_index = running_index;
-
-	// meager hack to fill out sound buffer before playing
-	static int first;
-	if ( !first )
-	{
-		ctx->buffer->lpVtbl->Play( ctx->buffer, 0, 0, DSBPLAY_LOOPING );
-		first = 1;
-	}
+	tsMixDS( ctx, floatA, floatB, bytes_to_lock, bytes_to_write );
 }
 
 #pragma pop_macro( "CHECK" )

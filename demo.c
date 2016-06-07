@@ -1,5 +1,24 @@
+#include "stb_vorbis.c"
+#undef L
+#undef C
+#undef R
+
 #define TS_IMPLEMENTATION
 #include "tinysound.h"
+
+void Vorbis( tsContext* ctx )
+{
+	// make these static as a hacky way to keep them around
+	// once this function returns.
+	static tsLoadedSound loaded;
+	static tsPlayingSound sound;
+	int sample_rate;
+
+	loaded = tsLoadOGG( "thingy.ogg", &sample_rate );
+	sound = tsMakePlayingSound( &loaded );
+	tsSetVolume( &sound, 0.5f, 0.5f );
+	tsInsertSound( ctx, &sound );
+}
 
 void LowLevelAPI( tsContext* ctx )
 {
@@ -7,8 +26,11 @@ void LowLevelAPI( tsContext* ctx )
 	tsLoadedSound jump = tsLoadWAV( "jump.wav" );
 	tsPlayingSound s0 = tsMakePlayingSound( &airlock );
 	tsPlayingSound s1 = tsMakePlayingSound( &jump );
-	tsLoopSound( &s0, 1 );
-	tsInsertSound( ctx, &s0 );
+	//tsInsertSound( ctx, &s0 );
+
+	// Play the vorbis song thingy.ogg, or loop airlock
+	if ( 0 ) tsLoopSound( &s0, 1 );
+	else Vorbis( ctx );
 
 	while ( 1 )
 	{
@@ -99,15 +121,17 @@ int main( )
 	int frequency = 48100; // a good standard frequency
 	int latency_in_Hz = 15; // a good latency, too high will cause artifacts, too low will create noticeable delays
 	int buffered_seconds = 5; // number of seconds the buffer will hold in memory. want this long enough in case of frame-delays
-	int use_playing_pool = 1; // non-zero uses high-level API, 0 uses low-level API
+	int use_playing_pool = 0; // non-zero uses high-level API, 0 uses low-level API
 	int num_elements_in_playing_pool = use_playing_pool ? 5 : 0; // pooled memory array size for playing sounds
 
 	// initializes direct sound and allocate necessary memory
 	tsContext* ctx = tsMakeContext( GetConsoleWindow( ), frequency, latency_in_Hz, buffered_seconds, num_elements_in_playing_pool );
 
+
 	if ( !use_playing_pool )
 	{
-		// play airlock sound upon startup and loop it
+		// play airlock sound upon startup and loop it (or play the ogg file,
+		// change the if statement inside to try each out),
 		// press space to play jump sound
 		LowLevelAPI( ctx );
 	}
