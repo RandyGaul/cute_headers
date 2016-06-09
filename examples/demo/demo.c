@@ -24,7 +24,7 @@ void Vorbis( tsContext* ctx )
 void LowLevelAPI( tsContext* ctx )
 {
 	tsLoadedSound airlock = tsLoadWAV( "airlock.wav" );
-	tsLoadedSound jump = tsLoadWAV( "jump.wav" );
+	tsLoadedSound jump = tsLoadWAV( "../jump.wav" );
 	tsPlayingSound s0 = tsMakePlayingSound( &airlock );
 	tsPlayingSound s1 = tsMakePlayingSound( &jump );
 	tsInsertSound( ctx, &s0 );
