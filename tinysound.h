@@ -116,11 +116,21 @@
 		parameter (buffer scale in seconds).
 */
 
+/*
+	FAQ
+	Q Why DirectSound instead of (insert API here)?
+	A Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
+	shippaed on Windows XP all the way through Windows 10 -- using this header effectively intro-
+	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
+	implement needed features, and users won't hear the difference between various APIs. Latency is
+	not that great with DS but it is shippable.
+*/
+
 #if !defined( TINYSOUND_H )
 
 #include <stdint.h>
 
-// read this in the event of LoadWAV errors
+// read this in the event of tsLoadWAV/tsLoadOGG errors
 extern const char* g_tsErrorReason;
 
 // stores a loaded sound in memory
@@ -201,7 +211,7 @@ void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 // delays sound before actually playing it. Requires context to be passed in
 // since there's a conversion from seconds to samples per second.
 // If one were so inclined another version could be implemented like:
-// void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay, int samples_per_second )
+// void tsSetDelay( tsPlayingSound* sound, float delay, int samples_per_second )
 void tsSetDelay( tsContext* ctx, tsPlayingSound* sound, float delay_in_seconds );
 
 // LOW-LEVEL API
