@@ -133,7 +133,6 @@
 	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
 		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4rd
 		parameter (buffer scale in seconds).
-	* No SIMD support (for now).
 */
 
 #if !defined( TINYSOUND_H )
