@@ -1,23 +1,24 @@
+// only create header symbols
+#define STB_VORBIS_HEADER_ONLY
 #include "stb_vorbis.c"
-#undef L
-#undef C
-#undef R
 
+// create header + implementation
 #define TS_IMPLEMENTATION
 #include "tinysound.h"
+
+static tsLoadedSound vorbis_loaded;
+static tsPlayingSound vorbis_sound;
 
 void Vorbis( tsContext* ctx )
 {
 	// make these static as a hacky way to keep them around
 	// once this function returns.
-	static tsLoadedSound loaded;
-	static tsPlayingSound sound;
 	int sample_rate;
 
-	loaded = tsLoadOGG( "thingy.ogg", &sample_rate );
-	sound = tsMakePlayingSound( &loaded );
-	tsSetVolume( &sound, 0.5f, 0.5f );
-	tsInsertSound( ctx, &sound );
+	vorbis_loaded = tsLoadOGG( "thingy.ogg", &sample_rate );
+	vorbis_sound = tsMakePlayingSound( &vorbis_loaded );
+	tsSetVolume( &vorbis_sound, 0.3f, 0.3f );
+	tsInsertSound( ctx, &vorbis_sound );
 }
 
 void LowLevelAPI( tsContext* ctx )
@@ -26,7 +27,7 @@ void LowLevelAPI( tsContext* ctx )
 	tsLoadedSound jump = tsLoadWAV( "jump.wav" );
 	tsPlayingSound s0 = tsMakePlayingSound( &airlock );
 	tsPlayingSound s1 = tsMakePlayingSound( &jump );
-	//tsInsertSound( ctx, &s0 );
+	tsInsertSound( ctx, &s0 );
 
 	// Play the vorbis song thingy.ogg, or loop airlock
 	if ( 0 ) tsLoopSound( &s0, 1 );
@@ -42,6 +43,8 @@ void LowLevelAPI( tsContext* ctx )
 
 		tsMix( ctx );
 	}
+
+	tsFreeSound( &vorbis_loaded );
 }
 
 float Time( )
@@ -114,11 +117,15 @@ void HighLevelAPI( tsContext* ctx )
 
 		tsMix( ctx );
 	}
+
+	tsFreeSound( &airlock );
+	tsFreeSound( &rupee1 );
+	tsFreeSound( &rupee2 );
 }
 
 int main( )
 {
-	int frequency = 48100; // a good standard frequency
+	int frequency = 44000; // a good standard frequency for playing commonly saved OGG + wav files
 	int latency_in_Hz = 15; // a good latency, too high will cause artifacts, too low will create noticeable delays
 	int buffered_seconds = 5; // number of seconds the buffer will hold in memory. want this long enough in case of frame-delays
 	int use_playing_pool = 0; // non-zero uses high-level API, 0 uses low-level API
@@ -146,6 +153,11 @@ int main( )
 		HighLevelAPI( ctx );
 	}
 
+
 	// shuts down direct sound, frees all used memory
 	tsShutdownContext( ctx );
 }
+
+// create implementation
+#undef STB_VORBIS_HEADER_ONLY
+#include "stb_vorbis.c"
