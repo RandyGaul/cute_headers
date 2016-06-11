@@ -169,12 +169,12 @@ tsLoadedSound tsLoadWAV( const char* path );
 // Reads a WAV file from memory. Still allocates memory for the tsLoadedSound since
 // WAV format will interlace stereo, and we need separate data streams to do SIMD
 // properly.
-void tsReadMemWAV( void* memory, tsLoadedSound* sound );
+void tsReadMemWAV( const void* memory, tsLoadedSound* sound );
 
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
-void tsReadMemOGG( void* memory, int length, int* sample_rate, tsLoadedSound* sound );
+void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound );
 tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
 #endif
 
@@ -284,6 +284,8 @@ DECLARE_HANDLE(HWND);
 #define WINAPI __stdcall
 #define DSBCAPS_PRIMARYBUFFER 0x00000001
 #define WAVE_FORMAT_PCM 1
+#define S_OK ((HRESULT)0L)
+#define DS_OK S_OK
 
 typedef struct _GUID {
     unsigned long  Data1;
@@ -493,7 +495,7 @@ static void tsLastElement( __m128* a, int i, int j, int16_t* samples, int offset
 	}
 }
 
-void tsReadMemWAV( void* memory, tsLoadedSound* sound )
+void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 {
 	#pragma pack( push, 1 )
 	typedef struct
@@ -610,7 +612,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
-void tsReadMemOGG( void* memory, int length, int* sample_rate, tsLoadedSound* sound )
+void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound )
 {
 	int16_t* samples = 0;
 	int channel_count;
