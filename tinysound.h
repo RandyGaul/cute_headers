@@ -1,5 +1,14 @@
 /*
 	tinysound.h - v1.02
+
+	Summary:
+	tinysound is a C API for loading, playing, looping, panning and fading mono
+	and stero sounds via Window's DirectSound. This means tinysound imparts no
+	external DLLs or large libraries that adversely effect shipping size.
+	tinysound can also run on Windows XP since DirectSound ships with all
+	recent versions of Windows. tinysound implements a custom SSE2 mixer by
+	explicitly locking and unlocking portions of a DirectSound secondary buffer.
+
 	Revision history:
 		1.0  (06/04/2016) initial release
 		1.01 (06/06/2016) load WAV from memory
