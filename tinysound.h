@@ -19,6 +19,8 @@
 		                  SSE2 implementation of mixer
 		                  fix typos on docs/comments
 		                  corrected volume bug introduced in 1.01
+		1.03 (07/05/2016) size calculation helper (to know size of sound in
+		                  bytes on the heap) tsSoundSize
 */
 
 /*
