@@ -191,6 +191,10 @@ tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
 // the channels stored within sound
 void tsFreeSound( tsLoadedSound* sound );
 
+// Returns the size, in bytes, of all heap-allocated memory for this particular
+// loaded sound
+int tsSoundSize( tsLoadedSound* sound );
+
 // playing_pool_count -- 0 to setup low-level API, non-zero to size the internal
 // memory pool for tsPlayingSound instances
 tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count );
@@ -711,6 +715,11 @@ void tsFreeSound( tsLoadedSound* sound )
 	free16( sound->channels[ 0 ] );
 	free16( sound->channels[ 1 ] );
 	memset( sound, 0, sizeof( tsLoadedSound ) );
+}
+
+int tsSoundSize( tsLoadedSound* sound )
+{
+	return sound->sample_count * sound->channel_count * sizeof( uint16_t );
 }
 
 tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded )
