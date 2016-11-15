@@ -103,6 +103,14 @@
 	Usually he high-level API will be used, but if someone is *really* picky about
 	their memory usage, or wants more control, the low-level API can be used.
 
+	Here is the Low-Level API:
+		tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
+		void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
+
+	Here is the High-Level API:
+		tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
+		tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
+
 	Be sure to link against dsound.dll (or dsound.lib).
 
 	Read the rest of the header for specific details on all available functions
