@@ -4,6 +4,7 @@ tinysound has no dependencies other than the C-standard library (memset, memcmp,
 
 Please view the header tinysound.h for detailed documentation. For now here's a quick example of loading in some sounds and playing them:
 
+```c++
     #define TS_IMPLEMENTATION
     #include "tinysound.h"
     
@@ -42,10 +43,13 @@ Please view the header tinysound.h for detailed documentation. For now here's a 
         tsShutdownContext( ctx );
         return 0;
     }
+```
 
 Just include tinysound.h into your project and you're good to go! Be sure to do this somewhere in your project to define the function definitions inside of tinysound.h:
 
+```c++
     #define TS_IMPLEMENTATION
     #include "tinysound.h"
+```
 
 Sometimes it is very annoying to have to include dsound.h, and in the event users do *not* want to include this file (for any reason, like compile times, or just preference) feel free to define TS_USE_DSOUND_HEADER as 0 inside of tinysound.h. This will remove the dsound.h header dependency by pulling in only the minimal necessary header symbols from dsound.h and windows.h.
