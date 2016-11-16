@@ -138,12 +138,18 @@
 
 /*
 	FAQ
-	Q Why DirectSound instead of (insert API here)?
-	A Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
+	Q : Why DirectSound instead of (insert API here)?
+	A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
 	shippaed on Windows XP all the way through Windows 10 -- using this header effectively intro-
 	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
 	implement needed features, and users won't hear the difference between various APIs. Latency is
 	not that great with DS but it is shippable.
+	
+	Q : Why not include OSX/iOS/Linux support?
+	A : I don't have time right now. I'm sure somewhere out there some great programmers already
+	know all about CoreAudio for OSX/iOS, or how to do audio on Linux. tinysound is port-ready,
+	so by all means, please contribute to the project and submit a pull request! See this link
+	for some details on how to port: https://github.com/RandyGaul/tinysound/issues/5
 */
 
 #if !defined( TINYSOUND_H )
