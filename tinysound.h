@@ -122,7 +122,8 @@
 
 	* Windows only. Since I last checked the Steam survey over 95% of users ran Windows.
 		Since tinysound is for games there's just not a good reason me to personally spend
-		time on other platforms.
+		time on other platforms. tinysound is port-ready! Please consider adding in a CoreAudio
+		port if you have the time to do so. See: https://github.com/RandyGaul/tinysound/issues/5
 	* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
 		guarantee it will work for all kinds of wav files, but it certainly does for the common
 		kind (and can be changed fairly easily if someone wanted to extend it).
