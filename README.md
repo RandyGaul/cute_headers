@@ -1,14 +1,15 @@
 tinysound is a single-header C API for manipulating and playing sounds. tinysound is mainly intended for use in games.
 
 Features:
-- Load WAV and OGG files from disk or from memory
+- Load WAV and OGG files from disk or from memory (stb_vorbis for OGG support)
 - Loop/Play/Pause/Stop sounds, also a delayed play feature
-- Panning/volume fade support. Users can layer onto this for 3D sound synthesis, or attenuation as desired.
-- Music and sound effects are all treated the same way
+- Mono/stereo panning/volume support. Users can layer onto this for 3D sound synthesis, fading, or attenuation as desired
+- Music and sound effects are all treated the same way; no special cases
 - Internal memory pool for playing sound instances (also explicit memory handling alternative)
 - Readable error reporting through `g_tsErrorReason`
-- High performance custom mixer using SIMD intrinsics
+- High performance custom mixer using SIMD intrinsics (roughly 3.5x speadup over well-implemented scalar mixers)
 - All playing sounds are instanced, so the same sound file can be played any number of times simultaneously
+- Gapless looping
 
 Currently tinysound only supports DirectSound, which implies Windows support only. Why only Windows? Since I last checked the Steam survey over 95% of users were running a Windows operating system, and I haven't yet had time to do a CoreAudio port for OSX/iOS. Please see the Issues tab if anyone is interested in contributing a CoreAudio port -- not much code would need to be mofidied as tinysound is port-ready!
 
