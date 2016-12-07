@@ -145,7 +145,7 @@
 		to float, mix all samples, and write back to DirectSound as 16 bit integers. In
 		practice this works very well and clipping is not often a big problem.
 	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
-		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4rd
+		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4th
 		parameter (buffer scale in seconds).
 	* Pitch shifting uses some code from 1996, so it's super slow. This should probably be
 		rewritten using SIMD intrinsics. Also for some reason the pitch shift code requires some
@@ -158,7 +158,7 @@
 	FAQ
 	Q : Why DirectSound instead of (insert API here)?
 	A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
-	shippaed on Windows XP all the way through Windows 10 -- using this header effectively intro-
+	shipped on Windows XP all the way through Windows 10 -- using this header effectively intro-
 	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
 	implement needed features, and users won't hear the difference between various APIs. Latency is
 	not that great with DS but it is shippable.
