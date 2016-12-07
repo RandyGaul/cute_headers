@@ -68,11 +68,15 @@ float Time( )
 	return (float)(diff / (double)freq.QuadPart);
 }
 
-void HighLevelAPI( tsContext* ctx )
+tsLoadedSound airlock;
+tsLoadedSound rupee1;
+tsLoadedSound rupee2;
+
+void HighLevelAPI( tsContext* ctx, int use_thread )
 {
-	tsLoadedSound airlock = tsLoadWAV( "airlock.wav" );
-	tsLoadedSound rupee1 = tsLoadWAV( "LTTP_Rupee1.wav" );
-	tsLoadedSound rupee2 = tsLoadWAV( "LTTP_Rupee2.wav" );
+	airlock = tsLoadWAV( "airlock.wav" );
+	rupee1 = tsLoadWAV( "LTTP_Rupee1.wav" );
+	rupee2 = tsLoadWAV( "LTTP_Rupee2.wav" );
 	tsPlaySoundDef def0 = tsMakeDef( &airlock );
 	tsPlaySoundDef def1 = tsMakeDef( &rupee1 );
 	tsPlaySoundDef def2 = tsMakeDef( &rupee2 );
@@ -115,12 +119,9 @@ void HighLevelAPI( tsContext* ctx )
 			debounce = 1;
 		}
 
-		tsMix( ctx );
+		if ( !use_thread )
+			tsMix( ctx );
 	}
-
-	tsFreeSound( &airlock );
-	tsFreeSound( &rupee1 );
-	tsFreeSound( &rupee2 );
 }
 
 int main( )
@@ -128,12 +129,11 @@ int main( )
 	int frequency = 44000; // a good standard frequency for playing commonly saved OGG + wav files
 	int latency_in_Hz = 15; // a good latency, too high will cause artifacts, too low will create noticeable delays
 	int buffered_seconds = 5; // number of seconds the buffer will hold in memory. want this long enough in case of frame-delays
-	int use_playing_pool = 0; // non-zero uses high-level API, 0 uses low-level API
+	int use_playing_pool = 1; // non-zero uses high-level API, 0 uses low-level API
 	int num_elements_in_playing_pool = use_playing_pool ? 5 : 0; // pooled memory array size for playing sounds
 
 	// initializes direct sound and allocate necessary memory
 	tsContext* ctx = tsMakeContext( GetConsoleWindow( ), frequency, latency_in_Hz, buffered_seconds, num_elements_in_playing_pool );
-
 
 	if ( !use_playing_pool )
 	{
@@ -141,21 +141,42 @@ int main( )
 		// change the if statement inside to try each out),
 		// press space to play jump sound
 		LowLevelAPI( ctx );
+
+		// shuts down direct sound, frees all used context memory
+		// does not free any loaded sounds!
+		tsShutdownContext( ctx );
 	}
 
 	else
 	{
+		// tsMix can be placed onto its own separate thread
+		// this can be handy since it performs a bunch of SIMD instructions on the CPU
+		int use_thread = 1;
+
+		if ( use_thread )
+		{
+			// be sure to read the docs for these functions in the header!
+			tsSpawnMixThread( ctx );
+			tsThreadSleepDelay( ctx, 10 );
+		}
+
 		// Same as LowLevelApi, but uses the internal tsPlayingSound memory
 		// pool. This can make it easier for users to generate tsPlayingSound
 		// instances without doing manual memory management. Pressing space
 		// once quickly will play a rupee noise (5 rupee pickup from ALTTP).
 		// If space is held more rupees will keep coming :)
-		HighLevelAPI( ctx );
+		HighLevelAPI( ctx, use_thread );
+
+		// shuts down direct sound, frees all used context memory
+		// does not free any loaded sounds!
+		tsShutdownContext( ctx );
+
+		// Sounds should be freed after tsShutdownContext in case tsSpawnMixThread was used, as the
+		// ctx thread may still be reading from loaded sounds prior to calling tsShutdownContext.
+		tsFreeSound( &airlock );
+		tsFreeSound( &rupee1 );
+		tsFreeSound( &rupee2 );
 	}
-
-
-	// shuts down direct sound, frees all used memory
-	tsShutdownContext( ctx );
 }
 
 // create implementation

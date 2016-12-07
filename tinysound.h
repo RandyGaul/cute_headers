@@ -1,5 +1,5 @@
 /*
-	tinysound.h - v1.02
+	tinysound.h - v1.04
 
 	Summary:
 	tinysound is a C API for loading, playing, looping, panning and fading mono
@@ -21,6 +21,18 @@
 		                  corrected volume bug introduced in 1.01
 		1.03 (07/05/2016) size calculation helper (to know size of sound in
 		                  bytes on the heap) tsSoundSize
+		1.04 (12/06/2016) merged in Aaron Balint's contributions
+		                  SFFT and pitch functions from Stephan M. Bernsee
+		                  tsMix can run on its own thread with tsSpawnMixThread
+		                  updated documentation, typo fixes
+		                  fixed typo in malloc16 that caused heap corruption
+*/
+
+/*
+	Contributors:
+		Aaron Balint      1.04 - real time pitch
+		                  1.04 - separate thread for tsMix
+		                  1.04 - bugfix, removed extra free16 call for second channel
 */
 
 /*
@@ -47,53 +59,54 @@
 	tsContext.
 
 	There are two main versions of the API, the low-level and the high-level
-	API. The low-level API does not manage any memory for tsPlayingSounds.
+	API. The low-level API does not manage any memory for tsPlayingSounds. The
+	high level api runs tsMix on a separate thread.
 
 	High-level API:
 		First create a context and pass in non-zero to the final parameter. This
 		final parameter controls how large of a memory pool to use for tsPlayingSounds.
 		Here's an example where N is the size of the internal pool:
-	
+
 		tsContext* ctx = tsMakeContext( hwnd, frequency, latency, seconds, N );
 	
 		We create tsPlayingSounds indirectly with tsPlayDef structs. tsPlayDef is a
 		POD struct so feel free to make them straight on the stack. The tsPlayDef
 		sets up initialization parameters. Here's an example to load a wav and
 		play it:
-	
+
 		tsLoadedSound loaded = tsLoadWAV( "path_to_file/filename.wav" );
 		tsPlaySoundDef def = tsMakeDef( &loaded );
 		tsPlayingSound* sound = tsPlaySound( ctx, def );
-	
+
 		The same def can be used to play as many sounds as desired (even simultaneously)
 		as long as the context playing sound pool is large enough.
 
 	Low-level API:
 		First create a context and pass 0 in the final parameter (0 here means
 		the context will *not* allocate a tsPlayingSound memory pool):
-	
+
 		tsContext* ctx = tsMakeContext( hwnd, frequency, latency, seconds, 0 );
-	
+
 		parameters:
 			hwnd           --  HWND, handle to window
 			frequency      --  int, represents Hz frequency rate in which samples are played
 			latency        --  int, estimated latency in Hz from PlaySound call to speaker output
 			seconds        --  int, number of second of samples internal buffers can hold
 			0 (last param) --  int, number of elements in tsPlayingSound pool
-	
+
 		We create a tsPlayingSound like so:
 		tsLoadedSound loaded = tsLoadWAV( "path_to_file/filename.wav" );
 		tsPlayingSound playing_sound = tsMakePlayingSound( &loaded );
-	
+
 		Mess around with various settings with the variou ts*** functions. Here's
 		an example for setting volume and looping:
-	
+
 		tsSetLoop( &playing_sound, 1 );
 		tsSetPan( &playing_sound, 0.2f );
-	
+
 		Then to play the sound we do:
 		tsInsertSound( ctx, &playing_sound );
-	
+
 		The above tsInsertSound function call will place playing_sound into
 		a singly-linked list inside the context. The context will remove
 		the sound from its internal list when it finishes playing.
@@ -102,6 +115,15 @@
 	try then the internal code will assert and crash. Pick one and stick with it.
 	Usually he high-level API will be used, but if someone is *really* picky about
 	their memory usage, or wants more control, the low-level API can be used.
+
+	Here is the Low-Level API:
+		tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
+		void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
+		tsMix( ctx );
+
+	Here is the High-Level API:
+		tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
+		tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
 
 	Be sure to link against dsound.dll (or dsound.lib).
 
@@ -114,7 +136,8 @@
 
 	* Windows only. Since I last checked the Steam survey over 95% of users ran Windows.
 		Since tinysound is for games there's just not a good reason me to personally spend
-		time on other platforms.
+		time on other platforms. tinysound is port-ready! Please consider adding in a CoreAudio
+		port if you have the time to do so. See: https://github.com/RandyGaul/tinysound/issues/5
 	* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
 		guarantee it will work for all kinds of wav files, but it certainly does for the common
 		kind (and can be changed fairly easily if someone wanted to extend it).
@@ -125,16 +148,34 @@
 	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
 		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4rd
 		parameter (buffer scale in seconds).
+	* Pitch shifting uses some code from 1996, so it's super slow. This should probably be
+		rewritten using SIMD intrinsics. Also for some reason the pitch shift code requires some
+		dynamic memory in order to store intermediary data, so it can process small chunks
+		of a sound at a time. This seems like code smells and dynamic memory probably should not
+		be required at all. Also getting rid of the WOL license would be great.
 */
 
 /*
 	FAQ
-	Q Why DirectSound instead of (insert API here)?
-	A Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
+	Q : Why DirectSound instead of (insert API here)?
+	A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
 	shippaed on Windows XP all the way through Windows 10 -- using this header effectively intro-
 	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
 	implement needed features, and users won't hear the difference between various APIs. Latency is
 	not that great with DS but it is shippable.
+	
+	Q : Why not include OSX/iOS/Linux support?
+	A : I don't have time right now. I'm sure somewhere out there some great programmers already
+	know all about CoreAudio for OSX/iOS, or how to do audio on Linux. tinysound is port-ready,
+	so by all means, please contribute to the project and submit a pull request! See this link
+	for some details on how to port: https://github.com/RandyGaul/tinysound/issues/5
+
+	Q : I would like to use my own memory management, how can I achieve this?
+	A : This header makes a couple uses of malloc/free, and malloc16/free16. Simply find these bits
+	and replace them with your own memory allocation routines. They can be wrapped up into a macro,
+	or call your own functions directly -- it's up to you. Generally these functions allocate fairly
+	large chunks of memory, and not very often (if at all), with one exception: tsSetPitch is a very
+	expensive routine and requires frequent dynamic memory management.
 */
 
 #if !defined( TINYSOUND_H )
@@ -152,8 +193,10 @@ typedef struct
 	void* channels[ 2 ];
 } tsLoadedSound;
 
-// represents an instance of a tsLoadedSound, can be played through
-// the tsContext
+struct tsPitchShift;
+typedef struct tsPitchShift tsPitchShift;
+
+// represents an instance of a tsLoadedSound, can be played through the tsContext
 typedef struct tsPlayingSound
 {
 	int active;
@@ -163,6 +206,8 @@ typedef struct tsPlayingSound
 	float volume1;
 	float pan0;
 	float pan1;
+	float pitch;
+	tsPitchShift* pitch_filter[ 2 ];
 	int sample_index;
 	tsLoadedSound* loaded_sound;
 	struct tsPlayingSound* next;
@@ -201,6 +246,21 @@ int tsSoundSize( tsLoadedSound* sound );
 // memory pool for tsPlayingSound instances
 tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count );
 void tsShutdownContext( tsContext* ctx );
+
+// Call tsSpawnMixThread once to setup a separate thread for the context to run
+// upon. The separate thread will continually call tsMix and perform mixing
+// operations.
+void tsSpawnMixThread( tsContext* ctx );
+
+// Use tsThreadSleepDelay to specify a custom sleep delay time.
+// A sleep will occur after each call to tsMix. By default YieldProcessor
+// is used, and no sleep occurs. Use a sleep delay to conserve CPU bandwidth.
+// A recommended sleep time is a little less than 1/2 your predicted 1/FPS.
+// 60 fps is 16 ms, so about 1-5 should work well in most cases.
+void tsThreadSleepDelay( tsContext* ctx, int milliseconds );
+
+// Call this manually, once per game tick recommended, if you haven't ever
+// called tsSpawnMixThread. Otherwise the thread will call tsMix itself.
 void tsMix( tsContext* ctx );
 
 // All of the functions in this next section should only be called if tsIsActive
@@ -223,7 +283,24 @@ void tsSetPan( tsPlayingSound* sound, float pan );
 // recommended to use the tsSetPan function for panning).
 void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right );
 
-// delays sound before actually playing it. Requires context to be passed in
+// Change pitch (not duration) of sound. pitch = 0.5f for one octave lower, pitch = 2.0f for one octave higher.
+// pitch at 1.0f applies no change. pitch settings farther away from 1.0f create more distortion and lower
+// the output sample quality. pitch can be adjusted in real-time for doppler effects and the like. Going beyond
+// 0.5f and 2.0f may require some tweaking of the smbPitchShift function. See this link for more info:
+// http://blogs.zynaptiq.com/bernsee/pitch-shifting-using-the-ft/
+
+// Additional important information about performance: This function
+// is quite expensive -- you have been warned! Try it out and be aware of how much CPU consumption it uses.
+// To avoid destroying the originally loaded sound samples, tsSetPitch will do a one-time allocation to copy
+// sound samples into a new buffer. The new buffer contains the pitch adjusted samples, and these will be played
+// through tsMix. This lets the pitch be modulated at run-time, but requires dynamically allocated memory. The
+// memory is freed once the sound finishes playing. If a one-time pitch adjustment is desired, for performance
+// reasons please consider doing an off-line pitch adjustment manually as a pre-processing step for your sounds.
+// Also, consider changing malloc16 and free16 to match your custom memory allocation needs. Try adjusting
+// TS_PITCH_QUALITY and see how this affects your performance.
+void tsSetPitch( tsPlayingSound* sound, float pitch );
+
+// Delays sound before actually playing it. Requires context to be passed in
 // since there's a conversion from seconds to samples per second.
 // If one were so inclined another version could be implemented like:
 // void tsSetDelay( tsPlayingSound* sound, float delay, int samples_per_second )
@@ -241,6 +318,7 @@ typedef struct
 	float volume_left;
 	float volume_right;
 	float pan;
+	float pitch;
 	float delay;
 	tsLoadedSound* loaded;
 } tsPlaySoundDef;
@@ -253,175 +331,16 @@ tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
 
 #ifdef TS_IMPLEMENTATION
 
+#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
 #include <stdlib.h>	// malloc, free
 #include <stdio.h>	// fopen, fclose
 #include <string.h>	// memcmp, memset, memcpy
 #include <xmmintrin.h>
 #include <emmintrin.h>
 
-// 1 : include dsound.h
-// 0 : use custom symbol definitions to remove dsound.h dependency
-#define TS_USE_DSOUND_HEADER 1
-
-#if TS_USE_DSOUND_HEADER
-	#include <dsound.h>
-	#undef PlaySound
-#else
-#ifdef __cplusplus
-extern "C" {
-#endif
-typedef struct IDirectSound *LPDIRECTSOUND;
-typedef struct IDirectSoundBuffer *LPDIRECTSOUNDBUFFER;
-typedef unsigned long DWORD;
-typedef unsigned short WORD;
-typedef long LONG;
-typedef unsigned long ULONG;
-typedef long *LPLONG;
-typedef LONG HRESULT;
-typedef signed short INT16;
-typedef void *LPVOID;
-typedef DWORD *LPDWORD;
-typedef struct
-{
-	struct IUnknownVtbl *lpVtbl;
-} IUnknown;
-typedef  IUnknown *LPUNKNOWN;
-
-#define DECLARE_HANDLE(name) struct name##__{int unused;}; typedef struct name##__ *name
-DECLARE_HANDLE(HWND);
-#define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
-#define _FACDS  0x878 /* DirectSound's facility code */
-#define MAKE_DSHRESULT(code)  MAKE_HRESULT(1, _FACDS, code)
-#define MAKE_HRESULT(sev,fac,code) ((HRESULT) (((unsigned long)(sev)<<31) | ((unsigned long)(fac)<<16) | ((unsigned long)(code))) )
-#define DSERR_BUFFERLOST MAKE_DSHRESULT(150)
-#define DSBPLAY_LOOPING 0x00000001
-#define DSSCL_PRIORITY 0x00000002
-#define WINAPI __stdcall
-#define DSBCAPS_PRIMARYBUFFER 0x00000001
-#define WAVE_FORMAT_PCM 1
-#define S_OK ((HRESULT)0L)
-#define DS_OK S_OK
-
-typedef struct _GUID {
-    unsigned long  Data1;
-    unsigned short Data2;
-    unsigned short Data3;
-    unsigned char  Data4[ 8 ];
-} GUID;
-typedef const GUID *LPCGUID;
-typedef GUID IID;
-
-typedef struct _DSBCAPS
-{
-    DWORD           dwSize;
-    DWORD           dwFlags;
-    DWORD           dwBufferBytes;
-    DWORD           dwUnlockTransferRate;
-    DWORD           dwPlayCpuOverhead;
-} DSBCAPS, *LPDSBCAPS;
-
-typedef struct _DSCAPS
-{
-    DWORD           dwSize;
-    DWORD           dwFlags;
-    DWORD           dwMinSecondarySampleRate;
-    DWORD           dwMaxSecondarySampleRate;
-    DWORD           dwPrimaryBuffers;
-    DWORD           dwMaxHwMixingAllBuffers;
-    DWORD           dwMaxHwMixingStaticBuffers;
-    DWORD           dwMaxHwMixingStreamingBuffers;
-    DWORD           dwFreeHwMixingAllBuffers;
-    DWORD           dwFreeHwMixingStaticBuffers;
-    DWORD           dwFreeHwMixingStreamingBuffers;
-    DWORD           dwMaxHw3DAllBuffers;
-    DWORD           dwMaxHw3DStaticBuffers;
-    DWORD           dwMaxHw3DStreamingBuffers;
-    DWORD           dwFreeHw3DAllBuffers;
-    DWORD           dwFreeHw3DStaticBuffers;
-    DWORD           dwFreeHw3DStreamingBuffers;
-    DWORD           dwTotalHwMemBytes;
-    DWORD           dwFreeHwMemBytes;
-    DWORD           dwMaxContigFreeHwMemBytes;
-    DWORD           dwUnlockTransferRateHwBuffers;
-    DWORD           dwPlayCpuOverheadSwBuffers;
-    DWORD           dwReserved1;
-    DWORD           dwReserved2;
-} DSCAPS, *LPDSCAPS;
-
-typedef struct tWAVEFORMATEX
-{
-    WORD        wFormatTag;
-    WORD        nChannels;
-    DWORD       nSamplesPerSec;
-    DWORD       nAvgBytesPerSec;
-    WORD        nBlockAlign;
-    WORD        wBitsPerSample;
-    WORD        cbSize;
-} WAVEFORMATEX, *PWAVEFORMATEX,  *NPWAVEFORMATEX,  *LPWAVEFORMATEX;
-
-typedef struct _DSBUFFERDESC
-{
-    DWORD           dwSize;
-    DWORD           dwFlags;
-    DWORD           dwBufferBytes;
-    DWORD           dwReserved;
-    LPWAVEFORMATEX  lpwfxFormat;
-
-    GUID            guid3DAlgorithm;
-} DSBUFFERDESC, *LPDSBUFFERDESC;
-
-typedef const DSBUFFERDESC *LPCDSBUFFERDESC;
-typedef const WAVEFORMATEX  *LPCWAVEFORMATEX;
-
-extern HRESULT WINAPI DirectSoundCreate(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, void* pUnkOuter);
-
-typedef struct IDirectSound { struct IDirectSoundVtbl * lpVtbl; }
-IDirectSound; typedef struct IDirectSoundVtbl IDirectSoundVtbl; struct IDirectSoundVtbl
-{
-    HRESULT (__stdcall * QueryInterface) (IDirectSound * This,   const IID * const,  LPVOID*);
-    ULONG (__stdcall * AddRef) (IDirectSound * This);
-    ULONG (__stdcall * Release) (IDirectSound * This);
-
-    HRESULT (__stdcall * CreateSoundBuffer)    (IDirectSound * This, LPCDSBUFFERDESC pcDSBufferDesc, LPDIRECTSOUNDBUFFER *ppDSBuffer, LPUNKNOWN pUnkOuter);
-    HRESULT (__stdcall * GetCaps)              (IDirectSound * This, LPDSCAPS pDSCaps);
-    HRESULT (__stdcall * DuplicateSoundBuffer) (IDirectSound * This, LPDIRECTSOUNDBUFFER pDSBufferOriginal, LPDIRECTSOUNDBUFFER *ppDSBufferDuplicate);
-    HRESULT (__stdcall * SetCooperativeLevel)  (IDirectSound * This, HWND hwnd, DWORD dwLevel);
-    HRESULT (__stdcall * Compact)              (IDirectSound * This);
-    HRESULT (__stdcall * GetSpeakerConfig)     (IDirectSound * This, LPDWORD pdwSpeakerConfig);
-    HRESULT (__stdcall * SetSpeakerConfig)     (IDirectSound * This, DWORD dwSpeakerConfig);
-    HRESULT (__stdcall * Initialize)           (IDirectSound * This, LPCGUID pcGuidDevice);
-};
-
-typedef struct IDirectSoundBuffer { struct IDirectSoundBufferVtbl * lpVtbl; }
-IDirectSoundBuffer; typedef struct IDirectSoundBufferVtbl IDirectSoundBufferVtbl; struct IDirectSoundBufferVtbl
-{
-    HRESULT (__stdcall * QueryInterface) (IDirectSoundBuffer * This,   const IID * const,  LPVOID*);
-    ULONG (__stdcall * AddRef) (IDirectSoundBuffer * This);
-    ULONG (__stdcall * Release) (IDirectSoundBuffer * This);
-
-    HRESULT (__stdcall * GetCaps)              (IDirectSoundBuffer * This, LPDSBCAPS pDSBufferCaps);
-    HRESULT (__stdcall * GetCurrentPosition)   (IDirectSoundBuffer * This, LPDWORD pdwCurrentPlayCursor, LPDWORD pdwCurrentWriteCursor);
-    HRESULT (__stdcall * GetFormat)            (IDirectSoundBuffer * This, LPWAVEFORMATEX pwfxFormat, DWORD dwSizeAllocated, LPDWORD pdwSizeWritten);
-    HRESULT (__stdcall * GetVolume)            (IDirectSoundBuffer * This, LPLONG plVolume);
-    HRESULT (__stdcall * GetPan)               (IDirectSoundBuffer * This, LPLONG plPan);
-    HRESULT (__stdcall * GetFrequency)         (IDirectSoundBuffer * This, LPDWORD pdwFrequency);
-    HRESULT (__stdcall * GetStatus)            (IDirectSoundBuffer * This, LPDWORD pdwStatus);
-    HRESULT (__stdcall * Initialize)           (IDirectSoundBuffer * This, LPDIRECTSOUND pDirectSound, LPCDSBUFFERDESC pcDSBufferDesc);
-    HRESULT (__stdcall * Lock)                 (IDirectSoundBuffer * This, DWORD dwOffset, DWORD dwBytes, LPVOID *ppvAudioPtr1, LPDWORD pdwAudioBytes1, LPVOID *ppvAudioPtr2, LPDWORD pdwAudioBytes2, DWORD dwFlags);
-    HRESULT (__stdcall * Play)                 (IDirectSoundBuffer * This, DWORD dwReserved1, DWORD dwPriority, DWORD dwFlags);
-    HRESULT (__stdcall * SetCurrentPosition)   (IDirectSoundBuffer * This, DWORD dwNewPosition);
-    HRESULT (__stdcall * SetFormat)            (IDirectSoundBuffer * This, LPCWAVEFORMATEX pcfxFormat);
-    HRESULT (__stdcall * SetVolume)            (IDirectSoundBuffer * This, LONG lVolume);
-    HRESULT (__stdcall * SetPan)               (IDirectSoundBuffer * This, LONG lPan);
-    HRESULT (__stdcall * SetFrequency)         (IDirectSoundBuffer * This, DWORD dwFrequency);
-    HRESULT (__stdcall * Stop)                 (IDirectSoundBuffer * This);
-    HRESULT (__stdcall * Unlock)               (IDirectSoundBuffer * This, LPVOID pvAudioPtr1, DWORD dwAudioBytes1, LPVOID pvAudioPtr2, DWORD dwAudioBytes2);
-    HRESULT (__stdcall * Restore)              (IDirectSoundBuffer * This);
-};
-#ifdef __cplusplus
-}
-#endif
-#endif
+#include <dsound.h>
+#undef PlaySound
+#pragma comment( lib, "dsound.lib" )
 
 #pragma push_macro( "CHECK" )
 #pragma push_macro( "ASSERT" )
@@ -476,7 +395,7 @@ static void* malloc16( size_t size )
 	void* p = malloc( size + 16 );
 	if ( !p ) return 0;
 	unsigned char offset = (size_t)p & 15;
-	p = (char*)ALIGN( p + 16, 16 );
+	p = (void*)ALIGN( p + 1, 16 );
 	*((char*)p - 1) = 16 - offset;
 	ASSERT( !((size_t)p & 15) );
 	return p;
@@ -529,7 +448,6 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 	#pragma pack( pop )
 
 	char* data = (char*)memory;
-	char* first = data;
 	CHECK( data, "Unable to read input file (file doesn't exist, or could not allocate heap memory." );
 	CHECK( tsFourCC( "RIFF", data ), "Incorrect file header; is this a WAV file?" );
 	CHECK( tsFourCC( "WAVE", data + 8 ), "Incorrect file header; is this a WAV file?" );
@@ -611,7 +529,6 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 	return;
 
 err:
-	free( sound->channels[ 0 ] );
 	memset( &sound, 0, sizeof( sound ) );
 }
 
@@ -715,7 +632,6 @@ tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
 void tsFreeSound( tsLoadedSound* sound )
 {
 	free16( sound->channels[ 0 ] );
-	free16( sound->channels[ 1 ] );
 	memset( sound, 0, sizeof( tsLoadedSound ) );
 }
 
@@ -734,6 +650,9 @@ tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded )
 	playing.volume1 = 1.0f;
 	playing.pan0 = 0.5f;
 	playing.pan1 = 0.5f;
+	playing.pitch = 1.0f;
+	playing.pitch_filter[ 0 ] = 0;
+	playing.pitch_filter[ 1 ] = 0;
 	playing.sample_index = 0;
 	playing.loaded_sound = loaded;
 	playing.next = 0;
@@ -770,6 +689,11 @@ void tsSetPan( tsPlayingSound* sound, float pan )
 	sound->pan1 = right;
 }
 
+void tsSetPitch( tsPlayingSound* sound, float pitch )
+{
+	sound->pitch = pitch;
+}
+
 void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 {
 	if ( volume_left < 0.0f ) volume_left = 0.0f;
@@ -795,7 +719,55 @@ struct tsContext
 	__m128i* samples;
 	tsPlayingSound* playing_pool;
 	tsPlayingSound* playing_free;
+
+	// data for tsMix thread, enable these with tsSpawnMixThread
+	CRITICAL_SECTION critical_section;
+	int separate_thread;
+	int running;
+	int sleep_milliseconds;
 };
+
+static void tsRemoveFilter( tsPlayingSound* playing );
+
+static void tsReleaseContext( tsContext* ctx )
+{
+	if ( ctx->separate_thread )	DeleteCriticalSection( &ctx->critical_section );
+	ctx->buffer->lpVtbl->Release( ctx->buffer );
+	ctx->primary->lpVtbl->Release( ctx->primary );
+	ctx->dsound->lpVtbl->Release( ctx->dsound );
+	tsPlayingSound* playing = ctx->playing;
+	while ( playing )
+	{
+		tsRemoveFilter( playing );
+		playing = playing->next;
+	}
+	free( ctx );
+}
+
+static DWORD WINAPI tsCtxThread( LPVOID lpParameter )
+{
+	tsContext* ctx = (tsContext*)lpParameter;
+
+	while ( ctx->running )
+	{
+		tsMix( ctx );
+
+		if ( ctx->sleep_milliseconds ) Sleep( ctx->sleep_milliseconds );
+		else YieldProcessor( );
+	}
+
+	return 0;
+}
+
+static void tsLock( tsContext* ctx )
+{
+	if ( ctx->separate_thread ) EnterCriticalSection( &ctx->critical_section );
+}
+
+static void tsUnlock( tsContext* ctx )
+{
+	if ( ctx->separate_thread ) LeaveCriticalSection( &ctx->critical_section );
+}
 
 tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count )
 {
@@ -850,6 +822,9 @@ tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency
 	ASSERT( !((size_t)ctx->floatA & 15) );
 	ctx->floatB = ctx->floatA + wide_count;
 	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->running = 1;
+	ctx->separate_thread = 0;
+	ctx->sleep_milliseconds = 0;
 
 	if ( playing_pool_count )
 	{
@@ -871,10 +846,27 @@ tsContext* tsMakeContext( void* hwnd, unsigned play_frequency_in_Hz, int latency
 
 void tsShutdownContext( tsContext* ctx )
 {
-	ctx->buffer->lpVtbl->Release( ctx->buffer );
-	ctx->primary->lpVtbl->Release( ctx->primary );
-	ctx->dsound->lpVtbl->Release( ctx->dsound );
-	free( ctx );
+	if ( ctx->separate_thread )
+	{
+		tsLock( ctx );
+		ctx->running = 0;
+		tsUnlock( ctx );
+	}
+
+	//tsReleaseContext( ctx );
+}
+
+void tsSpawnMixThread( tsContext* ctx )
+{
+	if ( ctx->separate_thread ) return;
+	InitializeCriticalSectionAndSpinCount( &ctx->critical_section, 0x00000400 );
+	ctx->separate_thread = 1;
+	CreateThread( 0, 0, tsCtxThread, ctx, 0, 0 );
+}
+
+void tsThreadSleepDelay( tsContext* ctx, int milliseconds )
+{
+	ctx->sleep_milliseconds = milliseconds;
 }
 
 void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
@@ -907,6 +899,7 @@ tsPlaySoundDef tsMakeDef( tsLoadedSound* sound )
 	def.volume_left = 1.0f;
 	def.volume_right = 1.0f;
 	def.pan = 0.5f;
+	def.pitch = 1.0f;
 	def.delay = 0.0f;
 	def.loaded = sound;
 	return def;
@@ -914,6 +907,8 @@ tsPlaySoundDef tsMakeDef( tsLoadedSound* sound )
 
 tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 {
+	tsLock( ctx );
+
 	tsPlayingSound* playing = ctx->playing_free;
 	if ( !playing ) return 0;
 	ctx->playing_free = playing->next;
@@ -923,9 +918,13 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 	playing->looped = def.looped;
 	tsSetVolume( playing, def.volume_left, def.volume_right );
 	tsSetPan( playing, def.pan );
+	tsSetPitch( playing, def.pitch );
 	tsSetDelay( ctx, playing, def.delay );
 	playing->next = ctx->playing;
 	ctx->playing = playing;
+
+	tsUnlock( ctx );
+
 	return playing;
 }
 
@@ -999,14 +998,59 @@ static void tsMemcpyToDS( tsContext* ctx, int16_t* samples, int byte_to_lock, in
 	}
 }
 
+static void smbPitchShift( float pitchShift, long numSampsToProcess, float sampleRate, float* indata, tsPitchShift** pitch_filter );
+
+// Pitch processing
+#define TS_PI                  3.14159265358979323846
+#define TS_MAX_FRAME_LENGTH    8192
+#define TS_PITCH_FRAME_SIZE    512
+#define TS_PITCH_QUALITY       4
+
+// the g members of tsPitchShift contain intermediary data for the
+// smbPitchShift function. This struct is only used if tsSetPitch is
+// called with a parameter other than 1.0f.
+typedef struct tsPitchShift
+{
+	float* outdata;
+	float gInFIFO[ TS_MAX_FRAME_LENGTH ];
+	float gOutFIFO[ TS_MAX_FRAME_LENGTH ];
+	float gFFTworksp[ 2 * TS_MAX_FRAME_LENGTH ];
+	float gLastPhase[ TS_MAX_FRAME_LENGTH / 2 + 1 ];
+	float gSumPhase[ TS_MAX_FRAME_LENGTH / 2 + 1 ];
+	float gOutputAccum[ 2 * TS_MAX_FRAME_LENGTH ];
+	float gAnaFreq[ TS_MAX_FRAME_LENGTH ];
+	float gAnaMagn[ TS_MAX_FRAME_LENGTH ];
+	float gSynFreq[ TS_MAX_FRAME_LENGTH ];
+	float gSynMagn[ TS_MAX_FRAME_LENGTH ];
+	long  gRover;
+} tsPitchShift;
+
+static void tsRemoveFilter( tsPlayingSound* playing )
+{
+	for ( int i = 0; i < 2; i++ )
+	{
+		if ( playing->pitch_filter[ i ] )
+		{
+			free16( playing->pitch_filter[ i ]->outdata );
+			free( playing->pitch_filter[ i ] );
+			playing->pitch_filter[ i ] = 0;
+		}
+	}
+}
+
 void tsMix( tsContext* ctx )
 {
+	tsLock( ctx );
+
 	int byte_to_lock;
 	int bytes_to_write;
 	tsPosition( ctx, &byte_to_lock, &bytes_to_write );
 
 	if ( !bytes_to_write )
+	{
+		tsUnlock( ctx );
 		return;
+	}
 
 	// clear mixer buffers
 	int samples_to_write = bytes_to_write / ctx->bps;
@@ -1067,7 +1111,7 @@ void tsMix( tsContext* ctx )
 		ASSERT( !(delay_offset & 3) );
 
 		// immediately remove any inactive elements
-		if ( !playing->active )
+		if ( !playing->active || !ctx->running )
 			goto remove;
 
 		// skip all paused sounds
@@ -1079,6 +1123,31 @@ void tsMix( tsContext* ctx )
 		int offset_wide = (int)TRUNC( offset, 4 ) / 4;
 		int delay_wide = (int)ALIGN( delay_offset, 4 ) / 4;
 
+		// use smbPitchShift to on-the-fly pitch shift some samples
+		// only call this function if the user set a custom pitch value
+		if ( playing->pitch != 1.0f )
+		{
+			int sample_count = (mix_wide - 2 * delay_wide) * 4;
+			int falling_behind = sample_count > TS_MAX_FRAME_LENGTH;
+
+			// TS_MAX_FRAME_LENGTH represents max samples we can pitch shift in one go,
+			// it should be large enough to never fall behind, but we need this if just in case...
+			if ( !falling_behind )
+			{
+				smbPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter );
+				cA = (__m128 *)playing->pitch_filter[ 0 ]->outdata;
+
+				if ( loaded->channel_count == 2 )
+				{
+					smbPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1 );
+					cB = (__m128 *)playing->pitch_filter[ 1 ]->outdata;
+				}
+
+				offset_wide = -delay_wide;
+			}
+		}
+
+		// apply volume, load samples into float buffers
 		switch ( loaded->channel_count )
 		{
 		case 1:
@@ -1098,6 +1167,7 @@ void tsMix( tsContext* ctx )
 			{
 				__m128 A = cA[ i + offset_wide ];
 				__m128 B = cB[ i + offset_wide ];
+
 				A = _mm_mul_ps( A, vA );
 				B = _mm_mul_ps( B, vB );
 				floatA[ i ] = _mm_add_ps( floatA[ i ], A );
@@ -1106,6 +1176,7 @@ void tsMix( tsContext* ctx )
 		}	break;
 		}
 
+		// playing list logic
 		playing->sample_index += mix_count;
 		if ( playing->sample_index == loaded->sample_count )
 		{
@@ -1120,6 +1191,8 @@ void tsMix( tsContext* ctx )
 			*ptr = (*ptr)->next;
 			playing->next = 0;
 			playing->active = 0;
+
+			tsRemoveFilter( playing );
 
 			// if using high-level API manage the tsPlayingSound memory ourselves
 			if ( ctx->playing_pool )
@@ -1149,6 +1222,7 @@ void tsMix( tsContext* ctx )
 	}
 
 	tsMemcpyToDS( ctx, (int16_t*)samples, byte_to_lock, bytes_to_write );
+	tsUnlock( ctx );
 }
 
 #pragma pop_macro( "CHECK" )
@@ -1178,3 +1252,281 @@ void tsMix( tsContext* ctx )
 	     be misrepresented as being the original software.
 	  3. This notice may not be removed or altered from any source distribution.
 */
+
+// NOTE:
+// See FAQ and see docs for tsPitchShift for more information on the below code.
+// Feel free to remove the below code in order to get rid of the WOL license,
+// if desired.
+
+/****************************************************************************
+*
+* NAME: smbPitchShift.cpp
+* VERSION: 1.2
+* HOME URL: http://blogs.zynaptiq.com/bernsee
+* KNOWN BUGS: none
+*
+* SYNOPSIS: Routine for doing pitch shifting while maintaining
+* duration using the Short Time Fourier Transform.
+*
+* DESCRIPTION: The routine takes a pitchShift factor value which is between 0.5
+* (one octave down) and 2. (one octave up). A value of exactly 1 does not change
+* the pitch. numSampsToProcess tells the routine how many samples in indata[0...
+* numSampsToProcess-1] should be pitch shifted and moved to outdata[0 ...
+* numSampsToProcess-1]. The two buffers can be identical (ie. it can process the
+* data in-place). fftFrameSize defines the FFT frame size used for the
+* processing. Typical values are 1024, 2048 and 4096. It may be any value <=
+* TS_MAX_FRAME_LENGTH but it MUST be a power of 2. osamp is the STFT
+* oversampling factor which also determines the overlap between adjacent STFT
+* frames. It should at least be 4 for moderate scaling ratios. A value of 32 is
+* recommended for best quality. sampleRate takes the sample rate for the signal 
+* in unit Hz, ie. 44100 for 44.1 kHz audio. The data passed to the routine in 
+* indata[] should be in the range [-1.0, 1.0), which is also the output range 
+* for the data, make sure you scale the data accordingly (for 16bit signed integers
+* you would have to divide (and multiply) by 32768). 
+*
+* COPYRIGHT 1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
+*
+* 						The Wide Open License (WOL)
+*
+* Permission to use, copy, modify, distribute and sell this software and its
+* documentation for any purpose is hereby granted without fee, provided that
+* the above copyright notice and this license appear in all source copies. 
+* THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT EXPRESS OR IMPLIED WARRANTY OF
+* ANY KIND. See http://www.dspguru.com/wol.htm for more information.
+*
+*****************************************************************************/ 
+
+#include <math.h>
+
+static double smbAtan2(double x, double y)
+{
+	double signx;
+	if (x > 0.) signx = 1.;  
+	else signx = -1.;
+
+	if (x == 0.) return 0.;
+	if (y == 0.) return signx * TS_PI / 2.;
+
+	return atan2(x, y);
+}
+
+static void smbFft(float *fftBuffer, long fftFrameSize, long sign)
+/* 
+	FFT routine, (C)1996 S.M.Bernsee. Sign = -1 is FFT, 1 is iFFT (inverse)
+	Fills fftBuffer[0...2*fftFrameSize-1] with the Fourier transform of the
+	time domain data in fftBuffer[0...2*fftFrameSize-1]. The FFT array takes
+	and returns the cosine and sine parts in an interleaved manner, ie.
+	fftBuffer[0] = cosPart[0], fftBuffer[1] = sinPart[0], asf. fftFrameSize
+	must be a power of 2. It expects a complex input signal (see footnote 2),
+	ie. when working with 'common' audio signals our input signal has to be
+	passed as {in[0],0.,in[1],0.,in[2],0.,...} asf. In that case, the transform
+	of the frequencies of interest is in fftBuffer[0...fftFrameSize].
+*/
+{
+	float wr, wi, arg, *p1, *p2, temp;
+	float tr, ti, ur, ui, *p1r, *p1i, *p2r, *p2i;
+	long i, bitm, j, le, le2, k;
+
+	for (i = 2; i < 2*fftFrameSize-2; i += 2) {
+		for (bitm = 2, j = 0; bitm < 2*fftFrameSize; bitm <<= 1) {
+			if (i & bitm) j++;
+			j <<= 1;
+		}
+		if (i < j) {
+			p1 = fftBuffer+i; p2 = fftBuffer+j;
+			temp = *p1; *(p1++) = *p2;
+			*(p2++) = temp; temp = *p1;
+			*p1 = *p2; *p2 = temp;
+		}
+	}
+	for (k = 0, le = 2; k < (long)(log(fftFrameSize)/log(2.)+.5); k++) {
+		le <<= 1;
+		le2 = le>>1;
+		ur = 1.0;
+		ui = 0.0;
+		arg = (float)(TS_PI / (le2>>1));
+		wr = (float)cos(arg);
+		wi = (float)(sign*sin(arg));
+		for (j = 0; j < le2; j += 2) {
+			p1r = fftBuffer+j; p1i = p1r+1;
+			p2r = p1r+le2; p2i = p2r+1;
+			for (i = j; i < 2*fftFrameSize; i += le) {
+				tr = *p2r * ur - *p2i * ui;
+				ti = *p2r * ui + *p2i * ur;
+				*p2r = *p1r - tr; *p2i = *p1i - ti;
+				*p1r += tr; *p1i += ti;
+				p1r += le; p1i += le;
+				p2r += le; p2i += le;
+			}
+			tr = ur*wr - ui*wi;
+			ui = ur*wi + ui*wr;
+			ur = tr;
+		}
+	}
+}
+
+/*
+	Purpose: doing pitch shifting while maintaining duration using the Short Time Fourier Transform.
+	Author: (c)1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
+*/
+static void smbPitchShift(float pitchShift, long numSampsToProcess, float sampleRate, float* indata, tsPitchShift** pitch_filter)
+{
+    tsPitchShift* pf;
+    
+    if (*pitch_filter == NULL)
+    {
+        pf = (tsPitchShift*)malloc(sizeof(tsPitchShift));
+        pf->outdata = malloc16(TS_MAX_FRAME_LENGTH*sizeof(float));
+        pf->gRover = 0;
+        memset(pf->gInFIFO, 0, TS_MAX_FRAME_LENGTH*sizeof(float));
+        memset(pf->gOutFIFO, 0, TS_MAX_FRAME_LENGTH*sizeof(float));
+        memset(pf->gFFTworksp, 0, 2*TS_MAX_FRAME_LENGTH*sizeof(float));
+        memset(pf->gLastPhase, 0, (TS_MAX_FRAME_LENGTH/2+1)*sizeof(float));
+        memset(pf->gSumPhase, 0, (TS_MAX_FRAME_LENGTH/2+1)*sizeof(float));
+        memset(pf->gOutputAccum, 0, 2*TS_MAX_FRAME_LENGTH*sizeof(float));
+        memset(pf->gAnaFreq, 0, TS_MAX_FRAME_LENGTH*sizeof(float));
+        memset(pf->gAnaMagn, 0, TS_MAX_FRAME_LENGTH*sizeof(float));
+        *pitch_filter = pf;
+    }
+    else
+    {
+        pf = *pitch_filter;
+    }
+
+	double magn, phase, tmp, window, real, imag;
+	long i, k, qpd, index;
+
+    long fftFrameSize = TS_PITCH_FRAME_SIZE;
+    long osamp = TS_PITCH_QUALITY;
+
+        /* set up some handy variables */
+    long fftFrameSize2 = fftFrameSize / 2;
+    long stepSize = fftFrameSize / osamp;
+    double expct = 2.*TS_PI*(double)stepSize / (double)fftFrameSize;
+    double freqPerBin = sampleRate / (double)fftFrameSize;
+    long inFifoLatency = fftFrameSize - stepSize;
+    
+    if (pf->gRover == 0) pf->gRover = inFifoLatency;
+        
+	/* main processing loop */
+	for (i = 0; i < numSampsToProcess; i++){
+
+		/* As long as we have not yet collected enough data just read in */
+		pf->gInFIFO[pf->gRover] = indata[i] / 32768.0f;
+		pf->outdata[i] = pf->gOutFIFO[pf->gRover-inFifoLatency] * 32768.0f;
+		pf->gRover++;
+
+		/* now we have enough data for processing */
+		if (pf->gRover >= fftFrameSize) {
+			pf->gRover = inFifoLatency;
+
+			/* do windowing and re,im interleave */
+			for (k = 0; k < fftFrameSize;k++) {
+				window = -.5*cos(2.*TS_PI*(double)k/(double)fftFrameSize)+.5;
+				pf->gFFTworksp[2*k] = (float)(pf->gInFIFO[k] * window);
+				pf->gFFTworksp[2*k+1] = 0.;
+			}
+
+
+			/* ***************** ANALYSIS ******************* */
+			/* do transform */
+			smbFft(pf->gFFTworksp, fftFrameSize, -1);
+
+			/* this is the analysis step */
+			for (k = 0; k <= fftFrameSize2; k++) {
+
+				/* de-interlace FFT buffer */
+				real = pf->gFFTworksp[2*k];
+				imag = pf->gFFTworksp[2*k+1];
+
+				/* compute magnitude and phase */
+				magn = 2.*sqrt(real*real + imag*imag);
+				phase = smbAtan2(imag,real);
+
+				/* compute phase difference */
+				tmp = phase - pf->gLastPhase[k];
+				pf->gLastPhase[k] = (float)phase;
+
+				/* subtract expected phase difference */
+				tmp -= (double)k*expct;
+
+				/* map delta phase into +/- Pi interval */
+				qpd = (long)(tmp/TS_PI);
+				if (qpd >= 0) qpd += qpd&1;
+				else qpd -= qpd&1;
+				tmp -= TS_PI*(double)qpd;
+
+				/* get deviation from bin frequency from the +/- Pi interval */
+				tmp = osamp*tmp/(2.*TS_PI);
+
+				/* compute the k-th partials' true frequency */
+				tmp = (double)k*freqPerBin + tmp*freqPerBin;
+
+				/* store magnitude and true frequency in analysis arrays */
+				pf->gAnaMagn[k] = (float)magn;
+				pf->gAnaFreq[k] = (float)tmp;
+
+			}
+
+			/* ***************** PROCESSING ******************* */
+			/* this does the actual pitch shifting */
+			memset(pf->gSynMagn, 0, fftFrameSize*sizeof(float));
+			memset(pf->gSynFreq, 0, fftFrameSize*sizeof(float));
+			for (k = 0; k <= fftFrameSize2; k++) { 
+				index = (long)(k*pitchShift);
+				if (index <= fftFrameSize2) { 
+					pf->gSynMagn[index] += pf->gAnaMagn[k]; 
+					pf->gSynFreq[index] = pf->gAnaFreq[k] * pitchShift; 
+				} 
+			}
+			
+			/* ***************** SYNTHESIS ******************* */
+			/* this is the synthesis step */
+			for (k = 0; k <= fftFrameSize2; k++) {
+
+				/* get magnitude and true frequency from synthesis arrays */
+				magn = pf->gSynMagn[k];
+				tmp = pf->gSynFreq[k];
+
+				/* subtract bin mid frequency */
+				tmp -= (double)k*freqPerBin;
+
+				/* get bin deviation from freq deviation */
+				tmp /= freqPerBin;
+
+				/* take osamp into account */
+				tmp = 2.*TS_PI*tmp/osamp;
+
+				/* add the overlap phase advance back in */
+				tmp += (double)k*expct;
+
+				/* accumulate delta phase to get bin phase */
+				pf->gSumPhase[k] += (float)tmp;
+				phase = pf->gSumPhase[k];
+
+				/* get real and imag part and re-interleave */
+				pf->gFFTworksp[2*k] = (float)(magn*cos(phase));
+				pf->gFFTworksp[2*k+1] = (float)(magn*sin(phase));
+			} 
+
+			/* zero negative frequencies */
+			for (k = fftFrameSize+2; k < 2*fftFrameSize; k++) pf->gFFTworksp[k] = 0.;
+
+			/* do inverse transform */
+			smbFft(pf->gFFTworksp, fftFrameSize, 1);
+
+			/* do windowing and add to output accumulator */ 
+			for(k=0; k < fftFrameSize; k++) {
+				window = -.5*cos(2.*TS_PI*(double)k/(double)fftFrameSize)+.5;
+				pf->gOutputAccum[k] += (float)(2.*window*pf->gFFTworksp[2*k]/(fftFrameSize2*osamp));
+			}
+			for (k = 0; k < stepSize; k++) pf->gOutFIFO[k] = pf->gOutputAccum[k];
+
+			/* shift accumulator */
+			memmove(pf->gOutputAccum, pf->gOutputAccum+stepSize, fftFrameSize*sizeof(float));
+
+			/* move input FIFO */
+			for (k = 0; k < inFifoLatency; k++) pf->gInFIFO[k] = pf->gInFIFO[k+stepSize];
+		}
+	}
+}
