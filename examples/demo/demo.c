@@ -6,15 +6,12 @@
 #define TS_IMPLEMENTATION
 #include "tinysound.h"
 
-static tsLoadedSound vorbis_loaded;
-static tsPlayingSound vorbis_sound;
+tsLoadedSound vorbis_loaded;
+tsPlayingSound vorbis_sound;
 
 void Vorbis( tsContext* ctx )
 {
-	// make these static as a hacky way to keep them around
-	// once this function returns.
 	int sample_rate;
-
 	vorbis_loaded = tsLoadOGG( "thingy.ogg", &sample_rate );
 	vorbis_sound = tsMakePlayingSound( &vorbis_loaded );
 	tsSetVolume( &vorbis_sound, 0.3f, 0.3f );

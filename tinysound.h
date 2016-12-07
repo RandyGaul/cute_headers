@@ -119,7 +119,6 @@
 	Here is the Low-Level API:
 		tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
 		void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
-		tsMix( ctx );
 
 	Here is the High-Level API:
 		tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
