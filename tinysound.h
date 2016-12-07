@@ -852,7 +852,7 @@ void tsShutdownContext( tsContext* ctx )
 		tsUnlock( ctx );
 	}
 
-	//tsReleaseContext( ctx );
+	tsReleaseContext( ctx );
 }
 
 void tsSpawnMixThread( tsContext* ctx )
