@@ -880,8 +880,8 @@ void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 	tsLock( ctx );
 	sound->next = ctx->playing;
 	ctx->playing = sound;
-	tsUnlock( ctx );
 	sound->active = 1;
+	tsUnlock( ctx );
 }
 
 // NOTE: does not allow delay_in_seconds to be negative (clamps at 0)
