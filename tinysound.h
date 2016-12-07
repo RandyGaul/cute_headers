@@ -877,8 +877,10 @@ void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 	ASSERT( ctx->playing_pool == 0 );
 
 	if ( sound->active ) return;
+	tsLock( ctx );
 	sound->next = ctx->playing;
 	ctx->playing = sound;
+	tsUnlock( ctx );
 	sound->active = 1;
 }
 
