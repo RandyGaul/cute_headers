@@ -10,6 +10,8 @@ Features:
 - High performance custom mixer using SIMD intrinsics (roughly 3.5x speadup over well-implemented scalar mixers)
 - All playing sounds are instanced, so the same sound file can be played any number of times simultaneously
 - Gapless looping
+- Can spawn separate thread to run tsMix with tsSpawnMixThread
+- Real-time pitch shifting (without adjusting sound length)
 
 Currently tinysound only supports DirectSound, which implies Windows support only. Why only Windows? Since I last checked the Steam survey over 95% of users were running a Windows operating system, and I haven't yet had time to do a CoreAudio port for OSX/iOS. Please see the Issues tab if anyone is interested in contributing a CoreAudio port -- not much code would need to be mofidied as tinysound is port-ready!
 
