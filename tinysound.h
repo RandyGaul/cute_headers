@@ -60,7 +60,7 @@
 
 	There are two main versions of the API, the low-level and the high-level
 	API. The low-level API does not manage any memory for tsPlayingSounds. The
-	high level api runs tsMix on a separate thread.
+	high level api holds a memory pool of playing sounds.
 
 	High-level API:
 		First create a context and pass in non-zero to the final parameter. This
