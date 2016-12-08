@@ -755,6 +755,7 @@ static DWORD WINAPI tsCtxThread( LPVOID lpParameter )
 		else YieldProcessor( );
 	}
 
+	ctx->separate_thread = 0;
 	return 0;
 }
 
@@ -852,6 +853,7 @@ void tsShutdownContext( tsContext* ctx )
 		tsUnlock( ctx );
 	}
 
+	while ( ctx->separate_thread ) Sleep( 1 );
 	tsReleaseContext( ctx );
 }
 
