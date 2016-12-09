@@ -1,5 +1,5 @@
 /*
-	tinysound.h - v1.04
+	tinysound.h - v1.05
 
 	Summary:
 	tinysound is a C API for loading, playing, looping, panning and fading mono
@@ -26,6 +26,7 @@
 		                  tsMix can run on its own thread with tsSpawnMixThread
 		                  updated documentation, typo fixes
 		                  fixed typo in malloc16 that caused heap corruption
+		1.05 (12/08/2016) tsStopAllSounds, suggested by Aaron Balint
 */
 
 /*
