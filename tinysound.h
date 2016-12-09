@@ -98,12 +98,6 @@
 		tsLoadedSound loaded = tsLoadWAV( "path_to_file/filename.wav" );
 		tsPlayingSound playing_sound = tsMakePlayingSound( &loaded );
 
-		Mess around with various settings with the variou ts*** functions. Here's
-		an example for setting volume and looping:
-
-		tsSetLoop( &playing_sound, 1 );
-		tsSetPan( &playing_sound, 0.2f );
-
 		Then to play the sound we do:
 		tsInsertSound( ctx, &playing_sound );
 
@@ -123,6 +117,7 @@
 	Here is the High-Level API:
 		tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
 		tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
+		void tsStopAllSounds( tsContext( ctx );
 
 	Be sure to link against dsound.dll (or dsound.lib).
 
@@ -324,6 +319,7 @@ typedef struct
 
 tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
 tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
+void tsStopAllSounds( tsContext* ctx );
 
 #define TINYSOUND_H
 #endif
@@ -929,6 +925,20 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 	tsUnlock( ctx );
 
 	return playing;
+}
+
+void tsStopAllSounds( tsContext* ctx )
+{
+	tsPlayingSound* sound = ctx->playing;
+	ctx->playing = 0;
+	
+	while ( sound )
+	{
+		tsPlayingSound* next = sound->next;
+		sound->next = ctx->playing_free;
+		ctx->playing_free = sound;
+		sound = next;
+	}
 }
 
 static void tsPosition( tsContext* ctx, int* byte_to_lock, int* bytes_to_write )
