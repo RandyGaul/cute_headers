@@ -17,6 +17,11 @@ Currently tinysound only supports DirectSound, which implies Windows support onl
 
 tinysound has no dependencies other than the C-standard library (memset, memcmp, malloc, free, sqrtf, fopen, fclose) and dsound.dll/dsound.lib. tinysound does not even have to include dsound.h on Windows (details below)!
 
+Here are some demo videos (click on images):
+
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/GyPvcsHFQMQ/0.jpg)](https://www.youtube.com/watch?v=GyPvcsHFQMQ)  
+Particle + tinysound test, playing over 800 simultaneous sounds by Aaron Balint
+
 Please view the header tinysound.h for detailed documentation. For now here's a quick example of loading in some sounds and playing them:
 
 ```c++
