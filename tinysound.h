@@ -930,6 +930,11 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 
 void tsStopAllSounds( tsContext* ctx )
 {
+	// This is apart of the high level API, not the low level API.
+	// If using the low level API you must write your own function to
+	// stop playing all sounds.
+	ASSERT( ctx->playing_pool == 0 );
+	
 	tsPlayingSound* sound = ctx->playing;
 	ctx->playing = 0;
 	
