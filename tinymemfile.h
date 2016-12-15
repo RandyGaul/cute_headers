@@ -74,7 +74,7 @@ inline void tmFormatMemfileBuffer( const char* format, char* buffer )
 }
 
 //--------------------------------------------------------------------------------------------------
-inline void tmseek( MEM_FILE* fp, int offset )
+inline void tmseek( tmMEM_FILE* fp, int offset )
 {
 #ifdef _DEBUG
 	assert( fp->bytes_read + offset >= 0 );
@@ -97,7 +97,7 @@ inline void tmseek( MEM_FILE* fp, int offset )
 		int bytes_read; \
 		int ret; \
 		tmFormatMemfileBuffer( format, buffer ); \
-		ret = sscanf( file->ptr + file->bytes_read, buffer, TM_LOOP( SCANF_ARGS, N ), &bytes_read ); \
+		ret = sscanf( file->ptr + file->bytes_read, buffer, TM_LOOP( TM_SCANF_ARGS, N ), &bytes_read ); \
 		file->bytes_read += bytes_read; \
 		return ret; \
 	}

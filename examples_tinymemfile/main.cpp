@@ -1,5 +1,4 @@
-#include <stdio.h>
-#include "memfile.h"
+#include "../tinymemfile.h"
 
 // generated from poem.txt via incbin (incbin by Richard Mitton)
 const unsigned char poem[] = {
@@ -13,22 +12,22 @@ const int poem_size = (int)sizeof(poem);
 
 int main( )
 {
-	MEM_FILE fp;
+	tmMEM_FILE fp;
 	char buffer[ 256 ];
 	
-	OpenFileInMemory( &fp, poem );
+	tmOpenFileInMemory( &fp, poem );
 
 	// prints:
 	// the spider crawled on up the web and smiled :)
 	while ( fp.bytes_read < poem_size )
 	{
-		mscanf( &fp, "%s", buffer );
+		tmscanf( &fp, "%s", buffer );
 		printf( "%s ", buffer );
 	}
 
 	// prints:
 	// spider
-	mseek( &fp, 4 );
-	mscanf( &fp, "%s", buffer );
+	tmseek( &fp, 4 );
+	tmscanf( &fp, "%s", buffer );
 	printf( "%s ", buffer );
 }
