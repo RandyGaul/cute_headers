@@ -45,10 +45,10 @@ typedef struct
 {
 	const char* ptr;
 	int bytes_read;
-} tmMEM_FILE;
+} tmFILE;
 
 //--------------------------------------------------------------------------------------------------
-inline void tmOpenFileInMemory( tmMEM_FILE* file, const void* data )
+inline void tmOpenFileInMemory( tmFILE* file, const void* data )
 {
 	file->ptr = (const char*)data;
 	file->bytes_read = 0;
@@ -74,7 +74,7 @@ inline void tmFormatMemfileBuffer( const char* format, char* buffer )
 }
 
 //--------------------------------------------------------------------------------------------------
-inline void tmseek( tmMEM_FILE* fp, int offset )
+inline void tmseek( tmFILE* fp, int offset )
 {
 #ifdef _DEBUG
 	assert( fp->bytes_read + offset >= 0 );
@@ -91,7 +91,7 @@ inline void tmseek( tmMEM_FILE* fp, int offset )
 	argument_##N
 
 #define TM_SCANF_FUNC( N ) \
-	inline int tmscanf( tmMEM_FILE* file, const char* format, TM_LOOP( TM_SCANF_PARAMS, N ) ) \
+	inline int tmscanf( tmFILE* file, const char* format, TM_LOOP( TM_SCANF_PARAMS, N ) ) \
 	{ \
 		char buffer[ 256 ]; \
 		int bytes_read; \

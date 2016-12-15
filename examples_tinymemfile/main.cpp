@@ -12,7 +12,7 @@ const int poem_size = (int)sizeof(poem);
 
 int main( )
 {
-	tmMEM_FILE fp;
+	tmFILE fp;
 	char buffer[ 256 ];
 	
 	tmOpenFileInMemory( &fp, poem );
