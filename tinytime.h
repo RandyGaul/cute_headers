@@ -28,6 +28,7 @@ float ttTime( );
 // functions on multiple threads multiple times will grant a heft performance
 // loss in the form of false sharing due to CPU cache synchronization across
 // multiple cores.
+// More info: https://msdn.microsoft.com/en-us/library/windows/desktop/ee417693(v=vs.85).aspx
 
 #if TT_PLATFORM == TT_WINDOWS
 
