@@ -70,7 +70,7 @@ float ttTime( );
 			first = 0;
 			mach_timebase_info_data_t info;
 			mach_timebase_info( &info );
-			factor = ((double)info.numer / (double)info.denom) * 1000000000.0;
+			factor = (double)info.numer / ((double)info.denom * 1000000000.0);
 			prev = mach_absolute_time( );
 			return 0;
 		}
