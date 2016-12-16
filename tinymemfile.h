@@ -1,9 +1,7 @@
 #if !defined( TINYMEMFILE_H )
 
-#ifdef _DEBUG
 #include <assert.h>
 #include <string.h>
-#endif
 
 #include <stdio.h> // sscanf
 
@@ -45,23 +43,56 @@ typedef struct
 {
 	const char* ptr;
 	int bytes_read;
+	int size;
 } tmFILE;
 
 //--------------------------------------------------------------------------------------------------
-inline void tmOpenFileInMemory( tmFILE* file, const void* data )
+// Make sure your file is nul-byte terminated! This represents EOF, and
+// is important for the internal sscanf call.
+inline void tmOpenFileInMemory( tmFILE* fp, const void* data, int size )
 {
-	file->ptr = (const char*)data;
-	file->bytes_read = 0;
+	fp->ptr = (const char*)data;
+	fp->bytes_read = 0;
+	fp->size = size - 1;
 }
 
 //--------------------------------------------------------------------------------------------------
-inline void tmFormatMemfileBuffer( const char* format, char* buffer )
+int tmEOF( tmFILE* fp )
+{
+	return fp->bytes_read == fp->size;
+}
+
+//--------------------------------------------------------------------------------------------------
+// returns 1 on succes, 0 on out of bounds access
+// feel free to remove the bytes_read clamping for efficiency purposes
+inline int tmseek( tmFILE* fp, int offset )
+{
+	assert( offset >= 0 );
+	assert( offset < fp->size + 1 );
+
+	int size = fp->size;
+	int ret = 1;
+	if ( offset < 0 )
+	{
+		ret = 0;
+		offset = 0;
+	}
+	
+	else if ( offset >= size )
+	{
+		ret = 0;
+		offset = size - 1;
+	}
+	
+	fp->bytes_read = offset;
+	return ret;
+}
+
+//--------------------------------------------------------------------------------------------------
+inline void tmFormatMemfileBuffer_internal( const char* format, char* buffer )
 {
 	int i;
-
-#ifdef _DEBUG
 	assert( strlen( format ) + 1 < 256 - 3 );
-#endif
 
 	for ( i = 0; format[ i ]; ++i )
 	{
@@ -71,16 +102,6 @@ inline void tmFormatMemfileBuffer( const char* format, char* buffer )
 	buffer[ i ] = '%';
 	buffer[ i + 1 ] = 'n';
 	buffer[ i + 2 ] = 0;
-}
-
-//--------------------------------------------------------------------------------------------------
-inline void tmseek( tmFILE* fp, int offset )
-{
-#ifdef _DEBUG
-	assert( fp->bytes_read + offset >= 0 );
-#endif
-
-	fp->bytes_read = offset;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -96,9 +117,11 @@ inline void tmseek( tmFILE* fp, int offset )
 		char buffer[ 256 ]; \
 		int bytes_read; \
 		int ret; \
-		tmFormatMemfileBuffer( format, buffer ); \
+		tmFormatMemfileBuffer_internal( format, buffer ); \
 		ret = sscanf( file->ptr + file->bytes_read, buffer, TM_LOOP( TM_SCANF_ARGS, N ), &bytes_read ); \
 		file->bytes_read += bytes_read; \
+		printf( "%d %d %d %d\n", ret, bytes_read, file->bytes_read, file->size ); \
+		assert( file->bytes_read <= file->size ); \
 		return ret; \
 	}
 
