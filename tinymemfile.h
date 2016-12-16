@@ -17,30 +17,6 @@
 
 #include <stdio.h> // sscanf
 
-#define TM_LOOP_0( F, N )
-#define TM_LOOP_1( F, N ) F( 1 )
-#define TM_LOOP_2( F, N ) TM_LOOP_1( F, N ), F( 2 )
-#define TM_LOOP_3( F, N ) TM_LOOP_2( F, N ), F( 3 )
-#define TM_LOOP_4( F, N ) TM_LOOP_3( F, N ), F( 4 )
-#define TM_LOOP_5( F, N ) TM_LOOP_4( F, N ), F( 5 )
-#define TM_LOOP_6( F, N ) TM_LOOP_5( F, N ), F( 6 )
-#define TM_LOOP_7( F, N ) TM_LOOP_6( F, N ), F( 7 )
-#define TM_LOOP_8( F, N ) TM_LOOP_7( F, N ), F( 8 )
-
-#define TM_ITERATE_0( F )
-#define TM_ITERATE_1( F ) F( 1 )
-#define TM_ITERATE_2( F ) TM_ITERATE_1( F ) F( 2 )
-#define TM_ITERATE_3( F ) TM_ITERATE_2( F ) F( 3 )
-#define TM_ITERATE_4( F ) TM_ITERATE_3( F ) F( 4 )
-#define TM_ITERATE_5( F ) TM_ITERATE_4( F ) F( 5 )
-#define TM_ITERATE_6( F ) TM_ITERATE_5( F ) F( 6 )
-#define TM_ITERATE_7( F ) TM_ITERATE_6( F ) F( 7 )
-#define TM_ITERATE_8( F ) TM_ITERATE_7( F ) F( 8 )
-
-#define TM_ITERATE( F, N ) TM_ITERATE_##N( F )
-
-#define TM_LOOP( F, N ) TM_LOOP_##N( F, N )
-
 // kinda sketchy, but helps compile on Windows
 // feel free to remove
 #ifdef WIN32
@@ -117,6 +93,30 @@ inline void tmFormatMemfileBuffer_internal( const char* format, char* buffer )
 }
 
 //--------------------------------------------------------------------------------------------------
+#define TM_LOOP_0( F, N )
+#define TM_LOOP_1( F, N ) F( 1 )
+#define TM_LOOP_2( F, N ) TM_LOOP_1( F, N ), F( 2 )
+#define TM_LOOP_3( F, N ) TM_LOOP_2( F, N ), F( 3 )
+#define TM_LOOP_4( F, N ) TM_LOOP_3( F, N ), F( 4 )
+#define TM_LOOP_5( F, N ) TM_LOOP_4( F, N ), F( 5 )
+#define TM_LOOP_6( F, N ) TM_LOOP_5( F, N ), F( 6 )
+#define TM_LOOP_7( F, N ) TM_LOOP_6( F, N ), F( 7 )
+#define TM_LOOP_8( F, N ) TM_LOOP_7( F, N ), F( 8 )
+
+#define TM_ITERATE_0( F )
+#define TM_ITERATE_1( F ) F( 1 )
+#define TM_ITERATE_2( F ) TM_ITERATE_1( F ) F( 2 )
+#define TM_ITERATE_3( F ) TM_ITERATE_2( F ) F( 3 )
+#define TM_ITERATE_4( F ) TM_ITERATE_3( F ) F( 4 )
+#define TM_ITERATE_5( F ) TM_ITERATE_4( F ) F( 5 )
+#define TM_ITERATE_6( F ) TM_ITERATE_5( F ) F( 6 )
+#define TM_ITERATE_7( F ) TM_ITERATE_6( F ) F( 7 )
+#define TM_ITERATE_8( F ) TM_ITERATE_7( F ) F( 8 )
+
+#define TM_ITERATE( F, N ) TM_ITERATE_##N( F )
+
+#define TM_LOOP( F, N ) TM_LOOP_##N( F, N )
+
 #define TM_SCANF_PARAMS( N ) \
 	void* argument_##N
 
