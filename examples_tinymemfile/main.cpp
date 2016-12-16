@@ -27,5 +27,5 @@ int main( )
 	// spider
 	tmseek( &fp, 4 );
 	tmscanf( &fp, "%s", buffer );
-	printf( "%s ", buffer );
+	printf( "%s", buffer );
 }
