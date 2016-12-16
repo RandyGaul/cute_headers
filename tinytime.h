@@ -48,6 +48,7 @@ float ttTime( );
 			LARGE_INTEGER freq;
 			QueryPerformanceFrequency( &freq );
 			factor = 1.0 / (double)freq.QuadPart;
+			return 0;
 		}
 
 		float elapsed = (float)((double)(now.QuadPart - prev.QuadPart) * factor);
