@@ -147,7 +147,7 @@ void SoakBasicAcks( )
 		if ( GetAsyncKeyState( VK_ESCAPE ) )
 			break;
 
-		time += Time( );
+		time += ttTime( );
 
 		if ( time < dt ) continue;
 		while ( time > dt )
@@ -155,7 +155,7 @@ void SoakBasicAcks( )
 
 		Sender( );
 		while ( Reciever( ) );
-		tnTick( ctx );
+		tnTick( ctx, time );
 	}
 }
 

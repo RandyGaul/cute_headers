@@ -712,7 +712,7 @@ struct tnIncomingPacketData
 struct tnOutgoingPacketData
 {
 	int acked;
-	float send_time;
+	int send_time_milliseconds;
 	int count;
 	uint16_t ids[ TN_MAX_RELIABLES ];
 };
@@ -723,7 +723,7 @@ struct tnReliableData
 	uint32_t data[ TN_RELIABLE_WORD_COUNT ];
 };
 
-#define TN_SEQUENCE_BUFFER_SIZE 512
+#define TN_SEQUENCE_BUFFER_SIZE 1024
 struct tnSequenceBuffer
 {
 	uint16_t sequence;
@@ -818,11 +818,23 @@ void tnMakeAck( tnSequenceBuffer* seq, uint16_t* ack, uint32_t* ack_bits )
 struct tnContext
 {
 	float dt;
+	int time_monotonic_milliseconds;
+	int rtt;
 	int vtable_count;
 	tnVTABLE* vtables;
 	int use_sim;
 	tnNetSim sim;
 };
+
+int tnPing( tnContext* ctx )
+{
+	int rtt = ctx->rtt;
+	/*int fuzz = (int)(ctx->dt * 1500.0f + 0.5f);
+	if ( ctx->use_sim ) fuzz += (int)(ctx->dt * 1000.0f + 0.5f);
+	if ( rtt - fuzz > 0 ) rtt = rtt - fuzz;
+	if ( rtt < 4 ) rtt = 4;*/
+	return rtt;
+}
 
 tnVTABLE* tnGetTable( tnContext* ctx, int user_type )
 {
@@ -893,7 +905,7 @@ int tnRegister( tnContext* ctx, int type_index, tnWrite write, tnRead read, tnMe
 	return 1;
 }
 
-tnContext* tnInit( int num_packet_types, float fixed_dt )
+tnContext* tnInit( int num_packet_types )
 {
 	#if TN_PLATFORM == PLATFORM_WINDOWS
 	WSADATA WsaData;
@@ -904,7 +916,9 @@ tnContext* tnInit( int num_packet_types, float fixed_dt )
 	TN_CHECK( req < TN_PACKET_TYPE_BYTES * 8, "Please make TN_PACKET_TYPE_NUM_BITS larger." );
 
 	tnContext* ctx = (tnContext*)malloc( sizeof( tnContext ) );
-	ctx->dt = fixed_dt;
+	ctx->dt = 0;
+	ctx->rtt = 0;
+	ctx->time_monotonic_milliseconds = 0;
 	ctx->vtable_count = num_packet_types;
 	ctx->vtables = (tnVTABLE*)calloc( 1, sizeof( tnVTABLE ) * num_packet_types );
 	ctx->use_sim = 0;
@@ -1026,12 +1040,16 @@ void tnFlushNetSim( tnContext* ctx )
 	}
 }
 
-void tnTick( tnContext* ctx )
+void tnTick( tnContext* ctx, float dt )
 {
 	// TODO:
 	// track bandwidth used
 	// if bandwidth under max, flush some more reliable data
 	TN_ASSERT( ctx );
+	ctx->dt = dt;
+	int milliseconds = (int)(dt * 1000.0f);
+	ctx->time_monotonic_milliseconds += milliseconds;
+	if ( ctx->time_monotonic_milliseconds < 0 ) ctx->time_monotonic_milliseconds *= -1;
 	if ( ctx->use_sim ) tnFlushNetSim( ctx );
 }
 
@@ -1329,9 +1347,8 @@ int tnSendPacket_internal( tnTransport* transport, tnPacketType_internal interna
 		tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnInsertSequence( outgoing, packet_sequence );
 		TN_ASSERT( data );
 		data->acked = 0;
-		data->send_time = 0;
+		data->send_time_milliseconds = ctx->time_monotonic_milliseconds;
 		data->count = 0;
-		// TODO: use real time here
 	}	break;
 
 	case TN_PACKET_TYPE_SLICE:
@@ -1428,10 +1445,23 @@ void tnOnAck_internal( tnTransport* transport, uint16_t sequence )
 {
 	//TN_DEBUG_PRINT( "GOT ACK FOR PACKET %d %s\n", sequence, transport->debug_name );
 
-	// remove acked reliables
 	tnSequenceBuffer* reliable_out = &transport->reliable_outgoing;
 	tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnGetSequenceData( &transport->outgoing, sequence );
 	TN_ASSERT( data ); // TODO: when can this be false?
+
+	// record round-trip time
+	tnContext* ctx = transport->ctx;
+	int prev_time = data->send_time_milliseconds;
+	int now_time = ctx->time_monotonic_milliseconds;
+	int rtt;
+	if ( now_time > prev_time ) rtt = now_time - prev_time;
+	else rtt = (int)TN_INT16_MAX - prev_time + now_time;
+	float a = (float)ctx->rtt;
+	float b = (float)rtt;
+	float c = (b - a) * 0.1f + a;
+	ctx->rtt = (int)(c + 0.5f);
+
+	// remove acked reliables
 	int count = data->count;
 	uint16_t* ids = data->ids;
 	//TN_DEBUG_PRINT( "PACKET %d HAD %d .. %d RELIABLES %s\n", sequence, ids[ 0 ] % TN_SEQUENCE_BUFFER_SIZE, ids[ count - 1 ] % TN_SEQUENCE_BUFFER_SIZE, transport->debug_name );
@@ -1664,7 +1694,7 @@ int tnGetReliable( tnTransport* transport, int* user_type, void* data )
 	tnVTABLE* table = tnGetTable( transport->ctx, type );
 	memcpy( data, reliable->data, table->runtime_size );
 	tnSequenceRemove( incoming, sequence );
-	TN_DEBUG_PRINT( "REMOVE INCOMING %d\t%s\n", sequence % TN_SEQUENCE_BUFFER_SIZE, transport->debug_name );
+	//TN_DEBUG_PRINT( "REMOVE INCOMING %d\t%s\n", sequence % TN_SEQUENCE_BUFFER_SIZE, transport->debug_name );
 	transport->reliable_next_incoming = sequence + 1;
 	return 1;
 }

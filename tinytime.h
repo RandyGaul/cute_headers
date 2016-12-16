@@ -107,6 +107,8 @@ float ttTime( );
 
 #endif
 
+#endif // TT_IMPLEMENTATION
+
 /*
 	zlib license:
 	
