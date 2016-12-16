@@ -120,7 +120,6 @@ inline void tmFormatMemfileBuffer_internal( const char* format, char* buffer )
 		tmFormatMemfileBuffer_internal( format, buffer ); \
 		ret = sscanf( file->ptr + file->bytes_read, buffer, TM_LOOP( TM_SCANF_ARGS, N ), &bytes_read ); \
 		file->bytes_read += bytes_read; \
-		printf( "%d %d %d %d\n", ret, bytes_read, file->bytes_read, file->size ); \
 		assert( file->bytes_read <= file->size ); \
 		return ret; \
 	}
