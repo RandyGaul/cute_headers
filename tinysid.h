@@ -22,6 +22,15 @@
 // path and out_path can point to the same file, or to different files
 void tsPreprocess( const char* path, const char* out_path );
 
+// Feel free to use SID at run-time to hash strings on the spot. Then at
+// some point in time (as a pre-build step or even when your application
+// is running) preprocess your files to create hard-coded constants.
+// The underlying hash function can be swapped out as-needed by modifying
+// this source file. Just replace all instances of djb2 with your own
+// hash function, along with a matching signature.
+#define SID( str ) djb2( str, str + strlen( str ) )
+unsigned djb2( char* str, char* end );
+
 #define TINYSID_H
 #endif
 
@@ -32,7 +41,7 @@ void tsPreprocess( const char* path, const char* out_path );
 #include <ctype.h>  // isspace
 #include <assert.h>
 
-static unsigned djb2( char* str, char* end )
+unsigned djb2( char* str, char* end )
 {
 	unsigned h = 5381;
 	int c;
@@ -46,10 +55,6 @@ static unsigned djb2( char* str, char* end )
 
 	return h;
 }
-
-#if !defined( TINYSID_HASH )
-	#define TINYSID_HASH djb2
-#endif
 
 static void tsSkipWhite_internal( char** dataPtr, char** outPtr )
 {
