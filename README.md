@@ -9,6 +9,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinytime](tinytime.h)** | Single function to return elapsed time delta in seconds since last call | 1.0 | C/C++
 **[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
 **[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
+**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
 
 &ast; Not yet hit first release
 
