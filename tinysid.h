@@ -1,5 +1,25 @@
+/*
+	tinysid.h - v1.0
+
+	SUMMARY:
+		Implements a compile-time string hasher via preprocessing.
+		Preprocesses an input file and turns all SID( "string" ) instances
+		into compile-time hashed integers that look more like:
+		
+		SID( "string" )
+		
+		turns into
+		
+		0x10293858 // "string"
+
+	To use this lib just call tsPreprocess on a file. See the example file at
+	https://github.com/RandyGaul/tinyheaders on how to recursively visit and call
+	tsPreprocess no all source files in a directory.
+*/
+
 #if !defined( TINYSID_H )
 
+// path and out_path can point to the same file, or to different files
 void tsPreprocess( const char* path, const char* out_path );
 
 #define TINYSID_H
