@@ -157,6 +157,7 @@ static int tfSafeStrCopy_internal( char* dst, const char* src, int n, int max, c
 				, file
 				, max );
 			TF_ASSERT( 0 );
+			break;
 		}
 
 		c = *src++;
