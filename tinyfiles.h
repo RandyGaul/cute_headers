@@ -149,15 +149,15 @@ static int tfSafeStrCopy_internal( char* dst, const char* src, int n, int max, c
 
 	do
 	{
-		if ( n >= max && TF_DEBUG_CHECKS )
+		if ( n >= max )
 		{
+			if ( !TF_DEBUG_CHECKS ) break;
 			printf( "ERROR: String \"%s\" too long to copy on line %d in file %s (max length of %d).\n"
 				, original
 				, line
 				, file
 				, max );
 			TF_ASSERT( 0 );
-			break;
 		}
 
 		c = *src++;
