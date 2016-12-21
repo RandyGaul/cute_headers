@@ -71,7 +71,7 @@ float ttTime( );
 			first = 0;
 			mach_timebase_info_data_t info;
 			mach_timebase_info( &info );
-			factor = (double)info.numer / ((double)info.denom * 1000000000.0);
+			factor = (double)info.numer / ((double)info.denom * 1.0e9);
 			prev = mach_absolute_time( );
 			return 0;
 		}
@@ -100,7 +100,7 @@ float ttTime( );
 		
 		struct timespec now;
 		clock_gettime( CLOCK_MONOTONIC, &now );
-		float elapsed = (float)((double)(now.tv_nsec - prev.tv_nsec) * 1000000000.0);
+		float elapsed = (float)((double)(now.tv_nsec - prev.tv_nsec) * 1.0e-9);
 		prev = now;
 		return elapsed;
 	}
