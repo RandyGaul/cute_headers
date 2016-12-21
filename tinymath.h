@@ -70,7 +70,6 @@
 
 #endif
 
-
 struct v3
 {
 	TM_INLINE v3( ) { }
@@ -122,6 +121,7 @@ TM_INLINE m3 rows( v3 x, v3 y, v3 z )
 	return m;
 }
 
+// helpers for static data
 struct v3_consti
 {
 	union { uint32_t i[ 4 ]; __m128 m; };
@@ -140,6 +140,7 @@ TM_SELECTANY v3_consti tmMaskSign = { 0x80000000, 0x80000000, 0x80000000, 0x8000
 TM_SELECTANY v3_consti tmMaskAllBits = { 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000 };
 TM_SELECTANY v3_constf tmMaskBasis = { 0.57735027f, 0.57735027f, 0.57735027f };
 
+// the binary ops
 TM_INLINE v3 operator+( v3 a, v3 b ) { return _mm_add_ps( a, b ); }
 TM_INLINE v3 operator-( v3 a, v3 b ) { return _mm_sub_ps( a, b ); }
 TM_INLINE v3 operator*( v3 a, v3 b ) { return _mm_mul_ps( a, b ); }
@@ -149,7 +150,7 @@ TM_INLINE v3& operator-=( v3 &a, v3 b ) { a = a - b; return a; }
 TM_INLINE v3& operator*=( v3 &a, v3 b ) { a = a * b; return a; }
 TM_INLINE v3& operator/=( v3 &a, v3 b ) { a = a / b; return a; }
 
-// generally comparisons are followed up with a mask(v3) call
+// generally comparisons are followed up with a mask(v3) call (or any(v3))
 TM_INLINE v3 operator==( v3 a, v3 b ) { return _mm_cmpeq_ps( a, b ); }
 TM_INLINE v3 operator!=( v3 a, v3 b ) { return _mm_cmpneq_ps( a, b ); }
 TM_INLINE v3 operator<( v3 a, v3 b ) { return _mm_cmplt_ps( a, b ); }
@@ -161,6 +162,7 @@ TM_INLINE unsigned mask( v3 a ) { return _mm_movemask_ps( a ) & 7; }
 TM_INLINE int any( v3 a ) { return mask( a ) != 0; }
 TM_INLINE int all( v3 a ) { return mask( a ) == 7; }
 
+// generally avoid these next three functions
 TM_INLINE v3 setx( v3 a, float x )
 {
 	v3 t0 = _mm_set_ss( x );
@@ -228,6 +230,10 @@ TM_INLINE v3 select( v3 a, v3 b, v3 mask ) { return _mm_xor_ps( a, _mm_and_ps( m
 TM_INLINE v3 lerp( v3 a, v3 b, float t ) { return a + (b - a) * t; }
 TM_INLINE v3 lerp( v3 a, v3 b, v3 t ) { return a + (b - a) * t; }
 
+// for posterity
+// TM_INLINE v3 lerp( v3 a, v3 b, float t ) { return a * (1.0f - t) + b * t; }
+// TM_INLINE v3 lerp( v3 a, v3 b, v3 t ) { return a * (1.0f - t) + b * t; }
+
 TM_INLINE float hmin( v3 a )
 {
 	v3 t0 = TM_SHUFFLE( a, a, 1, 0, 2 );
@@ -243,10 +249,6 @@ TM_INLINE float hmax( v3 a )
 	v3 t1 = TM_SHUFFLE( a, a, 2, 0, 1 );
 	return getx( max( a, t1 ) );
 }
-
-// for posterity
-// TM_INLINE v3 lerp( v3 a, v3 b, float t ) { return a * (1.0f - t) + b * t; }
-// TM_INLINE v3 lerp( v3 a, v3 b, v3 t ) { return a * (1.0f - t) + b * t; }
 
 TM_INLINE v3 norm( v3 a )
 { 
