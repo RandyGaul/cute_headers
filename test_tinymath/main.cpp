@@ -4,6 +4,7 @@
 #include <stdio.h>
 #define CHECK( X ) do { if ( !(X) ) { printf( "FAILED (line %d): %s\n", __LINE__, #X ); } } while ( 0 )
 
+// see http://www.codersnotes.com/notes/maths-lib-2016/
 bool RayBox( v3 rayOrg, v3 invDir, v3 bbmin, v3 bbmax, float &hitT )
 {
 	v3 d0 = (bbmin - rayOrg) * invDir;
