@@ -14,6 +14,14 @@
 		will need __cdecl (this is what TM_CDECL is for). Statically linking will bring
 		no problems, as __vectorcall will be applied to the statically linked lib.
 
+		This header is not particularly customized for general graphics programming since
+		there are no functions implemented here for 4x4 matrices. Personally I never use
+		4x4 matrices and instead prefer to represent affine transormations in block form:
+		Ax + b, where A is a 3x3 rotation matrix (and possibly scale), and b performs the
+		affine translation. A 4x4 matrix would store an additional row of { 0, 0, 0, 1 },
+		so in most cases this bottom row is wasted anyways. This is all my own preference
+		so feel free to adjust the header and add in 4x4 matrix routines as desired.
+
 	Some tips for writing efficient SIMD code:
 		SIMD operates on XMM (128 bit) and YMM (256 bit) registers. There aren't very many
 		of these registers. The functions in this file pass arguments by value in an attempt
