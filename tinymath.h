@@ -41,7 +41,7 @@
 		Scalar.
 
 		Try to use SIMD comparison functions to create a comparison mask. This mask can be
-		used with lmSelect to choose between one of two vectors. This lets the user avoid
+		used with select() to choose between one of two vectors. This lets the user avoid
 		branching in trade for extra computations. Here's a link to the list of SSE comparison
 		intrinsics: https://msdn.microsoft.com/en-us/library/w8kez9sf%28v=vs.90%29.aspx
 
