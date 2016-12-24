@@ -142,7 +142,7 @@ static int tsNext_internal( char** dataPtr, char** outPtr )
 
 void tsPreprocess( const char* path, const char* out_path )
 {
-#ifdef _WIN32
+#if defined( _WIN32 ) && defined( _MSC_VER )
 	_set_printf_count_output( 1 );
 #endif
 

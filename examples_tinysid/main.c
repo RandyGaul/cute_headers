@@ -1,3 +1,5 @@
+#include <Windows.h>
+
 #define TINYSID_IMPL
 #define TINYFILES_IMPL
 #include "tinysid.h"
