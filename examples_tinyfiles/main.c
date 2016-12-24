@@ -1,3 +1,5 @@
+#include <Windows.h>
+
 #define TINYFILES_IMPL
 #include "tinyfiles.h"
 

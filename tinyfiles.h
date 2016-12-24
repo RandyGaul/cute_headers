@@ -254,9 +254,6 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 
 	int tfDirOpen( tfDIR* dir, const char* path )
 	{
-		dir->fileCount = 0;
-		dir->files = 0;
-
 		int n = tfSafeStrCpy( dir->path, path, 0, TF_MAX_PATH );
 		n = tfSafeStrCpy( dir->path, "\\*", n - 1, TF_MAX_PATH );
 		dir->handle = FindFirstFileA( dir->path, &dir->fdata );
