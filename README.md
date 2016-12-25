@@ -2,15 +2,16 @@
 
 Various single-file cross-platform C/C++ headers implementing self-contianed libraries.
 
-| library | description | latest version| language(s)
-|---------|-------------|---------------|------------
-**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG in mono/stereo, high performance custom mixer | 1.05 | C/C++
-**[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++
-**[tinytime](tinytime.h)** | Single function to return elapsed time delta in seconds since last call | 1.0 | C/C++
-**[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
-**[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
-**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
-**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.0 | C++
+| library | description | latest version| language(s) | license
+|---------|-------------|---------------|-------------|--------
+**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG in mono/stereo, high performance custom mixer | 1.05 | C/C++ | zlib
+**[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++ | zlib
+**[tinytime](tinytime.h)** | Single function to return elapsed time delta in seconds since last call | 1.0 | C/C++ | zlib
+**[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++ | zlib
+**[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++ | zlib
+**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++ | zlib
+**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.0 | C++ | zlib
+**[tinydeflate](tinydeflate.h)** | DEFLATE compliant compressor/decompressor, load/save PNG, texture atlas compiler | 1.0 | C/C++ | public domain
 
 &ast; Not yet hit first release
 
