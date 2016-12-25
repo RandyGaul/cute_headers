@@ -204,20 +204,20 @@ typedef struct
 	uint32_t nlit;
 	uint32_t ndst;
 	uint32_t nlen;
-} tdState;
+} tdIState;
 
-TD_INLINE static int tdWouldOverflow( tdState* s, int num_bits )
+TD_INLINE static int tdWouldOverflow( tdIState* s, int num_bits )
 {
 	return s->bits_left - num_bits < 0;
 }
 
-TD_INLINE static char* tdPtr( tdState* s )
+TD_INLINE static char* tdPtr( tdIState* s )
 {
 	TD_ASSERT( !(s->bits_left & 7) );
 	return ((char*)s->words) + s->count;
 }
 
-TD_INLINE static uint64_t tdPeakBits( tdState* s, int num_bits_to_read )
+TD_INLINE static uint64_t tdPeakBits( tdIState* s, int num_bits_to_read )
 {
 	if ( s->count < num_bits_to_read )
 	{
@@ -241,7 +241,7 @@ TD_INLINE static uint64_t tdPeakBits( tdState* s, int num_bits_to_read )
 	return s->bits;
 }
 
-TD_INLINE static uint32_t tdConsumeBits( tdState* s, int num_bits_to_read )
+TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 {
 	TD_ASSERT( s->count >= num_bits_to_read );
 	uint32_t bits = s->bits & (((uint64_t)1 << num_bits_to_read) - 1);
@@ -251,7 +251,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdState* s, int num_bits_to_read )
 	return bits;
 }
 
-TD_INLINE static uint32_t tdReadBits( tdState* s, int num_bits_to_read )
+TD_INLINE static uint32_t tdReadBits( tdIState* s, int num_bits_to_read )
 {
 	TD_ASSERT( num_bits_to_read <= 32 );
 	TD_ASSERT( num_bits_to_read >= 0 );
@@ -297,7 +297,7 @@ TD_INLINE static uint32_t tdRev16( uint32_t a )
 // Slots arrays starts as "bl_count"
 // Added 2.5) to stransform slots from "bl_count" into an array that
 // represents first indices for each code length in the final tree
-static int tdBuild( tdState* s, uint32_t* tree, uint8_t* lens, int sym_count )
+static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 {
 	int slots[ 16 ] = { 0 };
 
@@ -358,7 +358,7 @@ static int tdBuild( tdState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 	return max_index;
 }
 
-static int tdStored( tdState* s )
+static int tdStored( tdIState* s )
 {
 	// 3.2.3
 	// skip any remaining bits in current partially processed byte
@@ -376,14 +376,14 @@ static int tdStored( tdState* s )
 }
 
 // 3.2.6
-TD_INLINE static int tdFixed( tdState* s )
+TD_INLINE static int tdFixed( tdIState* s )
 {
 	s->nlit = tdBuild( s, s->lit, g_tdFixed, 288 );
 	s->ndst = tdBuild( 0, s->dst, g_tdFixed + 288, 32 );
 	return 1;
 }
 
-static int tdDecode( tdState* s, uint32_t* tree, int hi )
+static int tdDecode( tdIState* s, uint32_t* tree, int hi )
 {
 	uint64_t bits = tdPeakBits( s, 16 );
 	uint32_t search = (tdRev16( (uint32_t)bits ) << 16) | 0xFFFF;
@@ -406,7 +406,7 @@ static int tdDecode( tdState* s, uint32_t* tree, int hi )
 	return (key >> 4) & 0xFFF;
 }
 
-static int tdTryLookup( tdState* s, uint32_t* tree, int hi )
+static int tdTryLookup( tdIState* s, uint32_t* tree, int hi )
 {
 	uint64_t bits = tdPeakBits( s, 16 );
 	int index = bits & TD_LOOKUP_MASK;
@@ -422,7 +422,7 @@ static int tdTryLookup( tdState* s, uint32_t* tree, int hi )
 }
 
 // 3.2.7
-static int tdDynamic( tdState* s )
+static int tdDynamic( tdIState* s )
 {
 	uint8_t lenlens[ 19 ] = { 0 };
 
@@ -455,7 +455,7 @@ static int tdDynamic( tdState* s )
 }
 
 // 3.2.3
-static int tdBlock( tdState* s )
+static int tdBlock( tdIState* s )
 {
 	for (;;)
 	{
@@ -498,7 +498,7 @@ static int tdBlock( tdState* s )
 // 3.2.3
 int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 {
-	tdState* s = (tdState*)calloc( 1, sizeof( tdState ) );
+	tdIState* s = (tdIState*)calloc( 1, sizeof( tdIState ) );
 	s->bits = 0;
 	s->count = 0;
 	s->word_count = in_bytes / 4;
@@ -541,10 +541,173 @@ td_error:
 	return 0;
 }
 
-#if TD_PNG
+#define TD_WINDOW_SIZE       (1024 * 32)
+#define TD_HASH_COUNT        TD_WINDOW_SIZE
+#define TD_BLOCK_BUFFER_SIZE (TD_WINDOW_SIZE * 4)
+
+TD_INLINE static uint32_t djb2( char* str, char* end )
+{
+	uint32_t h = 5381;
+	uint32_t c;
+
+	while ( str != end )
+	{
+		c = *str;
+		h = ((h << 5) + h) + c;
+		++str;
+	}
+
+	return h;
+}
+
+typedef struct tdEntry
+{
+	uint32_t h;
+	//uint16_t len;
+	char* start;
+	//char* end;
+	struct tdEntry* next;
+} tdEntry;
+
+typedef struct
+{
+	char* in;
+	char* in_end;
+	char* out;
+	char* out_end;
+	char* window;
+
+	int max_entry_len;
+	int do_lazy_search;
+
+	tdEntry* free_list;
+	tdEntry* buckets[ TD_HASH_COUNT ];
+	tdEntry entries[ TD_HASH_COUNT ];
+	char block_buffer[ TD_BLOCK_BUFFER_SIZE ];
+} tdDState;
+
+typedef struct
+{
+	int max_entry_len;
+	int do_lazy_search;
+} tdDeflateOptions;
 
 #undef TD_CHECK
-#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; goto td_error; } } while ( 0 )
+#define TD_FAIL( ) do { goto td_error; } while ( 0 )
+#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
+
+TD_INLINE static void tdInsert( tdDState* s, char* start, char* end, uint32_t h )
+{
+	TD_ASSERT( s->free_list );
+	tdEntry* entry = s->free_list;
+	s->free_list = entry->next;
+	entry->h = h;
+	entry->len = end - start;
+	entry->start = start;
+	tdEntry* chain = s->buckets + h;
+	entry->next = chain;
+	chain = entry;
+}
+
+void* tdDeflateMem( void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
+{
+	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
+	s->in = (char*)in;
+	s->in_end = s->in + bytes;
+	s->out = (char*)malloc( bytes );
+	s->out_end = s->out + bytes;
+
+	s->max_entry_len = options->max_entry_len;
+	s->do_lazy_search = options->do_lazy_search;
+
+	for ( int i = 0; i < TD_HASH_COUNT - 1; ++i )
+		s->entries[ i ].next = s->entries + i + 1;
+	s->entries[ TD_HASH_COUNT - 1 ].next = 0;
+	s->free_list = s->entries;
+	memset( s->buckets, 0, sizeof( s->buckets ) );
+	s->window = s->block_buffer;
+
+	// write out 0
+	// write out 1
+
+	// write out first three bytes
+	for ( int i = 0; i < 3; ++i )
+		*s->window++ = *s->in++;
+
+	while ( s->in != s->in_end - 3 )
+	{
+		// move sliding window over one byte
+		// make 3 byte hash
+		char* start = s->in;
+		char* end = start + 3;
+		char byte = *s->in++;
+		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
+		tdEntry* chain = s->buckets + h;
+		
+		TD_ASSERT( s->free_list );
+		tdEntry* entry = s->free_list;
+		s->free_list = entry->next;
+		entry->h = h;
+		entry->start = start;
+		entry->next = chain;
+		s->buckets[ h ] = entry;
+
+		if ( chain )
+		{
+			// loop over chain
+				// keep track of best bit reduction
+				// discard matches that are too old
+
+			// make <len,dst> pair
+			// inc pair count
+			// if pair does not fit in block_buffer
+				// dump block_buffer
+
+			// else if pair count > threshold? && run count
+				// calc entropy
+				// if entropy * factor? > threshold?
+					// make tree, check depth
+					// if depth > 15
+						// PANIC
+					// if depth > threshold?
+						// dump block_buffer
+		}
+
+		else
+		{
+			// write out literal
+		}
+	}
+
+	// write out last 3 bytes??
+
+	int out_size = 0;
+	if ( out_bytes ) *out_bytes = out_size;
+	return 0;
+}
+
+void* tdDeflate( const char* in_path, const char* out_path, tdDeflateOptions* options )
+{
+	int size;
+	char* in = tdReadFileToMemory( in_path, &size );
+	char* out = 0;
+
+	TD_CHECK( in, "Unable to open in_path, or not enough memory to allocate file size." );
+	int out_bytes;
+	out = (char*)tdDeflateMem( in, size, &out_bytes, options );
+	if ( !out ) TD_FAIL( );
+	TD_CHECK( out, "Unable to allocate out buffer." );
+
+	free( in );
+	return out;
+
+td_error:
+	free( in );
+	return 0;
+}
+
+#if TD_PNG
+
 
 static uint8_t tdPaeth( uint8_t a, uint8_t b, uint8_t c )
 {
