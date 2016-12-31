@@ -16,11 +16,18 @@ void TestAtlas( )
 	tdImage pngs[ 8 ];
 	for ( int i = 0; i < 8; ++i )
 		pngs[ i ] = tdLoadPNG( png_names[ i ] );
-	tdMakeAtlas( "atlas.png", "atlas.txt", 64, 64, pngs, 8 );
+	tdMakeAtlas( "atlas.png", "atlas.txt", 64, 64, pngs, 8, png_names );
 }
 
 int main( )
 {
 	TestAtlas( );
+	tdImage img = tdLoadPNG( "atlas.png" );
+	int out_size;
+	const char* str = "    hello kekekekeke hello hi hi 123 321 123 321...";
+	int len = (int)(strlen( str ) + 1);
+	void* memory = malloc( len );
+	memcpy( memory, str, len );
+	void* out = tdDeflateMem( memory, len, &out_size, 0 );
 	return 0;
 }

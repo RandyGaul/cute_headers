@@ -27,10 +27,10 @@
 			// not only from tdLoad*** functions
 
 		Creating a texture atlas
-			tdMakeAtlas( "atlas.png", "atlas.txt", 256, 256, imgs, imgs_count );
+			tdMakeAtlas( "atlas.png", "atlas.txt", 256, 256, imgs, imgs_count, image_names );
 			// just pass an array of pointers to images, and the array count
 			// outputs a png along with a txt file. The txt contains UV info in
-			// a very easy to parse format.
+			// a very easy to parse format. The final parameter is optional.
 
 		Inflating a DEFLATE block
 			tdInflate( in, in_bytes, out, out_bytes );
@@ -131,7 +131,7 @@
 // return 1 for success, 0 for failures
 int tdInflate( void* in, int in_bytes, void* out, int out_bytes );
 int tdSavePNG( const char* fileName, tdImage* img );
-int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tdImage* pngs, int png_count );
+int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tdImage* pngs, int png_count, const char** names );
 
 // these two functions return tdImage::pix as 0 in event of errors
 tdImage tdLoadPNG( const char *fileName );
@@ -206,9 +206,9 @@ typedef struct
 	uint32_t nlen;
 } tdIState;
 
-TD_INLINE static int tdWouldOverflow( tdIState* s, int num_bits )
+TD_INLINE static int tdWouldOverflow( int bits_left, int num_bits )
 {
-	return s->bits_left - num_bits < 0;
+	return bits_left - num_bits < 0;
 }
 
 TD_INLINE static char* tdPtr( tdIState* s )
@@ -257,7 +257,7 @@ TD_INLINE static uint32_t tdReadBits( tdIState* s, int num_bits_to_read )
 	TD_ASSERT( num_bits_to_read >= 0 );
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 64 );
-	TD_ASSERT( !tdWouldOverflow( s, num_bits_to_read ) );
+	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_read ) );
 	tdPeakBits( s, num_bits_to_read );
 	uint32_t bits = tdConsumeBits( s, num_bits_to_read );
 	return bits;
@@ -291,6 +291,11 @@ TD_INLINE static uint32_t tdRev16( uint32_t a )
 	a = ((a & 0xF0F0) >>  4) | ((a & 0x0F0F) << 4);
 	a = ((a & 0xFF00) >>  8) | ((a & 0x00FF) << 8);
 	return a;
+}
+
+TD_INLINE static uint32_t tdRev( uint32_t a, uint32_t len )
+{
+	return tdRev16( a ) >> (16 - len);
 }
 
 // RFC 1951 section 3.2.2
@@ -541,9 +546,14 @@ td_error:
 	return 0;
 }
 
+// if TD_HASH_COUNT is set to >= TD_WINDOW_SIZE we can use a rolling buffer
 #define TD_WINDOW_SIZE       (1024 * 32)
 #define TD_HASH_COUNT        TD_WINDOW_SIZE
-#define TD_BLOCK_BUFFER_SIZE (TD_WINDOW_SIZE * 4)
+#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE * 4)
+
+#if TD_HASH_COUNT < TD_WINDOW_SIZE
+#error rolling buffer implementation requires worst case size minimum for hash entry memory
+#endif
 
 TD_INLINE static uint32_t djb2( char* str, char* end )
 {
@@ -560,14 +570,62 @@ TD_INLINE static uint32_t djb2( char* str, char* end )
 	return h;
 }
 
-typedef struct tdEntry
+typedef struct tdHash
 {
 	uint32_t h;
-	//uint16_t len;
 	char* start;
-	//char* end;
-	struct tdEntry* next;
+	struct tdHash* next;
+} tdHash;
+
+enum
+{
+	TD_ENTRY_LITERAL,
+	TD_ENTRY_MATCH,
+};
+
+typedef struct
+{
+	char type;
+	union
+	{
+		char literal;
+		struct
+		{
+			uint16_t len;
+			int dst;
+		};
+	};
 } tdEntry;
+
+typedef struct
+{
+	int key;
+	int val;
+} tdItem;
+
+typedef struct
+{
+	union
+	{
+		uint16_t freq;
+		uint16_t code;
+	};
+	union
+	{
+		uint16_t parent;
+		uint16_t len;
+	};
+
+	uint16_t depth;
+	uint16_t original;
+} tdNode;
+
+typedef struct
+{
+	uint16_t freq;
+	uint16_t code;
+	uint16_t len;
+} tdLeaf;
 
 typedef struct
 {
@@ -576,19 +634,30 @@ typedef struct
 	char* out;
 	char* out_end;
 	char* window;
+	tdLeaf len[ 286 ];
+	tdLeaf dst[ 30 ];
 
-	int max_entry_len;
+	uint64_t bits;
+	int count;
+	uint32_t* words;
+	int word_count;
+	int word_index;
+	int bits_left;
+
+	int max_chain_len;
 	int do_lazy_search;
 
-	tdEntry* free_list;
-	tdEntry* buckets[ TD_HASH_COUNT ];
-	tdEntry entries[ TD_HASH_COUNT ];
-	char block_buffer[ TD_BLOCK_BUFFER_SIZE ];
+	int hash_rolling;
+	tdHash* buckets[ TD_HASH_COUNT ];
+	tdHash hashes[ TD_HASH_COUNT ];
+
+	int entry_count;
+	tdEntry entries[ TD_ENTRY_BUFFER_SIZE ];
 } tdDState;
 
 typedef struct
 {
-	int max_entry_len;
+	int max_chain_len;
 	int do_lazy_search;
 } tdDeflateOptions;
 
@@ -596,90 +665,475 @@ typedef struct
 #define TD_FAIL( ) do { goto td_error; } while ( 0 )
 #define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
 
-TD_INLINE static void tdInsert( tdDState* s, char* start, char* end, uint32_t h )
+static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write )
 {
-	TD_ASSERT( s->free_list );
-	tdEntry* entry = s->free_list;
-	s->free_list = entry->next;
-	entry->h = h;
-	entry->len = end - start;
-	entry->start = start;
-	tdEntry* chain = s->buckets + h;
-	entry->next = chain;
-	chain = entry;
+	TD_ASSERT( num_bits_to_write <= 32 );
+	TD_ASSERT( s->bits_left > 0 );
+	TD_ASSERT( s->count <= 32 );
+	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
+
+	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
+	s->count += num_bits_to_write;
+	s->bits_left -= num_bits_to_write;
+
+	if ( s->count >= 32 )
+	{
+		s->words[ s->word_index ] = (uint32_t)(s->bits & ((uint32_t)~0));
+		s->bits >>= 32;
+		s->count -= 32;
+		s->word_index += 1;
+	}
 }
 
-void* tdDeflateMem( void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
+TD_INLINE static void tdFlush( tdDState* s )
 {
+	TD_ASSERT( s->count <= 32 );
+	if ( s->count ) s->words[ s->word_index ] = (uint32_t)(s->bits & ((uint32_t)~0));
+}
+
+TD_INLINE static void tdMatchIndices( int len, int dst, int* base_len, int* base_dst )
+{
+	TD_ASSERT( dst >= 0 && dst <= 32768 );
+	int dst_index = 0;
+	for ( int i = 0; i < 31; ++i )
+	{
+		int base = g_tdDistBase[ i ];
+		if ( base < dst ) dst_index = i;
+		else break;
+	}
+	int len_index = 0;
+	for ( int i = 0; i < 29; ++i )
+	{
+		int base = g_tdLenBase[ i ];
+		if ( base < len ) len_index = i;
+		else break;
+	}
+	TD_ASSERT( len_index >=0 && len_index <= 29 );
+	TD_ASSERT( dst_index >=0 && dst_index <= 31 );
+	*base_len = len_index;
+	*base_dst = dst_index;
+}
+
+TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
+{
+	int match_bits = len * 8;
+	return (len_bits + dst_bits) - match_bits;
+}
+
+#include <math.h>
+
+TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
+{
+	int sum = 0;
+	for ( int i = 0; i < 286; ++i ) sum += freq_in[ i ].freq;
+	float fsum = (float)sum;
+	float entropy = 0;
+	for ( int i = 0; i < 286; ++i )
+	{
+		int freq_int = freq_in[ i ].freq;
+		if ( freq_int )
+		{
+			float freq = (float)freq_int / fsum;
+			entropy -= freq * log2f( freq );
+		}
+	}
+	return entropy;
+}
+
+TD_INLINE static void tdLiteral( tdDState* s, char byte )
+{
+	tdEntry entry;
+	entry.type = TD_ENTRY_LITERAL;
+	entry.literal = byte;
+	s->window++;
+	s->entries[ s->entry_count++ ] = entry;
+	s->len[ byte ].freq++;
+}
+
+TD_INLINE static int tdSmaller( tdItem a, tdItem b, tdNode* nodes )
+{
+	if ( a.key < b.key ) return 1;
+	else if ( a.key == b.key && nodes[ a.val ].depth <= nodes[ b.val ].depth ) return 1;
+	return 0;
+}
+
+static void tdCascade( tdItem* items, int N, int i, tdNode* nodes )
+{
+	int min = i;
+	tdItem min_val = items[ i ];
+	int i2 = 2 * i;
+
+	while ( i2 < N )
+	{
+		int left = i2;
+		int right = i2 + 1;
+
+		if ( tdSmaller( items[ left ], min_val, nodes ) ) min = left;
+		if ( right < N && tdSmaller( items[ right ], items[ min ], nodes ) ) min = right;
+		if ( min == i ) break;
+
+		items[ i ] = items[ min ];
+		items[ min ] = min_val;
+		i = min;
+		i2 = 2 * i;
+	}
+}
+
+static void tdMakeHeap( tdItem* items, int count, tdNode* nodes )
+{
+	for ( int i = count / 2; i > 0; --i )
+		tdCascade( items, count, i, nodes );
+}
+
+static tdItem tdPopHeap( tdItem* items, int count, tdNode* nodes )
+{
+	tdItem root = items[ 1 ];
+	items[ 1 ] = items[ count - 1 ];
+	tdCascade( items, count - 1, 1, nodes );
+	return root;
+}
+
+static void tdPushHeap( tdItem* items, int count, tdItem a, tdNode* nodes )
+{
+	int i = count;
+	items[ count ] = a;
+
+	while ( i )
+	{
+		int j = i / 2;
+		tdItem child = items[ i ];
+		tdItem parent = items[ j ];
+
+		if ( tdSmaller( child, parent, nodes ) )
+		{
+			items[ i ] = parent;
+			items[ j ] = child;
+		}
+
+		i = j;
+	}
+}
+
+#if TD_DEBUG_CHECKS
+	#define tdAssertHeap( data, N, i, nodes ) tdAssertHeap_internal( data, N , i, nodes )
+#else
+	#define tdAssertHeap( ... )
+#endif
+void tdAssertHeap_internal( tdItem* data, int N, int i, tdNode* nodes )
+{
+	int left = i * 2;
+	int right = left + 1;
+
+	if ( left < N )
+	{
+		tdItem iVal = data[ i ];
+		tdItem lVal = data[ left ];
+		TD_ASSERT( tdSmaller( iVal, lVal, nodes ) );
+
+		if ( right < N )
+		{
+			tdItem rVal = data[ right ];
+			TD_ASSERT( tdSmaller( iVal, rVal, nodes ) );
+			tdAssertHeap( data, N, left, nodes );
+			tdAssertHeap( data, N, right, nodes );
+		}
+	}
+}
+
+void tdPrintHeap( tdItem* data, int count )
+{
+	int i = 1;
+	int j = 2;
+	int N = count;
+	do
+	{
+		if ( j > N ) j = N;
+		for ( int index = 0; index < N / 2 - i; ++index ) printf( "    " );
+		for ( int index = i; index < j; ++index ) printf( "(%2d %2d) ", data[ index ].key, data[ index ].val );
+		printf( "\n" );
+
+		i *= 2;
+		j = i * 2;
+	}
+	while ( i < N );
+	printf( "\n" );
+}
+
+TD_INLINE static tdMax( int a, int b )
+{
+	return a > b ? a : b;
+}
+
+void tdMakeTree( tdDState* s )
+{
+	// setup leaf nodes with frequencies set
+	int node_count = 0;
+	int item_count = 1;
+	tdNode nodes[ 286 * 2 + 1 ];
+	tdItem items[ 286 ];
+
+	for ( int i = 0; i < 286; ++i )
+	{
+		int freq = s->len[ i ].freq;
+		if ( freq )
+		{
+			//sum += freq;
+			TD_ASSERT( item_count < 286 );
+			tdItem* item = items + item_count++;
+			item->key = freq;
+			item->val = node_count++;
+			tdNode* node = nodes + item->val;
+			node->freq = freq;
+			node->parent = ~0;
+			node->depth = 0;
+			node->original = i;
+		}
+	}
+
+	// construct heap of leaves
+	tdMakeHeap( items, item_count, nodes );
+	tdAssertHeap( items, item_count, 1, nodes );
+	uint16_t sorted[ 286 * 2 + 1 ];
+	int sorted_count = 0;
+	int leaf_index = item_count - 1;
+
+	// Huffman algorithm
+	// tdItem::val is index into node array, key as frequency of node
+	// Also use the pop function to sort the nodes from lowest to highest frequency
+	do
+	{
+		tdItem a = tdPopHeap( items, item_count--, nodes );
+		tdItem b = tdPopHeap( items, item_count--, nodes );
+		tdItem c;
+		tdNode node_a = nodes[ a.val ];
+		tdNode node_b = nodes[ b.val ];
+		tdNode node_c;
+		sorted[ sorted_count++ ] = a.val;
+		sorted[ sorted_count++ ] = b.val;
+		int c_index = node_count++;
+		nodes[ a.val ].parent = c_index;
+		nodes[ b.val ].parent = c_index;
+		node_c.depth = tdMax( node_a.depth, node_b.depth ) + 1;
+		node_c.parent = ~0;
+		node_c.freq = node_a.freq + node_b.freq;
+		nodes[ c_index ] = node_c;
+		c.key = node_c.freq;
+		c.val = c_index;
+		tdPushHeap( items, item_count++, c, nodes );
+	}
+	while ( item_count > 2 );
+
+	printf( "\n(node.freq, node.depth)\n" );
+	for ( int i = 0; i < sorted_count; ++i )
+	{
+		tdNode node = nodes[ sorted[ i ] ];
+		printf( "(%d, %d)\n", node.freq, node.depth );
+	}
+
+	// crawling over the sorted list produces a level-order traversal
+	// setting code lengths becomes trivial
+	nodes[ sorted_count ].len = 0;
+	int len_counts[ 16 ];
+	int leaves[ 286 ];
+	int leaf_count = 0;
+	for ( int i = 0; i < 16; ++i ) len_counts[ i ] = 0;
+
+	for ( int i = sorted_count - 1; i >= 0; --i )
+	{
+		int index = sorted[ i ];
+		tdNode* child = nodes + index;
+		int parent = child->parent;
+		child->len = nodes[ parent ].len + 1;
+
+		if ( index > leaf_index ) continue;
+		TD_ASSERT( child->len < 16 );
+		len_counts[ child->len ]++;
+		TD_ASSERT( leaf_count < 286 );
+		leaves[ leaf_count++ ] = index;
+	}
+
+	printf( "\n(node.freq, node.len)\n" );
+	for ( int i = 0; i < sorted_count; ++i )
+	{
+		tdNode node = nodes[ sorted[ i ] ];
+		printf( "(%d, %d)\n", node.freq, node.len );
+	}
+
+	// freq and len are set
+	// now we overwrite freq with code
+	int codes[ 16 ];
+	codes[ 0 ] = 0;
+	for ( int i = 1; i < 16; ++i ) codes[ i ] = (codes[ i - 1 ] + len_counts[ i - 1 ]) << 1;
+	for ( int i = 0; i < leaf_count; ++i )
+	{
+		int leaf = leaves[ i ];
+		int len = nodes[ leaf ].len;
+		TD_ASSERT( len );
+		int original = nodes[ leaf ].original;
+		s->len[ original ].code = tdRev( codes[ len ]++, len );
+		s->len[ original ].len = len;
+	}
+}
+
+// TODO: remove = 0, we already calloc
+void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
+{
+	TD_ASSERT( !((size_t)in & 3) );
+	TD_ASSERT( !((size_t)bytes & 3) ); // TODO: get rid of this
+	char* in_buffer = (char*)in;
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
 	s->in = (char*)in;
 	s->in_end = s->in + bytes;
 	s->out = (char*)malloc( bytes );
 	s->out_end = s->out + bytes;
+	s->window = s->in;
 
-	s->max_entry_len = options->max_entry_len;
-	s->do_lazy_search = options->do_lazy_search;
+	s->bits = 0;
+	s->count = 0;
+	s->words = (uint32_t*)s->in;
+	s->word_count = bytes / sizeof( uint32_t );
+	s->word_index = 0;
+	s->bits_left = s->word_count * sizeof( uint32_t ) * 8;
 
-	for ( int i = 0; i < TD_HASH_COUNT - 1; ++i )
-		s->entries[ i ].next = s->entries + i + 1;
-	s->entries[ TD_HASH_COUNT - 1 ].next = 0;
-	s->free_list = s->entries;
+	if ( options )
+	{
+		s->max_chain_len = options->max_chain_len;
+		s->do_lazy_search = options->do_lazy_search;
+	}
+
+	else
+	{
+		// TODO think about these defaults
+		// and actually use them
+		s->max_chain_len = 1024;
+		s->do_lazy_search = 1;
+	}
+
+	s->hash_rolling = 0;
 	memset( s->buckets, 0, sizeof( s->buckets ) );
-	s->window = s->block_buffer;
+	s->entry_count = 0;
 
 	// write out 0
 	// write out 1
 
-	// write out first three bytes
-	for ( int i = 0; i < 3; ++i )
-		*s->window++ = *s->in++;
+	int pair_count = 0;
+	int run_count = 0;
 
-	while ( s->in != s->in_end - 3 )
+	while ( s->window != s->in_end - 3 )
 	{
 		// move sliding window over one byte
 		// make 3 byte hash
-		char* start = s->in;
-		char* end = start + 3;
-		char byte = *s->in++;
+		char* start = s->window;
+		char* end = s->window + 3;
 		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
-		tdEntry* chain = s->buckets + h;
-		
-		TD_ASSERT( s->free_list );
-		tdEntry* entry = s->free_list;
-		s->free_list = entry->next;
-		entry->h = h;
-		entry->start = start;
-		entry->next = chain;
-		s->buckets[ h ] = entry;
+		tdHash* chain = s->buckets[ h ];
+
+		int hash_index = s->hash_rolling++ % TD_HASH_COUNT;
+		tdHash* hash = s->hashes + hash_index;
+		hash->h = h;
+		hash->start = start;
+		hash->next = chain;
+		s->buckets[ h ] = hash;
 
 		if ( chain )
 		{
 			// loop over chain
-				// keep track of best bit reduction
-				// discard matches that are too old
+			// keep track of best bit reduction
+			tdHash* list = chain;
+			tdHash* best_match = 0;
+			int len = 0;
+			int dst;
+			int base_len;
+			int base_dst;
+			int len_bits;
+			int dst_bits;
+			int lowest_cost = INT_MAX;
+			while ( list )
+			{
+				char* a = hash->start;
+				char* b = list->start;
+				while ( len <= 258 && *a == *b && a < s->in_end )
+				{
+					*a++ = *b++;
+					++len;
+				}
+				if ( len )
+				{
+					TD_ASSERT( len <= 258 );
+					dst = (int)(size_t)(s->window - list->start);
+					tdMatchIndices( len, dst, &base_len, &base_dst );
+					len_bits = g_tdLenExtraBits[ base_len ];
+					dst_bits = g_tdDistExtraBits[ base_dst ];
+					int cost = tdMatchCost( len, len_bits, dst_bits );
+					if ( cost < lowest_cost )
+					{
+						lowest_cost = cost;
+						best_match = list;
+					}
+				}
+				list = list->next;
+			}
 
-			// make <len,dst> pair
-			// inc pair count
-			// if pair does not fit in block_buffer
-				// dump block_buffer
+			if ( !best_match )
+				goto literal;
 
-			// else if pair count > threshold? && run count
-				// calc entropy
-				// if entropy * factor? > threshold?
+			if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
+			{
+				// if pair does not fit in block_buffer
+				// dump tree
+				__debugbreak( );
+			}
+
+			++pair_count;
+			++run_count;
+			s->len[ 256 + base_len ].freq++;
+			s->dst[ base_dst ].freq++;
+			s->window += len;
+
+			tdEntry entry;
+			entry.type = TD_ENTRY_MATCH;
+			entry.len = len;
+			entry.dst = dst;
+			s->entries[ s->entry_count++ ] = entry;
+
+			// num children in full binary tree, since we ideally pack in tons of
+			// leaves with bit length less than 9, for fast decoder lookups.
+			int two_to_ninth = 512;
+			if ( run_count > two_to_ninth )
+			{
+				float entropy = tdEntropy( s->len );
+				float golden = 1.61803398875f;
+				float factor = golden * golden;
+				if ( (int)(entropy * golden + 0.5f) > 15 )
+				{
+					tdMakeTree( s );
 					// make tree, check depth
 					// if depth > 15
 						// PANIC
+						// dump tree
 					// if depth > threshold?
-						// dump block_buffer
+						// dump tree
+				}
+			}
+
+			continue;
 		}
 
-		else
-		{
-			// write out literal
-		}
+	literal:
+		tdLiteral( s, *s->window );
 	}
 
-	// write out last 3 bytes??
+	if ( s->window != s->in_end )
+	{
+		TD_ASSERT( s->window + 3 == s->in_end );
+		tdLiteral( s, *s->window );
+		tdLiteral( s, *s->window );
+		tdLiteral( s, *s->window );
+	}
+
+	tdMakeTree( s );
+
+	// dump tree
 
 	int out_size = 0;
 	if ( out_bytes ) *out_bytes = out_size;
@@ -1275,7 +1729,7 @@ static void tdQSort( tdRawImage* items, int count )
 
 #define TD_MAX_ATLAS_NODES 1024
 
-int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tdImage* pngs, int png_count )
+int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tdImage* pngs, int png_count, const char** names )
 {
 	float w0, h0, div, wTol, hTol;
 	int atlasImageSize, atlasStride, sp;
@@ -1433,7 +1887,7 @@ int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 				max_y = tmp;
 			}
 
-			fprintf( fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y );
+			fprintf( fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[ i ], width, height, min_x, min_y, max_x, max_y );
 		}
 	}
 
