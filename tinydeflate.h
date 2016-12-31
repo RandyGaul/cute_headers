@@ -1887,7 +1887,8 @@ int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 				max_y = tmp;
 			}
 
-			fprintf( fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[ i ], width, height, min_x, min_y, max_x, max_y );
+			if ( names ) fprintf( fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[ i ], width, height, min_x, min_y, max_x, max_y );
+			else fprintf( fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y );
 		}
 	}
 
