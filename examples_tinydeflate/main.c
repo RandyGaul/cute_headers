@@ -21,13 +21,15 @@ void TestAtlas( )
 
 int main( )
 {
-	TestAtlas( );
-	tdImage img = tdLoadPNG( "atlas.png" );
+	//TestAtlas( );
+	//tdImage img = tdLoadPNG( "atlas.png" );
 	int out_size;
 	const char* str = "    hello kekekekeke hello hi hi 123 321 123 321...";
 	int len = (int)(strlen( str ) + 1);
 	void* memory = malloc( len );
 	memcpy( memory, str, len );
 	void* out = tdDeflateMem( memory, len, &out_size, 0 );
+	char* deflated = (char*)malloc( len );
+	tdInflate( out, out_size, deflated, len );
 	return 0;
 }

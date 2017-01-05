@@ -1,4 +1,4 @@
-/*
+﻿/*
 	tinydeflate - v1.0
 
 	SUMMARY:
@@ -167,6 +167,7 @@ const char* g_tdDeflateErrorReason;
 #define TD_LOOKUP_BITS 9
 #define TD_LOOKUP_COUNT (1 << TD_LOOKUP_BITS)
 #define TD_LOOKUP_MASK (TD_LOOKUP_COUNT - 1)
+#define TD_DEFLATE_MAX_BITLEN 15
 
 // DEFLATE tables from RFC 1951
 uint8_t g_tdFixed[ 288 + 32 ] = {
@@ -432,7 +433,7 @@ static int tdDynamic( tdIState* s )
 	uint8_t lenlens[ 19 ] = { 0 };
 
 	int nlit = 257 + tdReadBits( s, 5 );
-	int ndist = 1 + tdReadBits( s, 5 );
+	int ndst = 1 + tdReadBits( s, 5 );
 	int nlen = 4 + tdReadBits( s, 4 );
 
 	for ( int i = 0 ; i < nlen; ++i )
@@ -442,7 +443,7 @@ static int tdDynamic( tdIState* s )
 	s->nlen = tdBuild( 0, s->len, lenlens, 19 );
 	uint8_t lens[ 288 + 32 ];
 
-	for ( int n = 0; n < nlit + ndist; )
+	for ( int n = 0; n < nlit + ndst; )
 	{
 		int sym = tdDecode( s, s->len, s->nlen );
 		switch ( sym )
@@ -455,7 +456,7 @@ static int tdDynamic( tdIState* s )
 	}
 
 	s->nlit = tdBuild( s, s->lit, lens, nlit );
-	s->ndst = tdBuild( 0, s->dst, lens + nlit, ndist );
+	s->ndst = tdBuild( 0, s->dst, lens + nlit, ndst );
 	return 1;
 }
 
@@ -577,24 +578,13 @@ typedef struct tdHash
 	struct tdHash* next;
 } tdHash;
 
-enum
-{
-	TD_ENTRY_LITERAL,
-	TD_ENTRY_MATCH,
-};
-
 typedef struct
 {
-	char type;
-	union
-	{
-		char literal;
-		struct
-		{
-			uint16_t len;
-			int dst;
-		};
-	};
+	char base_len;
+	char base_dst;
+	uint16_t symbol_index;
+	uint16_t len;
+	int dst;
 } tdEntry;
 
 typedef struct
@@ -618,6 +608,11 @@ typedef struct
 
 	uint16_t depth;
 	uint16_t original;
+
+#if TD_DEBUG_CHECKS
+	uint16_t left;
+	uint16_t right;
+#endif
 } tdNode;
 
 typedef struct
@@ -720,7 +715,7 @@ TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
 	return (len_bits + dst_bits) - match_bits;
 }
 
-#include <math.h>
+#include <math.h> // log2f
 
 TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
 {
@@ -740,14 +735,13 @@ TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
 	return entropy;
 }
 
-TD_INLINE static void tdLiteral( tdDState* s, char byte )
+TD_INLINE static void tdLiteral( tdDState* s, int symbol )
 {
-	tdEntry entry;
-	entry.type = TD_ENTRY_LITERAL;
-	entry.literal = byte;
+	tdEntry entry = { 0 };
+	entry.symbol_index = symbol;
 	s->window++;
 	s->entries[ s->entry_count++ ] = entry;
-	s->len[ byte ].freq++;
+	s->len[ symbol ].freq++;
 }
 
 TD_INLINE static int tdSmaller( tdItem a, tdItem b, tdNode* nodes )
@@ -864,17 +858,61 @@ TD_INLINE static tdMax( int a, int b )
 	return a > b ? a : b;
 }
 
-void tdMakeTree( tdDState* s )
+char depth[ 2056 ];
+int di;
+
+void Push( char c )
 {
+	depth[ di++ ] = ' ';
+	depth[ di++ ] = c;
+	depth[ di++ ] = ' ';
+	depth[ di++ ] = ' ';
+	depth[ di ] = 0;
+}
+ 
+void tdPop( )
+{
+	depth[ di -= 4 ] = 0;
+}
+ 
+void tdPrint( tdNode* tree, tdNode* nodes )
+{
+	if ( tree->original != (uint16_t)~0 ) printf( "(%d, %d) L\n", tree->code, tree->len );
+	else printf( "(%d, %d)\n", tree->freq, tree->len );
+ 
+	if ( tree->left != (uint16_t)~0 )
+	{
+		if ( tree->right != (uint16_t)~0 ) printf( "%s %c%c%c", depth, 195, 196, 196 );
+		else printf( "%s %c%c%c", depth, 192, 196, 196 );
+		Push( 179 );
+		tdPrint( nodes + tree->left, nodes );
+		tdPop( );
+	}
+
+	if ( tree->right != (uint16_t)~0 )
+	{
+		printf( "%s %c%c%c", depth, 192, 196, 196 );
+		Push( ' ' );
+		tdPrint( nodes + tree->right, nodes );
+		tdPop( );
+	}
+}
+
+void tdMakeTree( tdLeaf* tree, int count )
+{
+	int bits_saved = 0;
 	// setup leaf nodes with frequencies set
 	int node_count = 0;
 	int item_count = 1;
+	// TODO: figure out correct upper bounds for all arrays in this function
+	// for now the upper bounds are placed really high as guesses that are 100% safe.
+	// surely they can be reduced to smaller sizes.
 	tdNode nodes[ 286 * 2 + 1 ];
 	tdItem items[ 286 ];
 
-	for ( int i = 0; i < 286; ++i )
+	for ( int i = 0; i < count; ++i )
 	{
-		int freq = s->len[ i ].freq;
+		int freq = tree[ i ].freq;
 		if ( freq )
 		{
 			//sum += freq;
@@ -887,6 +925,11 @@ void tdMakeTree( tdDState* s )
 			node->parent = ~0;
 			node->depth = 0;
 			node->original = i;
+			if ( TD_DEBUG_CHECKS )
+			{
+				node->left = ~0;
+				node->right = ~0;
+			}
 		}
 	}
 
@@ -916,6 +959,12 @@ void tdMakeTree( tdDState* s )
 		node_c.depth = tdMax( node_a.depth, node_b.depth ) + 1;
 		node_c.parent = ~0;
 		node_c.freq = node_a.freq + node_b.freq;
+		node_c.original = ~0;
+		if ( TD_DEBUG_CHECKS )
+		{
+			node_c.left = a.val;
+			node_c.right = b.val;
+		}
 		nodes[ c_index ] = node_c;
 		c.key = node_c.freq;
 		c.val = c_index;
@@ -923,12 +972,12 @@ void tdMakeTree( tdDState* s )
 	}
 	while ( item_count > 2 );
 
-	printf( "\n(node.freq, node.depth)\n" );
-	for ( int i = 0; i < sorted_count; ++i )
-	{
-		tdNode node = nodes[ sorted[ i ] ];
-		printf( "(%d, %d)\n", node.freq, node.depth );
-	}
+	//printf( "\n(node.freq, node.depth)\n" );
+	//for ( int i = 0; i < sorted_count; ++i )
+	//{
+	//	tdNode node = nodes[ sorted[ i ] ];
+	//	printf( "(%d, %d)\n", node.freq, node.depth );
+	//}
 
 	// crawling over the sorted list produces a level-order traversal
 	// setting code lengths becomes trivial
@@ -936,6 +985,7 @@ void tdMakeTree( tdDState* s )
 	int len_counts[ 16 ];
 	int leaves[ 286 ];
 	int leaf_count = 0;
+	int overflow = 0;
 	for ( int i = 0; i < 16; ++i ) len_counts[ i ] = 0;
 
 	for ( int i = sorted_count - 1; i >= 0; --i )
@@ -943,23 +993,66 @@ void tdMakeTree( tdDState* s )
 		int index = sorted[ i ];
 		tdNode* child = nodes + index;
 		int parent = child->parent;
-		child->len = nodes[ parent ].len + 1;
+		int len = nodes[ parent ].len + 1;
+		child->len = len;
 
-		if ( index > leaf_index ) continue;
+		if ( len > TD_DEFLATE_MAX_BITLEN )
+		{
+			len = TD_DEFLATE_MAX_BITLEN;
+			++overflow;
+		}
+
+		if ( index >= leaf_index ) continue;
 		TD_ASSERT( child->len < 16 );
 		len_counts[ child->len ]++;
 		TD_ASSERT( leaf_count < 286 );
+		bits_saved += nodes[ index ].freq;
 		leaves[ leaf_count++ ] = index;
 	}
 
-	printf( "\n(node.freq, node.len)\n" );
-	for ( int i = 0; i < sorted_count; ++i )
+	// overflow protection, untested
+	if ( overflow )
 	{
-		tdNode node = nodes[ sorted[ i ] ];
-		printf( "(%d, %d)\n", node.freq, node.len );
+		do
+		{
+			int len = TD_DEFLATE_MAX_BITLEN - 1;
+			while ( !len_counts[ len ] ) --len;
+			len_counts[ len ]--; // move one leaf down the tree
+			len_counts[ len + 1 ] += 2; // move one overflow item as its brother
+			len_counts[ TD_DEFLATE_MAX_BITLEN ]--;
+			overflow -= 2;
+		}
+		while ( overflow > 0 );
+
+		int h = sorted_count;
+		for ( int i = 0; i < TD_DEFLATE_MAX_BITLEN; ++i )
+		{
+			int j = len_counts[ i ];
+			while ( j )
+			{
+				int k = sorted[ --h ];
+				if ( k >= leaf_index ) continue;
+				if ( nodes[ k ].len != i )
+				{
+					nodes[ k ].len = i;
+				}
+				--j;
+			}
+		}
 	}
 
+	//printf( "\n(node.freq, node.len)\n" );
+	//for ( int i = 0; i < sorted_count; ++i )
+	//{
+	//	tdNode node = nodes[ sorted[ i ] ];
+	//	printf( "(%d, %d)\n", node.freq, node.len );
+	//}
+
 	// freq and len are set
+	//tdItem root = items[ 1 ];
+	//printf( "freq, len\n" );
+	//tdPrint( nodes + root.val, nodes );
+
 	// now we overwrite freq with code
 	int codes[ 16 ];
 	codes[ 0 ] = 0;
@@ -968,11 +1061,137 @@ void tdMakeTree( tdDState* s )
 	{
 		int leaf = leaves[ i ];
 		int len = nodes[ leaf ].len;
-		TD_ASSERT( len );
+		TD_ASSERT( len > 0 && len < 16 );
 		int original = nodes[ leaf ].original;
-		s->len[ original ].code = tdRev( codes[ len ]++, len );
-		s->len[ original ].len = len;
+		TD_ASSERT( original != (uint16_t)~0 );
+		TD_ASSERT( original >= 0 && original < count );
+		if ( TD_DEBUG_CHECKS ) nodes[ leaf ].code = codes[ len ];
+		tree[ original ].code = tdRev( codes[ len ]++, len );
+		tree[ original ].len = len;
 	}
+
+	// now len and code are set
+	//printf( "code, len\n" );
+	//tdPrint( nodes + root.val, nodes );
+}
+
+TD_INLINE static int tdRun( tdLeaf* tree, int i, int N, int match )
+{
+	int start = i - 1;
+	while ( i < N )
+	{
+		tdLeaf* symbol = tree + i;
+		if ( symbol->len != match ) return i - start;
+		++i;
+	}
+	return i - start;
+}
+
+static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits )
+{
+	int rle_count = 0;
+	for ( int i = 0; i < size; )
+	{
+		int symbol = tree[ i ].len;
+		TD_ASSERT( !(symbol & ~0xF) );
+		int run = tdRun( tree, i + 1, size, symbol );
+
+		if ( run >= 3 )
+		{
+			if ( symbol )
+			{
+				if ( run > 6 ) run = 6;
+				rle_bits[ rle_count ] = run - 3;
+				rle[ rle_count++ ] = 16;
+			}
+
+			else
+			{
+				if ( run > 10 )
+				{
+					if ( run > 138 ) run = 138;
+					rle_bits[ rle_count ] = run - 11;
+					rle[ rle_count++ ] = 18;
+				}
+
+				else
+				{
+					rle_bits[ rle_count ] = run - 3;
+					rle[ rle_count++ ] = 17;
+				}
+			}
+		}
+
+		else
+		{
+			rle[ rle_count++ ] = symbol;
+			run = 1;
+		}
+
+		i += run;
+	}
+	return rle_count;
+}
+
+static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
+{
+	int nlit = 286 - 257;
+	int ndst = 32 - 1;
+	int nlen = 15;
+
+	int rle[ 286 + 32 ];
+	int rle_bits[ 286 + 32 ];
+	int rle_count = tdRLE( len, 286, rle, rle_bits );
+	rle_count += tdRLE( dst, 32, rle + rle_count, rle_bits + rle_count );
+
+	tdLeaf lenlen_tree[ 19 ] = { 0 };
+	int lenlens[ 19 ] = { 0 };
+	for ( int i = 0; i < rle_count; ++i ) lenlen_tree[ rle[ i ] ].freq++;
+	tdMakeTree( lenlen_tree, 19 );
+	for ( int i = 0; i < 19; ++i ) lenlens[ i ] = lenlen_tree[ i ].len;
+	for ( int i = 0; i < 19; ++i ) TD_ASSERT( lenlens[ i ] >= 0 && lenlens[ i ] <= 7 );
+
+	while ( nlit > 0 && !len[ 257 + nlit - 1 ].len ) nlit--;
+	while ( ndst > 0 && !dst[ 1 + ndst - 1 ].len ) ndst--;
+	while ( nlen > 0 && !lenlens[ g_tdPermutationOrder[ nlen + 4 - 1 ] ] ) nlen--;
+	TD_ASSERT( nlit >= 0 && nlit < (286 - 257) );
+	TD_ASSERT( ndst >= 0 && ndst < (32 - 1) );
+	TD_ASSERT( nlen >= 0 && nlen < (19 - 4) );
+
+	int bits_used = s->bits_left;
+	if ( !size_only )
+	{
+		tdWriteBits( s, nlit, 5 );
+		tdWriteBits( s, ndst, 5 );
+		tdWriteBits( s, nlen, 4 );
+		int done = nlen + 4;
+		for ( int i = 0; i < done; ++i )
+			tdWriteBits( s, lenlens[ g_tdPermutationOrder[ i ] ], 3 );
+		for ( int i = 0; i < rle_count; ++i )
+		{
+			int symbol = rle[ i ];
+			int code = lenlen_tree[ symbol ].code;
+			int len = lenlen_tree[ symbol ].len;
+			TD_ASSERT( !(code & ~((1 << len) - 1)) );
+			tdWriteBits( s, code, len );
+			switch ( symbol )
+			{
+			case 16: tdWriteBits( s, rle_bits[ i ], 2 ); break;
+			case 17: tdWriteBits( s, rle_bits[ i ], 3 ); break;
+			case 18: tdWriteBits( s, rle_bits[ i ], 7 ); break;
+			}
+		}
+	}
+	bits_used = bits_used - s->bits_left;
+
+	int tree_size = 14;
+	tree_size += (nlen + 4) * 3;
+	for ( int i = 0; i < 19; i++ ) tree_size += lenlen_tree[ i ].len * lenlen_tree[ i ].freq;
+	tree_size += lenlen_tree[ 16 ].freq * 2;
+	tree_size += lenlen_tree[ 17 ].freq * 3;
+	tree_size += lenlen_tree[ 18 ].freq * 7;
+	TD_ASSERT( bits_used == tree_size );
+	return tree_size;
 }
 
 // TODO: remove = 0, we already calloc
@@ -990,10 +1209,11 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 	s->bits = 0;
 	s->count = 0;
-	s->words = (uint32_t*)s->in;
+	s->words = (uint32_t*)s->out;
 	s->word_count = bytes / sizeof( uint32_t );
 	s->word_index = 0;
 	s->bits_left = s->word_count * sizeof( uint32_t ) * 8;
+	int bits_left = s->bits_left;
 
 	if ( options )
 	{
@@ -1013,9 +1233,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	memset( s->buckets, 0, sizeof( s->buckets ) );
 	s->entry_count = 0;
 
-	// write out 0
-	// write out 1
-
+	tdWriteBits( s, 1, 1 );
 	int pair_count = 0;
 	int run_count = 0;
 
@@ -1091,9 +1309,10 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			s->window += len;
 
 			tdEntry entry;
-			entry.type = TD_ENTRY_MATCH;
 			entry.len = len;
 			entry.dst = dst;
+			entry.base_len = base_len;
+			entry.base_dst = base_dst;
 			s->entries[ s->entry_count++ ] = entry;
 
 			// num children in full binary tree, since we ideally pack in tons of
@@ -1104,15 +1323,11 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 				float entropy = tdEntropy( s->len );
 				float golden = 1.61803398875f;
 				float factor = golden * golden;
-				if ( (int)(entropy * golden + 0.5f) > 15 )
+				if ( (int)(entropy * factor + 0.5f) > 15 )
 				{
-					tdMakeTree( s );
-					// make tree, check depth
-					// if depth > 15
-						// PANIC
-						// dump tree
-					// if depth > threshold?
-						// dump tree
+					tdMakeTree( s->len, 286 );
+					tdMakeTree( s->dst, 30 );
+					tdWriteTree( s, s->len, s->dst, 0 );
 				}
 			}
 
@@ -1130,14 +1345,47 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		tdLiteral( s, *s->window );
 		tdLiteral( s, *s->window );
 	}
+	tdLiteral( s, 256 );
 
-	tdMakeTree( s );
+	tdMakeTree( s->len, 286 );
+	tdMakeTree( s->dst, 30 );
+	tdWriteBits( s, 2, 2 ); // dynamic
+	int tree_bits = tdWriteTree( s, s->len, s->dst, 0 );
+	tree_bits = (tree_bits + 7) / 8;
 
-	// dump tree
+	for ( int i = 0; i < s->entry_count; ++i )
+	{
+		tdEntry* entry = s->entries + i;
+		if ( entry->dst )
+		{
+			int base_len = entry->base_len;
+			tdLeaf* len = s->len + base_len + 256;
+			tdWriteBits( s, len->code, len->len );
+			tdWriteBits( s, g_tdLenExtraBits[ base_len ], entry->len - g_tdLenBase[ base_len ] );
+			int base_dst = entry->base_dst;
+			tdLeaf* dst = s->dst + base_dst;
+			tdWriteBits( s, dst->code, dst->len );
+			tdWriteBits( s, g_tdDistExtraBits[ base_dst ], entry->dst - g_tdDistBase[ base_dst ] );
+		}
 
-	int out_size = 0;
+		else
+		{
+			tdLeaf* symbol = s->len + entry->symbol_index;
+			int code = symbol->code;
+			int len = symbol->len;
+			TD_ASSERT( !(code & ~((1 << len) - 1)) );
+			tdWriteBits( s, code, len );
+		}
+	}
+	tdFlush( s );
+
+	int bits_written = bits_left - s->bits_left;
+	int bytes_written = (bits_written + 7) / 8;
+	int out_size = bytes_written;
 	if ( out_bytes ) *out_bytes = out_size;
-	return 0;
+	void* out = s->out;
+	free( s );
+	return out;
 }
 
 void* tdDeflate( const char* in_path, const char* out_path, tdDeflateOptions* options )
