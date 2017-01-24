@@ -942,6 +942,7 @@ void tsStopAllSounds( tsContext* ctx )
 	{
 		tsPlayingSound* next = sound->next;
 		sound->next = ctx->playing_free;
+		sound->active = 0;
 		ctx->playing_free = sound;
 		sound = next;
 	}
