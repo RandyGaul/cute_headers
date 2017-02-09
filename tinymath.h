@@ -426,7 +426,7 @@ TM_INLINE int parallel( v3 a, v3 b, float kTol )
 {
 	v3 k = length( a ) / length( b );
 	v3 bk = b * k;
-	if ( all( abs( a - b ) < v3( kTol ) ) ) return 1;
+	if ( all( abs( a - bk ) < v3( kTol ) ) ) return 1;
 	return 0;
 }
 
