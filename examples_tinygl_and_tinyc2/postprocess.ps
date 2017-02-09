@@ -1,0 +1,14 @@
+#version 410
+
+in vec2 v_uv;
+out vec4 out_col;
+
+uniform sampler2D u_screen_texture;
+uniform float u_time;
+
+void main( )
+{
+	float y = cos( (v_uv.x + u_time) * 5 ) * .15;
+	vec2 lookup = vec2( v_uv.x, clamp( v_uv.y + y, 0, 1 ) );
+	out_col = texture( u_screen_texture, lookup );
+}

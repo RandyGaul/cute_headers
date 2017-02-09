@@ -246,6 +246,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 {
 	TD_ASSERT( s->count >= num_bits_to_read );
 	uint32_t bits = s->bits & (((uint64_t)1 << num_bits_to_read) - 1);
+	printf( "C val, bits: %d, %d\n", bits, num_bits_to_read );
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
@@ -305,37 +306,18 @@ TD_INLINE static uint32_t tdRev( uint32_t a, uint32_t len )
 // represents first indices for each code length in the final tree
 static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 {
-	int slots[ 16 ] = { 0 };
+	int n, codes[16], first[16], counts[16]={0};
 
-	// 1) Count the number of codes for each code length
-	for ( int n = 0; n < sym_count; n++ )
-		slots[ lens[ n ] ]++;
+	// Frequency count.
+	for (n=0;n<sym_count;n++) counts[lens[n]]++;
 
-	// 2) Find numerical value of the smallest code for each code length
-	int codes[ 16 ];
-	codes[ 0 ] = 0;
-
-	for ( int i = 0; i < 15; i++ )
-		codes[ i + 1 ] = (codes[ i ] + slots[ i ]) << 1;
-
-	// 2.5)
-	// For each different length record where the first index starts
-	// Shift array to right one index
-	for ( int i = 1, sum = 0, prev = 0; i <= 15; i++ )
-	{
-		sum += slots[ i ];
-		slots[ i ] = prev;
-		prev = sum;
+	// Distribute codes.
+	counts[0] = codes[0] = first[0] = 0;
+	for (n=1;n<=15;n++) {
+		codes[n] = (codes[n-1] + counts[n-1]) << 1;
+		first[n] = first[n-1] + counts[n-1];
 	}
 
-	// 3)
-	// Assign numerical values to all codes, using consecutive values
-	// for all codes of the same length with the base values determined
-	// at step 2. Codes that are never used (which have a bit length of
-	// zero) must not be assigned a value. Two encodings are used to
-	// later retrieve lengths. One via lookup table, and a slower alt-
-	// ernative using a binary search. Tables are not constructed for
-	// smaller trees (distance, and first lenlen tree in dynamic case).
 	if ( s ) memset( s->lookup, 0, sizeof( 512 * sizeof( uint32_t ) ) );
 	for ( int i = 0; i < sym_count; ++i )
 	{
@@ -345,7 +327,7 @@ static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 		{
 			TD_ASSERT( len < 16 );
 			uint32_t code = codes[ len ]++;
-			uint32_t slot = slots[ len ]++;
+			uint32_t slot = first[ len ]++;
 			tree[ slot ] = (code << (32 - len)) | (i << 4) | len;
 
 			if ( s && len <= TD_LOOKUP_BITS )
@@ -360,7 +342,7 @@ static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 		}
 	}
 
-	int max_index = slots[ 15 ];
+	int max_index = first[ 15 ];
 	return max_index;
 }
 
@@ -408,7 +390,8 @@ static int tdDecode( tdIState* s, uint32_t* tree, int hi )
 		TD_ASSERT( (search >> len) == (key >> len) );
 	}
 
-	tdConsumeBits( s, key & 0xF );
+	int code = tdConsumeBits( s, key & 0xF );
+	(void)code;
 	return (key >> 4) & 0xFFF;
 }
 
@@ -440,6 +423,8 @@ static int tdDynamic( tdIState* s )
 		lenlens[ g_tdPermutationOrder[ i ] ] = (uint8_t)tdReadBits( s, 3 );
 
 	// Build the tree for decoding code lengths
+	int lenlens2[19] = { 0 };
+	for ( int i = 0; i < 19; ++i ) lenlens2[ i ] = lenlens[ i ];
 	s->nlen = tdBuild( 0, s->len, lenlens, 19 );
 	uint8_t lens[ 288 + 32 ];
 
@@ -511,7 +496,7 @@ int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 	s->word_index = 0;
 	s->bits_left = in_bytes * 8;
 
-	int first_bytes = (int)((size_t)in & 3);
+	int first_bytes = (int)((int)in & 3);
 	s->words = (uint32_t*)((char*)in + first_bytes);
 	s->last_bits = ((in_bytes - first_bytes) & 3) * 8;
 	s->final_bytes = (char*)in + in_bytes - s->last_bits;
@@ -667,6 +652,7 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
 
+	printf( "val, bits: %d, %d\n", value, num_bits_to_write );
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
@@ -678,6 +664,11 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 		s->count -= 32;
 		s->word_index += 1;
 	}
+}
+
+static void tdWriteBitsRev( tdDState* s, uint32_t value, uint32_t num_bits_to_write )
+{
+	tdWriteBits( s, tdRev( value, num_bits_to_write ), num_bits_to_write );
 }
 
 TD_INLINE static void tdFlush( tdDState* s )
@@ -874,11 +865,20 @@ void tdPop( )
 {
 	depth[ di -= 4 ] = 0;
 }
+
+void PrintCode( int code, int len, int L )
+{
+	printf( "(" );
+	for ( int i = 0; i < len; ++i ) printf( "%d", code & (1 << i) ? 1 : 0 );
+	printf( ", %d)", len );
+	if ( L ) printf( " L" );
+	printf( "\n" );
+}
  
 void tdPrint( tdNode* tree, tdNode* nodes )
 {
-	if ( tree->original != (uint16_t)~0 ) printf( "(%d, %d) L\n", tree->code, tree->len );
-	else printf( "(%d, %d)\n", tree->freq, tree->len );
+	if ( tree->original != (uint16_t)~0 ) PrintCode( tree->code, tree->len, 1 );
+	else PrintCode( tree->freq, tree->len, 0 );
  
 	if ( tree->left != (uint16_t)~0 )
 	{
@@ -898,9 +898,302 @@ void tdPrint( tdNode* tree, tdNode* nodes )
 	}
 }
 
+typedef struct Node Node;
+
+/*
+Nodes forming chains. Also used to represent leaves.
+*/
+struct Node {
+  int weight;  /* Total weight (symbol count) of this chain. */
+  Node* tail;  /* Previous node(s) of this chain, or 0 if none. */
+  int count;  /* Leaf symbol index, or number of leaves before this chain. */
+};
+
+/*
+Memory pool for nodes.
+*/
+typedef struct NodePool {
+  Node* next;  /* Pointer to a free node in the pool. */
+} NodePool;
+
+/*
+Initializes a chain node with the given values and marks it as in use.
+*/
+static void InitNode(int weight, int count, Node* tail, Node* node) {
+  node->weight = weight;
+  node->count = count;
+  node->tail = tail;
+}
+
+/*
+Performs a Boundary Package-Merge step. Puts a new chain in the given list. The
+new chain is, depending on the weights, a leaf or a combination of two chains
+from the previous list.
+lists: The lists of chains.
+maxbits: Number of lists.
+leaves: The leaves, one per symbol.
+numsymbols: Number of leaves.
+pool: the node memory pool.
+index: The index of the list in which a new chain or leaf is required.
+*/
+static void BoundaryPM(Node* (*lists)[2], Node* leaves, int numsymbols,
+                       NodePool* pool, int index) {
+  Node* newchain;
+  Node* oldchain;
+  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+
+  if (index == 0 && lastcount >= numsymbols) return;
+
+  newchain = pool->next++;
+  oldchain = lists[index][1];
+
+  /* These are set up before the recursive calls below, so that there is a list
+  pointing to the new node, to let the garbage collection know it's in use. */
+  lists[index][0] = oldchain;
+  lists[index][1] = newchain;
+
+  if (index == 0) {
+    /* New leaf node in list 0. */
+    InitNode(leaves[lastcount].weight, lastcount + 1, 0, newchain);
+  } else {
+    int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
+    if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
+      /* New leaf inserted in list, so count is incremented. */
+      InitNode(leaves[lastcount].weight, lastcount + 1, oldchain->tail,
+          newchain);
+    } else {
+      InitNode(sum, lastcount, lists[index - 1][1], newchain);
+      /* Two lookahead chains of previous list used up, create new ones. */
+      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
+      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
+    }
+  }
+}
+
+static void BoundaryPMFinal(Node* (*lists)[2],
+    Node* leaves, int numsymbols, NodePool* pool, int index) {
+  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+
+  int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
+
+  if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
+    Node* newchain = pool->next;
+    Node* oldchain = lists[index][1]->tail;
+
+    lists[index][1] = newchain;
+    newchain->count = lastcount + 1;
+    newchain->tail = oldchain;
+  } else {
+    lists[index][1]->tail = lists[index - 1][1];
+  }
+}
+
+/*
+Initializes each list with as lookahead chains the two leaves with lowest
+weights.
+*/
+static void InitLists(
+    NodePool* pool, const Node* leaves, int maxbits, Node* (*lists)[2]) {
+  int i;
+  Node* node0 = pool->next++;
+  Node* node1 = pool->next++;
+  InitNode(leaves[0].weight, 1, 0, node0);
+  InitNode(leaves[1].weight, 2, 0, node1);
+  for (i = 0; i < maxbits; i++) {
+    lists[i][0] = node0;
+    lists[i][1] = node1;
+  }
+}
+
+/*
+Converts result of boundary package-merge to the bitlengths. The result in the
+last chain of the last list contains the amount of active leaves in each list.
+chain: Chain to extract the bit length from (last chain from last list).
+*/
+static void ExtractBitLengths(Node* chain, Node* leaves, unsigned* bitlengths) {
+  int counts[16] = {0};
+  unsigned end = 16;
+  unsigned ptr = 15;
+  unsigned value = 1;
+  Node* node;
+  int val;
+
+  for (node = chain; node; node = node->tail) {
+    counts[--end] = node->count;
+  }
+
+  val = counts[15];
+  while (ptr >= end) {
+    for (; val > counts[ptr - 1]; val--) {
+      bitlengths[leaves[val - 1].count] = value;
+    }
+    ptr--;
+    value++;
+  }
+}
+
+/*
+Comparator for sorting the leaves. Has the function signature for qsort.
+*/
+static int LeafComparator(const void* a, const void* b) {
+  return ((const Node*)a)->weight - ((const Node*)b)->weight;
+}
+
+int ZopfliLengthLimitedCodeLengths(
+    const int* frequencies, int n, int maxbits, unsigned* bitlengths) {
+  NodePool pool;
+  int i;
+  int numsymbols = 0;  /* Amount of symbols with frequency > 0. */
+  int numBoundaryPMRuns;
+  Node* nodes;
+
+  /* Array of lists of chains. Each list requires only two lookahead chains at
+  a time, so each list is a array of two Node*'s. */
+  Node* (*lists)[2];
+
+  /* One leaf per symbol. Only numsymbols leaves will be used. */
+  Node* leaves = (Node*)malloc(n * sizeof(*leaves));
+
+  /* Initialize all bitlengths at 0. */
+  for (i = 0; i < n; i++) {
+    bitlengths[i] = 0;
+  }
+
+  /* Count used symbols and place them in the leaves. */
+  for (i = 0; i < n; i++) {
+    if (frequencies[i]) {
+      leaves[numsymbols].weight = frequencies[i];
+      leaves[numsymbols].count = i;  /* Index of symbol this leaf represents. */
+      numsymbols++;
+    }
+  }
+
+  /* Check special cases and error conditions. */
+  if ((1 << maxbits) < numsymbols) {
+    free(leaves);
+    return 1;  /* Error, too few maxbits to represent symbols. */
+  }
+  if (numsymbols == 0) {
+    free(leaves);
+    return 0;  /* No symbols at all. OK. */
+  }
+  if (numsymbols == 1) {
+    bitlengths[leaves[0].count] = 1;
+    free(leaves);
+    return 0;  /* Only one symbol, give it bitlength 1, not 0. OK. */
+  }
+  if (numsymbols == 2) {
+    bitlengths[leaves[0].count]++;
+    bitlengths[leaves[1].count]++;
+    free(leaves);
+    return 0;
+  }
+
+  /* Sort the leaves from lightest to heaviest. Add count into the same
+  variable for stable sorting. */
+  for (i = 0; i < numsymbols; i++) {
+    if (leaves[i].weight >=
+        ((int)1 << (sizeof(leaves[0].weight) * CHAR_BIT - 9))) {
+      free(leaves);
+      return 1;  /* Error, we need 9 bits for the count. */
+    }
+    leaves[i].weight = (leaves[i].weight << 9) | leaves[i].count;
+  }
+  qsort(leaves, numsymbols, sizeof(Node), LeafComparator);
+  for (i = 0; i < numsymbols; i++) {
+    leaves[i].weight >>= 9;
+  }
+
+  if (numsymbols - 1 < maxbits) {
+    maxbits = numsymbols - 1;
+  }
+
+  /* Initialize node memory pool. */
+  nodes = (Node*)malloc(maxbits * 2 * numsymbols * sizeof(Node));
+  pool.next = nodes;
+
+  lists = (Node* (*)[2])malloc(maxbits * sizeof(*lists));
+  InitLists(&pool, leaves, maxbits, lists);
+
+  /* In the last list, 2 * numsymbols - 2 active chains need to be created. Two
+  are already created in the initialization. Each BoundaryPM run creates one. */
+  numBoundaryPMRuns = 2 * numsymbols - 4;
+  for (i = 0; i < numBoundaryPMRuns - 1; i++) {
+    BoundaryPM(lists, leaves, numsymbols, &pool, maxbits - 1);
+  }
+  BoundaryPMFinal(lists, leaves, numsymbols, &pool, maxbits - 1);
+
+  ExtractBitLengths(lists[maxbits - 1][1], leaves, bitlengths);
+
+  free(lists);
+  free(leaves);
+  free(nodes);
+  return 0;  /* OK. */
+}
+
+void ZopfliLengthsToSymbols(const unsigned* lengths, int n, unsigned maxbits,
+                            unsigned* symbols) {
+  int* bl_count = (int*)malloc(sizeof(int) * (maxbits + 1));
+  int* next_code = (int*)malloc(sizeof(int) * (maxbits + 1));
+  unsigned bits, i;
+  unsigned code;
+
+  for (i = 0; i < (unsigned)n; i++) {
+    symbols[i] = 0;
+  }
+
+  /* 1) Count the number of codes for each code length. Let bl_count[N] be the
+  number of codes of length N, N >= 1. */
+  for (bits = 0; bits <= maxbits; bits++) {
+    bl_count[bits] = 0;
+  }
+  for (i = 0; i < (unsigned)n; i++) {
+    assert(lengths[i] <= maxbits);
+    bl_count[lengths[i]]++;
+  }
+  /* 2) Find the numerical value of the smallest code for each code length. */
+  code = 0;
+  bl_count[0] = 0;
+  for (bits = 1; bits <= maxbits; bits++) {
+    code = (code + bl_count[bits-1]) << 1;
+    next_code[bits] = code;
+  }
+  /* 3) Assign numerical values to all codes, using consecutive values for all
+  codes of the same length with the base values determined at step 2. */
+  for (i = 0;  i < (unsigned)n; i++) {
+    unsigned len = lengths[i];
+    if (len != 0) {
+      symbols[i] = next_code[len];
+      next_code[len]++;
+    }
+  }
+
+  free(bl_count);
+  free(next_code);
+}
+
+// WORKING HERE
+// this func isn't working correctly
+// maybe copy zopfli
 void tdMakeTree( tdLeaf* tree, int count )
 {
-	int bits_saved = 0;
+#if 1
+	int freq[ 288 ] = { 0 };
+	int lens[ 288 ] = { 0 };
+	int code[ 288 ] = { 0 };
+	for ( int i = 0; i < count; ++i ) freq[ i ] = tree[ i ].freq;
+	ZopfliLengthLimitedCodeLengths( freq, count, 15, lens );
+	ZopfliLengthsToSymbols(lens, count, 15, code);
+	for ( int i = 0; i < count; ++i )
+	{
+		tree[ i ].code = code[ i ];
+		tree[ i ].freq = freq[ i ];
+		tree[ i ].len = lens[ i ];
+	}
+	return;
+#endif
+
+	int bits_saved = 0; // TODO: calc bits saved?
 	// setup leaf nodes with frequencies set
 	int node_count = 0;
 	int item_count = 1;
@@ -982,11 +1275,10 @@ void tdMakeTree( tdLeaf* tree, int count )
 	// crawling over the sorted list produces a level-order traversal
 	// setting code lengths becomes trivial
 	nodes[ sorted_count ].len = 0;
-	int len_counts[ 16 ];
+	int len_counts[ 16 ] = { 0 };
 	int leaves[ 286 ];
 	int leaf_count = 0;
 	int overflow = 0;
-	for ( int i = 0; i < 16; ++i ) len_counts[ i ] = 0;
 
 	for ( int i = sorted_count - 1; i >= 0; --i )
 	{
@@ -1003,7 +1295,7 @@ void tdMakeTree( tdLeaf* tree, int count )
 		}
 
 		if ( index >= leaf_index ) continue;
-		TD_ASSERT( child->len < 16 );
+		TD_ASSERT( child->len < 16  && child->len >= 0 );
 		len_counts[ child->len ]++;
 		TD_ASSERT( leaf_count < 286 );
 		bits_saved += nodes[ index ].freq;
@@ -1049,14 +1341,23 @@ void tdMakeTree( tdLeaf* tree, int count )
 	//}
 
 	// freq and len are set
-	//tdItem root = items[ 1 ];
+	tdItem root = items[ 1 ];
 	//printf( "freq, len\n" );
 	//tdPrint( nodes + root.val, nodes );
-
+	
 	// now we overwrite freq with code
 	int codes[ 16 ];
+#define USE_ZOPFLI 0
+	ZopfliLengthLimitedCodeLengths( len_counts, 16, 15, codes );
 	codes[ 0 ] = 0;
+	
+#if !USE_ZOPFLI
+	// Distribute codes.
+	for (int n=1;n<=15;n++) {
+		codes[n] = (codes[n-1] + len_counts[n-1]) << 1;
+	}
 	for ( int i = 1; i < 16; ++i ) codes[ i ] = (codes[ i - 1 ] + len_counts[ i - 1 ]) << 1;
+#endif
 	for ( int i = 0; i < leaf_count; ++i )
 	{
 		int leaf = leaves[ i ];
@@ -1065,14 +1366,21 @@ void tdMakeTree( tdLeaf* tree, int count )
 		int original = nodes[ leaf ].original;
 		TD_ASSERT( original != (uint16_t)~0 );
 		TD_ASSERT( original >= 0 && original < count );
+#if !USE_ZOPFLI
 		if ( TD_DEBUG_CHECKS ) nodes[ leaf ].code = codes[ len ];
 		tree[ original ].code = tdRev( codes[ len ]++, len );
 		tree[ original ].len = len;
+		TD_ASSERT( !(tree[ original ].code & ~((1 << tree[ original ].len ) - 1)) );
+#else
+		//tree[ original ].code = tdRev( codes[ len ]++, len );
+		tree[ original ].code = codes[ len ]++;
+		tree[ original ].len = len;
+#endif
 	}
 
 	// now len and code are set
-	//printf( "code, len\n" );
-	//tdPrint( nodes + root.val, nodes );
+	printf( "code, len\n" );
+	tdPrint( nodes + root.val, nodes );
 }
 
 TD_INLINE static int tdRun( tdLeaf* tree, int i, int N, int match )
@@ -1131,6 +1439,179 @@ static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits )
 		i += run;
 	}
 	return rle_count;
+}
+
+#define ZOPFLI_APPEND_DATA(/* T */ value, /* T** */ data, /* int* */ size) {\
+  if (!((*size) & ((*size) - 1))) {\
+    /*double alloc size if it's a power of two*/\
+    (*data) = (*size) == 0 ? malloc(sizeof(**data))\
+                           : realloc((*data), (*size) * 2 * sizeof(**data));\
+  }\
+  (*data)[(*size)] = (value);\
+  (*size)++;\
+}
+
+static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
+                         const unsigned* d_lengths,
+                         int use_16, int use_17, int use_18) {
+  unsigned lld_total;  /* Total amount of literal, length, distance codes. */
+  /* Runlength encoded version of lengths of litlen and dist trees. */
+  unsigned* rle = 0;
+  unsigned* rle_bits = 0;  /* Extra bits for rle values 16, 17 and 18. */
+  unsigned rle_size = 0;  /* Size of rle array. */
+  int rle_bits_size = 0;  /* Should have same value as rle_size. */
+  unsigned hlit = 29;  /* 286 - 257 */
+  unsigned hdist = 29;  /* 32 - 1, but gzip does not like hdist > 29.*/
+  unsigned hclen;
+  unsigned hlit2;
+  unsigned i, j;
+  int clcounts[19];
+  unsigned clcl[19];  /* Code length code lengths. */
+  unsigned clsymbols[19];
+  /* The order in which code length code lengths are encoded as per deflate. */
+  static const unsigned order[19] = {
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
+  };
+  int size_only = 0;
+  int result_size = 0;
+
+  for(i = 0; i < 19; i++) clcounts[i] = 0;
+
+  /* Trim zeros. */
+  while (hlit > 0 && ll_lengths[257 + hlit - 1] == 0) hlit--;
+  while (hdist > 0 && d_lengths[1 + hdist - 1] == 0) hdist--;
+  hlit2 = hlit + 257;
+
+  lld_total = hlit2 + hdist + 1;
+
+  for (i = 0; i < lld_total; i++) {
+    /* This is an encoding of a huffman tree, so now the length is a symbol */
+    unsigned char symbol = i < hlit2 ? ll_lengths[i] : d_lengths[i - hlit2];
+    unsigned count = 1;
+    if(use_16 || (symbol == 0 && (use_17 || use_18))) {
+      for (j = i + 1; j < lld_total && symbol ==
+          (j < hlit2 ? ll_lengths[j] : d_lengths[j - hlit2]); j++) {
+        count++;
+      }
+    }
+    i += count - 1;
+
+    /* Repetitions of zeroes */
+    if (symbol == 0 && count >= 3) {
+      if (use_18) {
+        while (count >= 11) {
+          unsigned count2 = count > 138 ? 138 : count;
+          if (!size_only) {
+            ZOPFLI_APPEND_DATA(18, &rle, &rle_size);
+            ZOPFLI_APPEND_DATA(count2 - 11, &rle_bits, &rle_bits_size);
+          }
+          clcounts[18]++;
+          count -= count2;
+        }
+      }
+      if (use_17) {
+        while (count >= 3) {
+          unsigned count2 = count > 10 ? 10 : count;
+          if (!size_only) {
+            ZOPFLI_APPEND_DATA(17, &rle, &rle_size);
+            ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
+          }
+          clcounts[17]++;
+          count -= count2;
+        }
+      }
+    }
+
+    /* Repetitions of any symbol */
+    if (use_16 && count >= 4) {
+      count--;  /* Since the first one is hardcoded. */
+      clcounts[symbol]++;
+      if (!size_only) {
+        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
+        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
+      }
+      while (count >= 3) {
+        unsigned count2 = count > 6 ? 6 : count;
+        if (!size_only) {
+          ZOPFLI_APPEND_DATA(16, &rle, &rle_size);
+          ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
+        }
+        clcounts[16]++;
+        count -= count2;
+      }
+    }
+
+    /* No or insufficient repetition */
+    clcounts[symbol] += count;
+    while (count > 0) {
+      if (!size_only) {
+        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
+        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
+      }
+      count--;
+    }
+  }
+
+  ZopfliLengthLimitedCodeLengths(clcounts, 19, 7, clcl);
+  if (!size_only) ZopfliLengthsToSymbols(clcl, 19, 7, clsymbols);
+
+  hclen = 15;
+  /* Trim zeros. */
+  while (hclen > 0 && clcounts[order[hclen + 4 - 1]] == 0) hclen--;
+
+  if (!size_only) {
+    tdWriteBits(s, hlit, 5);
+    tdWriteBits(s, hdist, 5);
+    tdWriteBits(s, hclen, 4);
+
+    for (i = 0; i < hclen + 4; i++) {
+      tdWriteBits(s, clcl[order[i]], 3);
+    }
+
+    for (i = 0; i < rle_size; i++) {
+      unsigned symbol = clsymbols[rle[i]];
+      tdWriteBitsRev(s, symbol, clcl[rle[i]]);
+      /* Extra bits. */
+      if (rle[i] == 16) tdWriteBits(s, rle_bits[i], 2);
+      else if (rle[i] == 17) tdWriteBits(s, rle_bits[i], 3);
+      else if (rle[i] == 18) tdWriteBits(s, rle_bits[i], 7);
+    }
+  }
+
+  result_size += 14;  /* hlit, hdist, hclen bits */
+  result_size += (hclen + 4) * 3;  /* clcl bits */
+  for(i = 0; i < 19; i++) {
+    result_size += clcl[i] * clcounts[i];
+  }
+  /* Extra bits. */
+  result_size += clcounts[16] * 2;
+  result_size += clcounts[17] * 3;
+  result_size += clcounts[18] * 7;
+
+  /* Note: in case of "size_only" these are null pointers so no effect. */
+  free(rle);
+  free(rle_bits);
+
+  return result_size;
+}
+
+static void AddDynamicTree(tdDState* s, const unsigned* ll_lengths,
+                           const unsigned* d_lengths) {
+  int i;
+  int best = 0;
+  int bestsize = 0;
+
+  //for(i = 0; i < 8; i++) {
+  //  int size = EncodeTree(s, ll_lengths, d_lengths,
+  //                           i & 1, i & 2, i & 4);
+  //  if (bestsize == 0 || size < bestsize) {
+  //    bestsize = size;
+  //    best = i;
+  //  }
+  //}
+
+  EncodeTree(s, ll_lengths, d_lengths,
+             1, 1, 1);
 }
 
 static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
@@ -1197,8 +1678,8 @@ static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 // TODO: remove = 0, we already calloc
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
-	TD_ASSERT( !((size_t)in & 3) );
-	TD_ASSERT( !((size_t)bytes & 3) ); // TODO: get rid of this
+	TD_ASSERT( !((int)in & 3) );
+	TD_ASSERT( !((int)bytes & 3) ); // TODO: get rid of this
 	char* in_buffer = (char*)in;
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
 	s->in = (char*)in;
@@ -1278,7 +1759,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 				if ( len )
 				{
 					TD_ASSERT( len <= 258 );
-					dst = (int)(size_t)(s->window - list->start);
+					dst = (int)(int)(s->window - list->start);
 					tdMatchIndices( len, dst, &base_len, &base_dst );
 					len_bits = g_tdLenExtraBits[ base_len ];
 					dst_bits = g_tdDistExtraBits[ base_dst ];
@@ -1350,8 +1831,13 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	tdMakeTree( s->len, 286 );
 	tdMakeTree( s->dst, 30 );
 	tdWriteBits( s, 2, 2 ); // dynamic
-	int tree_bits = tdWriteTree( s, s->len, s->dst, 0 );
-	tree_bits = (tree_bits + 7) / 8;
+	uint32_t lens[ 288 ];
+	uint32_t dsts[ 32 ];
+	for ( int i = 0; i < 288; ++i ) lens[ i ] = s->len[ i ].len;
+	for ( int i = 0; i < 32; ++i ) dsts[ i ] = s->dst[ i ].len;
+	AddDynamicTree( s, lens, dsts );
+	//int tree_bits = tdWriteTree( s, s->len, s->dst, 0 );
+	//tree_bits = (tree_bits + 7) / 8;
 
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
@@ -1361,11 +1847,11 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			int base_len = entry->base_len;
 			tdLeaf* len = s->len + base_len + 256;
 			tdWriteBits( s, len->code, len->len );
-			tdWriteBits( s, g_tdLenExtraBits[ base_len ], entry->len - g_tdLenBase[ base_len ] );
+			tdWriteBits( s, entry->len - g_tdLenBase[ base_len ], g_tdLenExtraBits[ base_len ] );
 			int base_dst = entry->base_dst;
 			tdLeaf* dst = s->dst + base_dst;
 			tdWriteBits( s, dst->code, dst->len );
-			tdWriteBits( s, g_tdDistExtraBits[ base_dst ], entry->dst - g_tdDistBase[ base_dst ] );
+			tdWriteBits( s, entry->dst - g_tdDistBase[ base_dst ], g_tdDistExtraBits[ base_dst ] );
 		}
 
 		else
