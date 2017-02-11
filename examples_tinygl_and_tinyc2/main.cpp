@@ -19,6 +19,8 @@ tgFramebuffer fb;
 tgShader post_fx;
 int spaced_pressed;
 void* ctx;
+float screen_w;
+float screen_h;
 float mouse_x;
 float mouse_y;
 
@@ -65,6 +67,8 @@ void KeyCB( GLFWwindow* window, int key, int scancode, int action, int mods )
 
 void MouseCB( GLFWwindow* window, double x, double y )
 {
+	mouse_x = (float)x - screen_w / 2;
+	mouse_y = -((float)y - screen_h / 2);
 }
 
 void ResizeFramebuffer( int w, int h )
@@ -80,7 +84,8 @@ void ResizeFramebuffer( int w, int h )
 		free( ps );
 	}
 	else tgFreeFramebuffer( &fb );
-
+	screen_w = (float)w;
+	screen_h = (float)h;
 	tgMakeFramebuffer( &fb, &post_fx, w, h );
 }
 
@@ -357,16 +362,20 @@ int main( )
 		t = fmod( t, 2.0f * 3.14159265f );
 		tgSendF32( &post_fx, "u_time", 1, &t, 1 );
 
-		//TestDrawPrim( );
+		TestDrawPrim( );
+		DrawCircle( c2V( mouse_x, mouse_y ), 10.0f );
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized
-		tgDrawCall call;
-		call.r = &r;
-		call.texture_count = 0;
-		call.verts = &verts[ 0 ];
-		call.vert_count = verts.size( );
-		tgPushDrawCall( ctx, call );
+		if ( verts.size( ) )
+		{
+			tgDrawCall call;
+			call.r = &r;
+			call.texture_count = 0;
+			call.verts = &verts[ 0 ];
+			call.vert_count = verts.size( );
+			tgPushDrawCall( ctx, call );
+		}
 
 		// flush all draw calls to screen
 		// optionally the fb can be NULL or 0 to signify no post-processing fx
