@@ -1,9 +1,80 @@
 #if !defined( TINYGL_H )
 
+/*
+	tinygl - v1.0
+
+	Summary:
+	Wrapper for OpenGL for vertex attributes, shader creation, draw calls, and
+	post-processing fx. The API was carefully designed to facilitate trying out
+	one-off techqniques or experiments, of which are critical for certain kinds
+	of development styles (i.e. fast iteration). Credit goes to thatgamecompany
+	for the original designs + idea of this API style.
+
+	To create implementation (the function definitions)
+		#define TINYGL_IMPL
+	in *one* C/CPP file (translation unit) that includes this file
+*/
+
+/*
+	DOCUMENTATION (quick intro):
+	1. create context
+	2. define vertices
+	3. load shader
+	4. create renderable
+	5. compose draw calls
+	6. flush
+
+	1. void* ctx = tgMakeCtx( max_draw_calls_per_flush, clear_bits, settings_bits )
+	2. tgMakeVertexData( ... ) and tgAddAttribute( ... )
+	3. tgLoadShader( &shader_instance, vertex_shader_string, pixel_shader_string )
+	4. tgMakeRenderable( &renderable_instance, &vertex_data_instance )
+	5. tgPushDrawCall( ctx, draw_call )
+	6. tgFlush( ctx, swap_buffer_func, use_post_fx ? &frame_buffer : 0 )
+
+	DETAILS:
+	tinygl only renders triangles. Triangles can be fed to draw calls with static
+	or dynamic geometry. Dynamic geometry is sent to the GPU upon each draw call,
+	while static geometry is sent only upon the first draw call. Dynamic vertices
+	are triple buffered using fence syncs for optimal performance and screen tear-
+	ing avoidance.
+
+	tinygl does come with a debug line renderer built in! Can be turned off at
+	compile time if not used (see TG_LINE_RENDERER). This is perfect for creating
+	a global line rendering utility for debugging purposes.
+
+	Post processing fx are done with a frame buffer, and are done only once with
+	one shader, after all draw calls have been processed.
+
+	For full examples of use please visit either of these links:
+		example to render various 2d shapes + post fx
+			https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
+
+		example of rendering 3d geometry + post fx, a full game from a game jam (windows only)
+			https://github.com/RandyGaul/pook
+*/
+
+/*
+	Contributors:
+		Andrew Hung       1.0 - initial frame buffer implementation, various bug fixes
+*/
+
+/*
+	Some Current Limitations
+		* No index support. Adding indices would not be too hard and come down to a
+			matter of adding in some more triple buffer/single buffer code for
+			GL_STATIC_DRAW vs GL_DYNAMIC_DRAW.
+		* GL 3.0+ support only
+		* Full support for array uniforms is not quite tested and hammered out.
+*/
+
 #include <stdint.h>
 
 // recommended to leave this on as long as possible (perhaps until release)
 #define TG_DEBUG_CHECKS 1
+
+// feel free to turn this off if unused
+// used to render lines over everything else (besides post fx) with no depth testing
+#define TG_LINE_RENDERER 1
 
 enum
 {
@@ -63,7 +134,7 @@ typedef struct
 	tgVertexData data;
 	tgShader* program;
 	tgRenderState state;
-	uint32_t attributeCount;
+	uint32_t attribute_count;
 
 	uint32_t index0;
 	uint32_t index1;
@@ -110,15 +181,20 @@ typedef struct
 	tgRenderable* r;
 	uint32_t texture_count;
 	uint32_t textures[ 8 ];
-	tgFramebuffer* fbo;
 } tgDrawCall;
 
-void* tgMakeCtx( uint32_t max_draw_calls );
+void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits );
 void tgFreeCtx( void* ctx );
+
+void tgLineMVP( void* context, float* mvp );
+void tgLineColor( void* context, float r, float g, float b );
+void tgLine( void* context, float ax, float ay, float az, float bx, float by, float bz );
+void tgLineWidth( float width );
+
 void tgMakeFramebuffer( tgFramebuffer* tgFbo, tgShader* shader, int w, int h );
 void tgFreeFramebuffer( tgFramebuffer* tgFbo );
 
-void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t vertex_stride, uint32_t primitive, uint32_t usage );
+void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t primitive, uint32_t vertex_stride, uint32_t usage );
 void tgAddAttribute( tgVertexData* vd, char* name, uint32_t size, uint32_t type, uint32_t offset );
 void tgMakeRenderable( tgRenderable* r, tgVertexData* vd );
 
@@ -127,8 +203,6 @@ void tgSetShader( tgRenderable* r, tgShader* s );
 void tgLoadShader( tgShader* s, const char* vertex, const char* pixel );
 void tgFreeShader( tgShader* s );
 
-// TODO: Think about how glUseProgram affects these functions, maybe some error
-//       checking to make sure that sending doesn't happen if SetActive was not called
 void tgSetActiveShader( tgShader* s );
 void tgDeactivateShader( );
 void tgSendF32( tgShader* s, char* uniform_name, uint32_t size, float* floats, uint32_t count );
@@ -136,10 +210,9 @@ void tgSendMatrix( tgShader* s, char* uniform_name, float* floats );
 void tgSendTexture( tgShader* s, char* uniform_name, uint32_t index );
 
 void tgPushDrawCall( void* ctx, tgDrawCall call );
-void tgPresent( void* ctx );
 
-typedef void (*tgSwapBuffers)( );
-void tgFlush( void* ctx, tgSwapBuffers swap );
+typedef void (*tgFunc)( );
+void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb );
 
 void tgOrtho2D( float w, float h, float x, float y, float* m );
 void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float f );
@@ -174,17 +247,30 @@ void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float 
 
 typedef struct
 {
+	uint32_t clear_bits;
+	uint32_t settings_bits;
 	uint32_t max_draw_calls;
 	uint32_t count;
 	tgDrawCall* calls;
+
+#if TG_LINE_RENDERER
+	tgRenderable line_r;
+	tgShader line_s;
+	uint32_t line_vert_count;
+	uint32_t line_vert_capacity;
+	float* line_verts;
+	float r, g, b;
+#endif
 } tgContext;
 
 #include <stdlib.h> // malloc, free, NULL
 #include <string.h> // memset
 
-void* tgMakeCtx( uint32_t max_draw_calls )
+void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits )
 {
 	tgContext* ctx = (tgContext*)malloc( sizeof( tgContext ) );
+	ctx->clear_bits = clear_bits;
+	ctx->settings_bits = settings_bits;
 	ctx->max_draw_calls = max_draw_calls;
 	ctx->count = 0;
 	ctx->calls = (tgDrawCall*)malloc( sizeof( tgDrawCall ) * max_draw_calls );
@@ -196,6 +282,24 @@ void* tgMakeCtx( uint32_t max_draw_calls )
 	GLuint vao;
 	glGenVertexArrays( 1, &vao );
 	glBindVertexArray( vao );
+
+#if TG_LINE_RENDERER
+	#define TG_LINE_STRIDE (sizeof( float ) * 3 * 2)
+	tgVertexData vd;
+	tgMakeVertexData( &vd, 1024 * 1024, GL_LINES, TG_LINE_STRIDE, GL_DYNAMIC_DRAW );
+	tgAddAttribute( &vd, "in_pos", 3, TG_FLOAT, 0 );
+	tgAddAttribute( &vd, "in_col", 3, TG_FLOAT, TG_LINE_STRIDE / 2 );
+	tgMakeRenderable( &ctx->line_r, &vd );
+	const char* vs = "#version 410\nuniform mat4 u_mvp;in vec2 in_pos;in vec3 in_col;out vec3 v_col;void main( ){v_col = in_col;gl_Position = u_mvp * vec4( in_pos, 0, 1 );}";
+	char* ps = "#version 410\nin vec3 v_col;out vec4 out_col;void main( ){out_col = vec4( v_col, 1 );}";
+	tgLoadShader( &ctx->line_s, vs, ps );
+	tgSetShader( &ctx->line_r, &ctx->line_s );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	ctx->line_vert_count = 0;
+	ctx->line_vert_capacity = 1024 * 1024;
+	ctx->line_verts = (float*)malloc( TG_LINE_STRIDE * ctx->line_vert_capacity );
+#endif
+
 	return ctx;
 }
 
@@ -205,6 +309,50 @@ void tgFreeCtx( void* ctx )
 	free( context->calls );
 	free( context );
 }
+
+#if TG_LINE_RENDERER
+void tgLineMVP( void* context, float* mvp )
+{
+	tgContext* ctx = (tgContext*)context;
+	tgSendMatrix( &ctx->line_s, "u_mvp", mvp );
+}
+
+void tgLineColor( void* context, float r, float g, float b )
+{
+	tgContext* ctx = (tgContext*)context;
+	ctx->r = r; ctx->g = g; ctx->b = b;
+}
+
+void tgLine( void* context, float ax, float ay, float az, float bx, float by, float bz )
+{
+	tgContext* ctx = (tgContext*)context;
+	if ( ctx->line_vert_count + 2 > ctx->line_vert_capacity )
+	{
+		uint32_t new_cap = ctx->line_vert_capacity * 2;
+		float* new_mem = (float*)malloc( new_cap );
+		memcpy( new_mem, ctx->line_verts, TG_LINE_STRIDE * ctx->line_vert_count );
+		free( ctx->line_verts );
+		ctx->line_verts = new_mem;
+		ctx->line_vert_capacity = new_cap;
+	}
+	float verts[] = { ax, ay, az, ctx->r, ctx->g, ctx->b, bx, by, bz, ctx->r, ctx->g, ctx->b };
+	memcpy( ctx->line_verts + ctx->line_vert_count * (TG_LINE_STRIDE / sizeof( float )), verts, sizeof( verts ) );
+	ctx->line_vert_count += 2;
+}
+
+void tgLineWidth( float width )
+{
+	glLineWidth( width );
+	TG_PRINT_GL_ERRORS( ); // common errors here unfortunately
+}
+#else
+#define TG_UNUSED( x ) (void)(x);
+void tgLineMVP( void* context, float* mvp ) { TG_UNUSED( context ); TG_UNUSED( mvp ); }
+void tgLineColor( void* context, float r, float g, float b ) { TG_UNUSED( context ); TG_UNUSED( r ); TG_UNUSED( g ); TG_UNUSED( b ); }
+void tgLine( void* context, float ax, float ay, float az, float bx, float by, float bz )
+{ TG_UNUSED( context ); TG_UNUSED( ax ); TG_UNUSED( ay ); TG_UNUSED( az ); TG_UNUSED( bx ); TG_UNUSED( by ); TG_UNUSED( bz ); }
+void tgLineWidth( float width ) { TG_UNUSED( width ); }
+#endif
 
 void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
 {
@@ -282,7 +430,7 @@ static uint32_t tg_djb2( unsigned char* str )
 	return hash;
 }
 
-void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t vertex_stride, uint32_t primitive, uint32_t usage )
+void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t primitive, uint32_t vertex_stride, uint32_t usage )
 {
 	vd->buffer_size = buffer_size;
 	vd->vertex_stride = vertex_stride;
@@ -420,13 +568,13 @@ void tgSetShader( tgRenderable* r, tgShader* program )
 	TG_ASSERT( !r->program );
 
 	r->program = program;
-	glGetProgramiv( program->program, GL_ACTIVE_ATTRIBUTES, (GLint*)&r->attributeCount );
+	glGetProgramiv( program->program, GL_ACTIVE_ATTRIBUTES, (GLint*)&r->attribute_count );
 
 #if TG_DEBUG_CHECKS
-	if ( r->attributeCount != r->data.attribute_count )
+	if ( r->attribute_count != r->data.attribute_count )
 	{
-		TG_WARN( "Mismatch between VertexData attribute count (%d), and shader attributeCount (%d).\n",
-				r->attributeCount,
+		TG_WARN( "Mismatch between VertexData attribute count (%d), and shader attribute count (%d).\n",
+				r->attribute_count,
 				r->data.attribute_count );
 	}
 #endif
@@ -437,7 +585,7 @@ void tgSetShader( tgRenderable* r, tgShader* program )
 	uint32_t hash;
 
 	// Query and set all attribute locations as defined by the shader linking
-	for ( uint32_t i = 0; i < r->attributeCount; ++i )
+	for ( uint32_t i = 0; i < r->attribute_count; ++i )
 	{
 		glGetActiveAttrib( program->program, i, 256, 0, (GLint*)&size, (GLenum*)&type, buffer );
 		hash = tg_djb2( (unsigned char*)buffer );
@@ -643,7 +791,7 @@ void tgSendF32( tgShader* s, char* uniform_name, uint32_t size, float* floats, u
 		break;
 
 	case 4:
-		glUniform4f( u->location, floats[ 0 ], floats[ 1 ], floats[ 2 ], 1.0f );
+		glUniform4f( u->location, floats[ 0 ], floats[ 1 ], floats[ 2 ], floats[ 3 ] );
 		break;
 
 	default:
@@ -749,16 +897,8 @@ void tgDoMap( tgDrawCall* call, tgRenderable* render )
 	tgUnmap( );
 }
 
-static void tgRender( tgDrawCall* call )
+static void tgRender( tgContext* ctx, tgDrawCall* call )
 {
-	tgFramebuffer* fbo = call->fbo;
-
-	if ( fbo )
-	{
-		glBindFramebuffer( GL_FRAMEBUFFER, fbo->fb_id );
-		glClear( GL_COLOR_BUFFER_BIT );
-	}
-
 	tgRenderable* render = call->r;
 	uint32_t texture_count = call->texture_count;
 	uint32_t* textures = call->textures;
@@ -826,44 +966,60 @@ static void tgRender( tgDrawCall* call )
 
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
 	glUseProgram( 0 );
+}
 
-	if ( fbo )
+void tgPresent( void* context, tgFramebuffer* fb )
+{
+	tgContext* ctx = (tgContext*)context;
+	tgQSort( ctx->calls, ctx->count );
+	
+	if ( fb ) glBindFramebuffer( GL_FRAMEBUFFER, fb->fb_id );
+	if ( ctx->clear_bits ) glClear( ctx->clear_bits );
+	if ( ctx->settings_bits ) glEnable( ctx->settings_bits );
+
+	// flush all draw calls to the GPU
+	for ( uint32_t i = 0; i < ctx->count; ++i )
+	{
+		tgDrawCall* call = ctx->calls + i;
+		tgRender( ctx, call );
+	}
+
+#if TG_LINE_RENDERER
+	if ( ctx->line_vert_count )
+	{
+		glDisable( GL_DEPTH_TEST );
+		tgDrawCall call;
+		call.vert_count = ctx->line_vert_count;
+		call.verts = ctx->line_verts;
+		call.r = &ctx->line_r;
+		call.texture_count = 0;
+		tgRender( ctx, &call );
+		ctx->line_vert_count = 0;
+	}
+#endif
+
+	if ( fb )
 	{
 		glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 		glClear( GL_COLOR_BUFFER_BIT );
-		tgSetActiveShader( fbo->shader );
+		glDisable( GL_DEPTH_TEST );
 
-		glBindBuffer( GL_ARRAY_BUFFER, fbo->quad_id );
-		glBindTexture( GL_TEXTURE_2D, fbo->tex_id );
-
+		tgSetActiveShader( fb->shader );
+		glBindBuffer( GL_ARRAY_BUFFER, fb->quad_id );
+		glBindTexture( GL_TEXTURE_2D, fb->tex_id );
 		glEnableVertexAttribArray( 0 );
 		glVertexAttribPointer( 0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof( GLfloat ), (GLvoid*)0);
 		glEnableVertexAttribArray( 1 );
 		glVertexAttribPointer( 1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof( GLfloat ), (GLvoid*)(2 * sizeof( GLfloat )) );
 		glDrawArrays( GL_TRIANGLES, 0, 6 );
 		glBindBuffer( GL_ARRAY_BUFFER, 0 );
-
 		tgDeactivateShader( );
 	}
 }
 
-void tgPresent( void* ctx )
+void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb )
 {
-	tgContext* context = (tgContext*)ctx;
-	glClear( GL_COLOR_BUFFER_BIT );
-	tgQSort( context->calls, context->count );
-
-	// flush all draw calls to the GPU
-	for ( uint32_t i = 0; i < context->count; ++i )
-	{
-		tgDrawCall* call = context->calls + i;
-		tgRender( call );
-	}
-}
-
-void tgFlush( void* ctx, tgSwapBuffers swap )
-{
-	tgPresent( ctx );
+	tgPresent( ctx, fb );
 	tgContext* context = (tgContext*)ctx;
 	context->count = 0;
 
