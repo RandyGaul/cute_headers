@@ -21,8 +21,12 @@ int spaced_pressed;
 void* ctx;
 float screen_w;
 float screen_h;
-float mouse_x;
-float mouse_y;
+c2v mp;
+float wheel;
+
+c2Circle user_circle;
+c2Capsule user_capsule;
+float user_rotation;
 
 void* ReadFileToMemory( const char* path, int* size )
 {
@@ -65,10 +69,35 @@ void KeyCB( GLFWwindow* window, int key, int scancode, int action, int mods )
 		use_post_fx = !use_post_fx;
 }
 
+void ScrollCB( GLFWwindow* window, double x, double y )
+{
+	(void)x;
+	wheel = (float)y;
+}
+
+void Rotate( c2v* src, c2v* dst, int count )
+{
+	if ( !wheel ) return;
+	c2r r = c2Rot( wheel > 0 ? 3.14159265f / 16.0f : -3.14159265f / 16.0f );
+	for ( int i = 0; i < count; ++i ) dst[ i ] = c2Mulrv( r, src[ i ] );
+}
+
+c2Capsule GetCapsule( )
+{
+	c2Capsule cap = user_capsule;
+	cap.a = c2Add( mp, cap.a );
+	cap.b = c2Add( mp, cap.b );
+	return cap;
+}
+
 void MouseCB( GLFWwindow* window, double x, double y )
 {
-	mouse_x = (float)x - screen_w / 2;
-	mouse_y = -((float)y - screen_h / 2);
+	float mouse_x = (float)x - screen_w / 2;
+	float mouse_y = -((float)y - screen_h / 2);
+	mp = c2V( mouse_x, mouse_y );
+
+	user_circle.p = mp;
+	user_circle.r = 10.0f;
 }
 
 void ResizeFramebuffer( int w, int h )
@@ -283,6 +312,169 @@ void TestDrawPrim( )
 	DrawPoly( poly, 4 );
 }
 
+void TestBoolean0( )
+{
+	c2AABB aabb;
+	aabb.min = c2V( -40.0f, -40.0f );
+	aabb.max = c2V( -15.0f, -15.0f );
+
+	c2Circle circle;
+	circle.p = c2V( -70.0f, 0 );
+	circle.r = 20.0f;
+
+	c2Capsule capsule;
+	capsule.a = c2V( -40.0f, 40.0f );
+	capsule.b = c2V( -20.0f, 100.0f );
+	capsule.r = 10.0f;
+
+	if ( c2CircletoCircle( user_circle, circle ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+	else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+	DrawCircle( circle.p, circle.r );
+
+	if ( c2CircletoAABB( user_circle, aabb ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+	else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+	DrawAABB( aabb.min, aabb.max );
+
+	if ( c2CircletoCapsule( user_circle, capsule ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+	else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+	DrawCapsule( capsule.a, capsule.b, capsule.r );
+
+	tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+	DrawCircle( user_circle.p, user_circle.r );
+}
+
+void TestBoolean1( )
+{
+	c2AABB bb;
+	bb.min = c2V( -100.0f, -30.0f );
+	bb.max = c2V( -50.0f, 30.0f );
+	c2Capsule cap = GetCapsule( );
+
+	c2v a, b;
+	c2GJK( &bb, C2_AABB, 0, &cap, C2_CAPSULE, 0, &a, &b, 1 );
+	DrawCircle( a, 2.0f );
+	DrawCircle( b, 2.0f );
+	tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+
+	if ( c2AABBtoCapsule( bb, cap ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+	else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+	DrawAABB( bb.min, bb.max );
+
+	tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+	DrawCapsule( cap.a, cap.b, cap.r );
+}
+
+float randf( )
+{
+	float r = (float)(rand( ) & RAND_MAX);
+	r /= RAND_MAX;
+	r = 2.0f * r - 1.0f;
+	return r;
+}
+
+c2v RandomVec( )
+{
+	return c2V( randf( ) * 100.0f, randf( ) * 100.0f );
+}
+
+void TestBoolean2( )
+{
+	static c2Poly poly;
+	static c2Poly poly2;
+	static int first = 1;
+	if ( first )
+	{
+		first = 0;
+		poly.count = C2_MAX_POLYGON_VERTS;
+		for ( int i = 0; i < poly.count; ++i ) poly.verts[ i ] = RandomVec( );
+		poly.count = c2Hull( poly.verts, poly.count );
+		poly2.count = C2_MAX_POLYGON_VERTS;
+		for ( int i = 0; i < poly2.count; ++i ) poly2.verts[ i ] = RandomVec( );
+		poly2.count = c2Hull( poly2.verts, poly2.count );
+	}
+
+	static int which;
+	if ( spaced_pressed ) which = (which + 1) % 4;
+	if ( wheel ) Rotate( poly2.verts, poly2.verts, poly2.count );
+
+	switch ( which )
+	{
+	case 0:
+	{
+		c2v a, b;
+		c2GJK( &user_circle, C2_CIRCLE, 0, &poly, C2_POLY, 0, &a, &b, 1 );
+		DrawCircle( a, 2.0f );
+		DrawCircle( b, 2.0f );
+		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+
+		if ( c2CircletoPoly( user_circle, &poly, 0 ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+		else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+		DrawPoly( poly.verts, poly.count );
+
+		tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+		DrawCircle( user_circle.p, user_circle.r );
+	}	break;
+
+	case 1:
+	{
+		c2v a, b;
+		c2AABB bb;
+		bb.min = c2V( -10.0f, -10.0f );
+		bb.max = c2V( 10.0f, 10.0f );
+		bb.min = c2Add( bb.min, mp );
+		bb.max = c2Add( bb.max, mp );
+		c2GJK( &bb, C2_AABB, 0, &poly, C2_POLY, 0, &a, &b, 1 );
+		DrawCircle( a, 2.0f );
+		DrawCircle( b, 2.0f );
+		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+
+		if ( c2AABBtoPoly( bb, &poly, 0 ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+		else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+		DrawPoly( poly.verts, poly.count );
+
+		tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+		DrawAABB( bb.min, bb.max );
+	}	break;
+
+	case 2:
+	{
+		c2v a, b;
+		c2Capsule cap = GetCapsule( );
+		c2GJK( &cap, C2_CAPSULE, 0, &poly, C2_POLY, 0, &a, &b, 1 );
+		DrawCircle( a, 2.0f );
+		DrawCircle( b, 2.0f );
+		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+
+		if ( c2CapsuletoPoly( cap, &poly, 0 ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+		else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+		DrawPoly( poly.verts, poly.count );
+
+		tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+		DrawCapsule( cap.a, cap.b, cap.r );
+	}	break;
+
+	case 3:
+	{
+		c2v a, b;
+		c2Poly poly3;
+		for ( int i = 0; i < poly2.count; ++i ) poly3.verts[ i ] = c2Add( mp, poly2.verts[ i ] );
+		poly3.count = poly2.count;
+
+		c2GJK( &poly, C2_POLY, 0, &poly3, C2_POLY, 0, &a, &b, 1 );
+		DrawCircle( a, 2.0f );
+		DrawCircle( b, 2.0f );
+		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+
+		if ( c2PolytoPoly( &poly, 0, &poly3, 0 ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
+		else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+		DrawPoly( poly.verts, poly.count );
+
+		tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
+		DrawPoly( poly3.verts, poly3.count );
+	}	break;
+	}
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -306,6 +498,7 @@ int main( )
 		return 1;
 	}
 
+	glfwSetScrollCallback( window, ScrollCB );
 	glfwSetCursorPosCallback( window, MouseCB );
 	glfwSetKeyCallback( window, KeyCB );
 	glfwSetFramebufferSizeCallback( window, Reshape );
@@ -349,12 +542,18 @@ int main( )
 	tgSendMatrix( &simple, "u_mvp", projection );
 	tgLineMVP( ctx, projection );
 
+	// setup some models
+	user_capsule.a = c2V( -30.0f, 0 );
+	user_capsule.b = c2V( 30.0f, 0 );
+	user_capsule.r = 10.0f;
+
 	// main loop
 	glClearColor( 0, 0, 0, 1 );
 	float t = 0;
 	while ( !glfwWindowShouldClose( window ) )
 	{
 		if ( spaced_pressed == 1 ) spaced_pressed = 0;
+		wheel = 0;
 		glfwPollEvents( );
 
 		float dt = ttTime( );
@@ -362,8 +561,12 @@ int main( )
 		t = fmod( t, 2.0f * 3.14159265f );
 		tgSendF32( &post_fx, "u_time", 1, &t, 1 );
 
-		TestDrawPrim( );
-		DrawCircle( c2V( mouse_x, mouse_y ), 10.0f );
+		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
+
+		//TestDrawPrim( );
+		//TestBoolean0( );
+		//TestBoolean1( );
+		TestBoolean2( );
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized

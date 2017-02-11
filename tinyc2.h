@@ -141,6 +141,19 @@ typedef enum
 	C2_POLY
 } C2_TYPE;
 
+// Runs the GJK algorithm to find closest points, returns distance between closest points.
+// outA and outB can be NULL, in this case only distance is returned. ax_ptr and bx_ptr
+// can be NULL, and represent local to world transformations for shapes A and B respectively.
+// use_radius will apply radii for capsules and circles (if set to false, spheres are
+// treated as points and capsules are treated as line segments i.e. rays).
+float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius );
+
+// Computes 2D convex hull. Will not do anything if less than two verts supplied. If
+// more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
+int c2Hull( c2v* verts, int count );
+
+// Generic collision detection routines, useful for games that want to use some poly-
+// morphism to write more generic-styled code. Internally calls various above functions.
 int c2Collided( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB );
 void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB, c2Manifold* m );
 
@@ -156,7 +169,7 @@ void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 #define c2Cos( radians ) cosf( radians )
 #define c2Sqrt( a ) sqrtf( a )
 #define c2Min( a, b ) ((a) < (b) ? (a) : (b))
-#define c2Max( a, b ) c2Min( b, a )
+#define c2Max( a, b ) ((a) > (b) ? (a) : (b))
 #define c2Abs( a ) ((a) < 0 ? -(a) : (a))
 #define c2Clamp( a, lo, hi ) c2Max( lo, c2Min( a, hi ) )
 C2_INLINE void c2SinCos( float radians, float* s, float* c ) { *c = c2Cos( radians ); *s = c2Sin( radians ); }
@@ -167,6 +180,7 @@ C2_INLINE c2v c2Add( c2v a, c2v b ) { a.x += b.x; a.y += b.y; return a; }
 C2_INLINE c2v c2Sub( c2v a, c2v b ) { a.x -= b.x; a.y -= b.y; return a; }
 C2_INLINE float c2Dot( c2v a, c2v b ) { return a.x * b.x + a.y * b.y; }
 C2_INLINE c2v c2Mulvs( c2v a, float b ) { a.x *= b; a.y *= b; return a; }
+C2_INLINE c2v c2Mulvv( c2v a, c2v b ) { a.x *= b.x; a.y *= b.y; return a; }
 C2_INLINE c2v c2Div( c2v a, float b ) { return c2Mulvs( a, 1.0f / b ); }
 C2_INLINE c2v c2Skew( c2v a ) { c2v b; b.x = -a.y; b.y = a.x; return b; }
 C2_INLINE c2v c2CW90( c2v a ) { c2v b; b.x = a.y; b.y = -a.x; return b; }
@@ -175,8 +189,11 @@ C2_INLINE c2v c2Minv( c2v a, c2v b ) { return c2V( c2Min( a.x, b.x ), c2Min( a.y
 C2_INLINE c2v c2Maxv( c2v a, c2v b ) { return c2V( c2Max( a.x, b.x ), c2Max( a.y, b.y ) ); }
 C2_INLINE c2v c2Clampv( c2v a, c2v lo, c2v hi ) { return c2Maxv( lo, c2Minv( a, hi ) ); }
 C2_INLINE c2v c2Absv( c2v a ) { return c2V( c2Abs( a.x ), c2Abs( a.y ) ); }
+C2_INLINE float c2Hmin( c2v a ) { return c2Min( a.x, a.y ); }
+C2_INLINE float c2Hmax( c2v a ) { return c2Max( a.x, a.y ); }
 C2_INLINE float c2Len( c2v a ) { return c2Sqrt( c2Dot( a, a ) ); }
 C2_INLINE c2v c2Norm( c2v a ) { return c2Div( a, c2Len( a ) ); }
+C2_INLINE c2v c2Neg( c2v a ) { return c2V( -a.x, -a.y ); }
 C2_INLINE int c2Parallel( c2v a, c2v b, float kTol )
 {
 	float k = c2Len( a ) / c2Len( b );
@@ -321,6 +338,427 @@ void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 	}
 }
 
+#define C2_GJK_ITERS 20
+
+typedef struct
+{
+	float radius;
+	int count;
+	c2v verts[ C2_MAX_POLYGON_VERTS ];
+} c2Proxy;
+
+typedef struct
+{
+	c2v sA;
+	c2v sB;
+	c2v p;
+	float u;
+	int iA;
+	int iB;
+} c2sv;
+
+typedef struct
+{
+	c2sv a, b, c, d;
+	float div;
+	int count;
+} c2Simplex;
+
+void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
+{
+	switch ( type )
+	{
+	case C2_CIRCLE:
+	{
+		c2Circle* c = (c2Circle*)shape;
+		p->radius = c->r;
+		p->count = 1;
+		p->verts[ 0 ] = c->p;
+	}	break;
+
+	case C2_AABB:
+	{
+		c2AABB* bb = (c2AABB*)shape;
+		p->radius = 0;
+		p->count = 4;
+		p->verts[ 0 ] = bb->min;
+		p->verts[ 1 ] = c2V( bb->max.x, bb->min.y );
+		p->verts[ 2 ] = bb->max;
+		p->verts[ 3 ] = c2V( bb->min.x, bb->max.y );
+	}	break;
+
+	case C2_CAPSULE:
+	{
+		c2Capsule* c = (c2Capsule*)shape;
+		p->radius = c->r;
+		p->count = 2;
+		p->verts[ 0 ] = c->a;
+		p->verts[ 1 ] = c->b;
+	}	break;
+
+	case C2_POLY:
+	{
+		c2Poly* poly = (c2Poly*)shape;
+		p->radius = 0;
+		p->count = poly->count;
+		for ( int i = 0; i < p->count; ++i ) p->verts[ i ] = poly->verts[ i ];
+	}	break;
+	}
+}
+
+int c2Support( c2v* verts, int count, c2v d )
+{
+	int imax = 0;
+	float dmax = c2Dot( verts[ 0 ], d );
+
+	for ( int i = 1; i < count; ++i )
+	{
+		float dot = c2Dot( verts[ i ], d );
+		if ( dot > dmax )
+		{
+			imax = i;
+			dmax = dot;
+		}
+	}
+
+	return imax;
+}
+
+#define C2_BARY( n, x ) c2Mulvs( s->n.x, (den * s->n.u) )
+#define C2_BARY2( x ) c2Add( C2_BARY( a, x ), C2_BARY( b, x ) )
+#define C2_BARY3( x ) c2Add( c2Add( C2_BARY( a, x ), C2_BARY( b, x ) ), C2_BARY( c, x ) )
+
+c2v c2L( c2Simplex* s )
+{
+	float den = 1.0f / s->div;
+	switch ( s->count )
+	{
+	case 1: return s->a.p;
+	case 2: return C2_BARY2( p );
+	case 3: return C2_BARY3( p );
+	default: return c2V( 0, 0 );
+	}
+}
+
+void c2Witness( c2Simplex* s, c2v* a, c2v* b )
+{
+	float den = 1.0f / s->div;
+	switch ( s->count )
+	{
+	case 1: *a = s->a.sA; *b = s->a.sB; break;
+	case 2: *a = C2_BARY2( sA ); *b = C2_BARY2( sB ); break;
+	case 3: *a = C2_BARY3( sA ); *b = C2_BARY3( sB ); break;
+	default: *a = c2V( 0, 0 ); *b = c2V( 0, 0 );
+	}
+}
+
+c2v c2D( c2Simplex* s )
+{
+	switch ( s->count )
+	{
+	case 1: return c2Neg( s->a.p );
+	case 2:
+	{
+		c2v ab = c2Sub( s->b.p, s->a.p );
+		if ( c2Det2( ab, c2Neg( s->a.p ) ) > 0 ) return c2Skew( ab );
+		return c2CW90( ab );
+	}
+	case 3:
+	default: return c2V( 0, 0 );
+	}
+}
+
+void c22( c2Simplex* s )
+{
+	c2v a = s->a.p;
+	c2v b = s->b.p;
+	float u = c2Dot( b, c2Norm( c2Sub( b, a ) ) );
+	float v = c2Dot( a, c2Norm( c2Sub( a, b ) ) );
+
+	if ( v <= 0 )
+	{
+		s->a.u = 1.0f;
+		s->div = 1.0f;
+		s->count = 1;
+	}
+
+	else if ( u <= 0 )
+	{
+		s->a = s->b;
+		s->a.u = 1.0f;
+		s->div = 1.0f;
+		s->count = 1;
+	}
+
+	else
+	{
+		s->a.u = u;
+		s->b.u = v;
+		s->div = u + v;
+		s->count = 2;
+	}
+}
+
+void c23( c2Simplex* s )
+{
+	c2v a = s->a.p;
+	c2v b = s->b.p;
+	c2v c = s->c.p;
+
+	float uAB = c2Dot( b, c2Norm( c2Sub( b, a ) ) );
+	float vAB = c2Dot( a, c2Norm( c2Sub( a, b ) ) );
+	float uBC = c2Dot( c, c2Norm( c2Sub( c, b ) ) );
+	float vBC = c2Dot( b, c2Norm( c2Sub( b, c ) ) );
+	float uCA = c2Dot( a, c2Norm( c2Sub( a, c ) ) );
+	float vCA = c2Dot( c, c2Norm( c2Sub( c, a ) ) );
+	float area = c2Det2( c2Norm( c2Sub( b, a ) ), c2Norm( c2Sub( c, a ) ) );
+	float uABC = c2Det2( b, c ) * area;
+	float vABC = c2Det2( c, a ) * area;
+	float wABC = c2Det2( a, b ) * area;
+
+	if ( vAB <= 0 && uCA <= 0 )
+	{
+		s->a.u = 1.0f;
+		s->div = 1.0f;
+		s->count = 1;
+	}
+
+	else if ( uAB <= 0 && vBC <= 0 )
+	{
+		s->a = s->b;
+		s->a.u = 1.0f;
+		s->div = 1.0f;
+		s->count = 1;
+	}
+
+	else if ( uBC <= 0 && vCA <= 0 )
+	{
+		s->a = s->c;
+		s->a.u = 1.0f;
+		s->div = 1.0f;
+		s->count = 1;
+	}
+
+	else if ( uAB > 0 && vAB > 0 && wABC <= 0 )
+	{
+		s->a.u = uAB;
+		s->b.u = vAB;
+		s->div = uAB + vAB;
+		s->count = 2;
+	}
+
+	else if ( uBC > 0 && vBC > 0 && uABC <= 0 )
+	{
+		s->a = s->b;
+		s->b = s->c;
+		s->a.u = uBC;
+		s->b.u = vBC;
+		s->div = uBC + vBC;
+		s->count = 2;
+	}
+
+	else if ( uCA > 0 && vCA > 0 && vABC <= 0 )
+	{
+		s->b = s->a;
+		s->a = s->c;
+		s->a.u = uCA;
+		s->b.u = vCA;
+		s->div = uCA + vCA;
+		s->count = 2;
+	}
+
+	else
+	{
+		s->a.u = uABC;
+		s->b.u = vABC;
+		s->c.u = wABC;
+		s->div = uABC + vABC + wABC;
+		s->count = 3;
+	}
+}
+
+#include <float.h>
+
+float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius )
+{
+	c2x ax;
+	c2x bx;
+	if ( typeA != C2_POLY || !ax_ptr ) ax = c2xIdentity( );
+	else ax = *ax_ptr;
+	if ( typeB != C2_POLY || !bx_ptr ) bx = c2xIdentity( );
+	else bx = *bx_ptr;
+
+	c2Proxy pA;
+	c2Proxy pB;
+	c2MakeProxy( A, typeA, &pA );
+	c2MakeProxy( B, typeB, &pB );
+
+	c2Simplex s;
+	s.a.iA = 0;
+	s.a.iB = 0;
+	s.a.sA = c2Mulxv( ax, pA.verts[ 0 ] );
+	s.a.sB = c2Mulxv( bx, pB.verts[ 0 ] );
+	s.a.p = c2Sub( s.a.sB, s.a.sA );
+	s.a.u = 1.0f;
+	s.count = 1;
+
+	c2sv* verts = &s.a;
+	int saveA[ 3 ], saveB[ 3 ];
+	int save_count = 0;
+	float d0 = FLT_MAX;
+	float d1 = FLT_MAX;
+	int iter = 0;
+	int hit = 0;
+	while ( iter < C2_GJK_ITERS )
+	{
+		save_count = s.count;
+		for ( int i = 0; i < save_count; ++i )
+		{
+			saveA[ i ] = verts[ i ].iA;
+			saveB[ i ] = verts[ i ].iB;
+		}
+		
+		switch ( s.count )
+		{
+		case 1: break;
+		case 2: c22( &s ); break;
+		case 3: c23( &s ); break;
+		}
+
+		if ( s.count == 3 )
+		{
+			hit = 1;
+			break;
+		}
+
+		c2v p = c2L( &s );
+		d1 = c2Dot( p, p );
+
+		if ( d1 > d0 ) break;
+		d0 = d1;
+
+		c2v d = c2D( &s );
+		if ( c2Dot( d, d ) < FLT_EPSILON * FLT_EPSILON ) break;
+
+		int iA = c2Support( pA.verts, pA.count, c2MulrvT( ax.r, c2Neg( d ) ) );
+		c2v sA = c2Mulxv( ax, pA.verts[ iA ] );
+		int iB = c2Support( pB.verts, pB.count, c2MulrvT( bx.r, d ) );
+		c2v sB = c2Mulxv( bx, pB.verts[ iB ] );
+
+		++iter;
+
+		int dup = 0;
+		for ( int i = 0; i < save_count; ++i )
+		{
+			if ( iA == saveA[ i ] && iB == saveB[ i ] )
+			{
+				dup = true;
+				break;
+			}
+		}
+		if ( dup ) break;
+
+		c2sv* v = verts + s.count;
+		v->iA = iA;
+		v->sA = sA;
+		v->iB = iB;
+		v->sB = sB;
+		v->p = c2Sub( v->sB, v->sA );
+		++s.count;
+	}
+
+	c2v a, b;
+	c2Witness( &s, &a, &b );
+	float dist = c2Len( c2Sub( a, b ) );
+
+	if ( hit )
+	{
+		a = b;
+		dist = 0;
+	}
+
+	else if ( use_radius )
+	{
+		float rA = pA.radius;
+		float rB = pB.radius;
+
+		if ( dist > rA + rB && dist > FLT_EPSILON )
+		{
+			dist -= rA + rB;
+			c2v n = c2Norm( c2Sub( b, a ) );
+			a = c2Add( a, c2Mulvs( n, rA ) );
+			b = c2Sub( b, c2Mulvs( n, rB ) );
+		}
+
+		else
+		{
+			c2v p = c2Mulvs( c2Add( a, b ), 0.5f );
+			a = p;
+			b = p;
+			dist = 0;
+		}
+	}
+
+	if ( outA ) *outA = a;
+	if ( outB ) *outB = b;
+	return dist;
+}
+
+int c2Hull( c2v* verts, int count )
+{
+	if ( count <= 2 ) return 0;
+	count = c2Min( C2_MAX_POLYGON_VERTS, count );
+
+	int right = 0;
+	float xmax = verts[ 0 ].x;
+	for ( int i = 1; i < count; ++i )
+	{
+		float x = verts[ i ].x;
+		if ( x > xmax )
+		{
+			xmax = x;
+			right = i;
+		}
+
+		else if ( x == xmax )
+		if ( verts[ i ].y < verts[ right ].y ) right = i;
+	}
+
+	int hull[ C2_MAX_POLYGON_VERTS ];
+	int out_count = 0;
+	int index = right;
+
+	while ( 1 )
+	{
+		hull[ out_count ] = index;
+		int next = 0;
+
+		for ( int i = 1; i < count; ++i )
+		{
+			if ( next == index )
+			{
+				next = i;
+				continue;
+			}
+
+			c2v e1 = c2Sub( verts[ next ], verts[ hull[ out_count ] ] );
+			c2v e2 = c2Sub( verts[ i ], verts[ hull[ out_count ] ] );
+			float c = c2Det2( e1, e2 );
+			if( c < 0 ) next = i;
+			if ( c == 0 && c2Dot( e2, e2 ) > c2Dot( e1, e1 ) ) next = i;
+		}
+
+		++out_count;
+		index = next;
+		if ( next == right ) break;
+	}
+
+	c2v hull_verts[ C2_MAX_POLYGON_VERTS ];
+	for ( int i = 0; i < out_count; ++i ) hull_verts[ i ] = verts[ hull[ i ] ];
+	memcpy( verts, hull_verts, sizeof( c2v ) * out_count );
+	return out_count;
+}
+
 int c2CircletoCircle( c2Circle A, c2Circle B )
 {
 	c2v c = c2Sub( B.p, A.p );
@@ -334,7 +772,7 @@ int c2CircletoCircle( c2Circle A, c2Circle B )
 int c2CircletoAABB( c2Circle A, c2AABB B )
 {
 	c2v L = c2Clampv( A.p, B.min, B.max );
-	c2v ab = c2Sub( L, A.p );
+	c2v ab = c2Sub( A.p, L );
 	float d2 = c2Dot( ab, ab );
 	float r2 = A.r * A.r;
 	if ( d2 < r2 ) return 1;
@@ -357,7 +795,7 @@ int c2CircletoCapsule( c2Circle A, c2Capsule B )
 	float da = c2Dot( ap, n );
 	float d2;
 
-	if ( da < 0 ) d2 = c2Dot( n, n );
+	if ( da < 0 ) d2 = c2Dot( ap, ap );
 	else
 	{
 		float db = c2Dot( c2Sub( A.p, B.b ), n );
@@ -380,32 +818,38 @@ int c2CircletoCapsule( c2Circle A, c2Capsule B )
 
 int c2AABBtoCapsule( c2AABB A, c2Capsule B )
 {
-	return 0;
+	if ( c2GJK( &A, C2_AABB, 0, &B, C2_CAPSULE, 0, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2CapsuletoCapsule( c2Capsule A, c2Capsule B )
 {
-	return 0;
+	if ( c2GJK( &A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2CircletoPoly( c2Circle A, c2Poly* B, c2x* bx )
 {
-	return 0;
+	if ( c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2AABBtoPoly( c2AABB A, c2Poly* B, c2x* bx )
 {
-	return 0;
+	if ( c2GJK( &A, C2_AABB, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2CapsuletoPoly( c2Capsule A, c2Poly* B, c2x* bx )
 {
-	return 0;
+	if ( c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx )
 {
-	return 0;
+	if ( c2GJK( A, C2_POLY, ax, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
+	return 1;
 }
 
 int c2RaytoCircle( c2Ray A, c2Circle B, c2Raycast* out )

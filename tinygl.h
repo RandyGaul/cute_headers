@@ -190,6 +190,7 @@ void tgLineMVP( void* context, float* mvp );
 void tgLineColor( void* context, float r, float g, float b );
 void tgLine( void* context, float ax, float ay, float az, float bx, float by, float bz );
 void tgLineWidth( float width );
+void tgLineDepthTest( void* context, int zero_for_off );
 
 void tgMakeFramebuffer( tgFramebuffer* tgFbo, tgShader* shader, int w, int h );
 void tgFreeFramebuffer( tgFramebuffer* tgFbo );
@@ -260,6 +261,7 @@ typedef struct
 	uint32_t line_vert_capacity;
 	float* line_verts;
 	float r, g, b;
+	int line_depth_test;
 #endif
 } tgContext;
 
@@ -298,6 +300,7 @@ void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings
 	ctx->line_vert_count = 0;
 	ctx->line_vert_capacity = 1024 * 1024;
 	ctx->line_verts = (float*)malloc( TG_LINE_STRIDE * ctx->line_vert_capacity );
+	ctx->line_depth_test = 0;
 #endif
 
 	return ctx;
@@ -345,6 +348,12 @@ void tgLineWidth( float width )
 	glLineWidth( width );
 	TG_PRINT_GL_ERRORS( ); // common errors here unfortunately
 }
+
+void tgLineDepthTest( void* context, int zero_for_off )
+{
+	tgContext* ctx = (tgContext*)context;
+	ctx->line_depth_test = zero_for_off;
+}
 #else
 #define TG_UNUSED( x ) (void)(x);
 void tgLineMVP( void* context, float* mvp ) { TG_UNUSED( context ); TG_UNUSED( mvp ); }
@@ -352,6 +361,7 @@ void tgLineColor( void* context, float r, float g, float b ) { TG_UNUSED( contex
 void tgLine( void* context, float ax, float ay, float az, float bx, float by, float bz )
 { TG_UNUSED( context ); TG_UNUSED( ax ); TG_UNUSED( ay ); TG_UNUSED( az ); TG_UNUSED( bx ); TG_UNUSED( by ); TG_UNUSED( bz ); }
 void tgLineWidth( float width ) { TG_UNUSED( width ); }
+void tgLineDepthTest( void* context, int zero_for_off ) { TG_UNUSED( context ); TG_UNUSED( zero_for_off ); }
 #endif
 
 void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
@@ -987,7 +997,8 @@ void tgPresent( void* context, tgFramebuffer* fb )
 #if TG_LINE_RENDERER
 	if ( ctx->line_vert_count )
 	{
-		glDisable( GL_DEPTH_TEST );
+		if ( ctx->line_depth_test ) glEnable( GL_DEPTH_TEST );
+		else glDisable( GL_DEPTH_TEST );
 		tgDrawCall call;
 		call.vert_count = ctx->line_vert_count;
 		call.verts = ctx->line_verts;
