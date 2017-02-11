@@ -475,6 +475,57 @@ void TestBoolean2( )
 	}
 }
 
+void TestRay( )
+{
+	c2Circle c;
+	c.p = c2V( 0, 0 );
+	c.r = 20.0f;
+
+	c2AABB bb;
+	bb.min = c2V( 30.0f, 30.0f );
+	bb.max = c2V( 70.0f, 70.0f );
+
+	c2Ray ray;
+	ray.p = c2V( -100.0f, 100.0f );
+	ray.d = c2Norm( c2Sub( mp, ray.p ) );
+	ray.t = c2Dot( mp, ray.d ) - c2Dot( ray.p, ray.d );
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawCircle( c.p, c.r );
+	DrawAABB( bb.min, bb.max );
+
+	c2Raycast cast;
+	int hit = c2RaytoCircle( ray, c, &cast );
+	if ( hit )
+	{
+		ray.t = cast.t;
+		c2v impact = c2Impact( ray, ray.t );
+		c2v end = c2Add( impact, c2Mulvs( cast.n, 15.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+		tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
+	}
+
+	else
+	{
+
+		ray.d = c2Norm( c2Sub( mp, ray.p ) );
+		ray.t = c2Dot( mp, ray.d ) - c2Dot( ray.p, ray.d );
+
+		if ( c2RaytoAABB( ray, bb, &cast ) )
+		{
+			ray.t = cast.t;
+			c2v impact = c2Impact( ray, ray.t );
+			c2v end = c2Add( impact, c2Mulvs( cast.n, 15.0f ) );
+			tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+			tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+		}
+		else tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+
+		tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
+	}
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -566,7 +617,8 @@ int main( )
 		//TestDrawPrim( );
 		//TestBoolean0( );
 		//TestBoolean1( );
-		TestBoolean2( );
+		//TestBoolean2( );
+		TestRay( );
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized

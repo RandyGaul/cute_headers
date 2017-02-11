@@ -80,8 +80,11 @@ typedef struct
 typedef struct
 {
 	float t; // time of impact
-	c2v p;   // position of impact p = ray.p + ray.d * raycast.t
+	c2v n;   // normal of surface at impact (unit length)
 } c2Raycast;
+
+// position of impact p = ray.p + ray.d * raycast.t
+#define c2Impact( ray, t ) c2Add( ray.p, c2Mulvs( ray.d, t ) )
 
 // contains all information necessary to resolve a collision, or in other words
 // this is the information needed to separate shapes that are colliding. Doing
@@ -173,6 +176,7 @@ void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 #define c2Abs( a ) ((a) < 0 ? -(a) : (a))
 #define c2Clamp( a, lo, hi ) c2Max( lo, c2Min( a, hi ) )
 C2_INLINE void c2SinCos( float radians, float* s, float* c ) { *c = c2Cos( radians ); *s = c2Sin( radians ); }
+#define c2Sign( a ) (a < 0 ? -1.0f : 1.0f)
 
 // vector ops
 C2_INLINE c2v c2V( float x, float y ) { c2v a; a.x = x; a.y = y; return a; }
@@ -854,11 +858,44 @@ int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx )
 
 int c2RaytoCircle( c2Ray A, c2Circle B, c2Raycast* out )
 {
+	c2v p = B.p;
+	c2v m = c2Sub( A.p, p );
+	float c = c2Dot( m, m ) - B.r * B.r;
+	float b = c2Dot( m, A.d );
+	float disc = b * b - c;
+	if ( disc < 0 ) return 0;
+
+	float t = -b - c2Sqrt( disc );
+	if ( t >= 0 && t <= A.t )
+	{
+		out->t = t;
+		c2v impact = c2Impact( A, t );
+		out->n = c2Norm( c2Sub( impact, p ) );
+		return 1;
+	}
 	return 0;
 }
 
 int c2RaytoAABB( c2Ray A, c2AABB B, c2Raycast* out )
 {
+	c2v inv = c2V( 1.0f / A.d.x, 1.0f / A.d.y );
+	c2v d0 = c2Mulvv( c2Sub( B.min, A.p ), inv );
+	c2v d1 = c2Mulvv( c2Sub( B.max, A.p ), inv );
+	c2v v0 = c2Minv( d0, d1 );
+	c2v v1 = c2Maxv( d0, d1 );
+	float t0 = c2Hmax( v0 );
+	float t1 = c2Hmin( v1 );
+
+	if ( t1 >= 0 && t1 >= t0 && t0 <= A.t )
+	{
+		c2v c = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
+		c = c2Sub( c2Impact( A, t0 ), c );
+		c2v abs_c = c2Absv( c );
+		if ( abs_c.x > abs_c.y ) out->n = c2V( c2Sign( c.x ), 0 );
+		else out->n = c2V( 0, c2Sign( c.y ) );
+		out->t = t0;
+		return 1;
+	}
 	return 0;
 }
 
