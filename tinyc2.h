@@ -901,6 +901,46 @@ int c2RaytoAABB( c2Ray A, c2AABB B, c2Raycast* out )
 
 int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 {
+	c2m M;
+	M.y = c2Norm( c2Sub( B.b, B.a ) );
+	M.x = c2CW90( M.y );
+
+	c2v yBb = c2MulmvT( M, c2Sub( B.b, B.a ) );
+	c2v yAp = c2MulmvT( M, c2Sub( A.p, B.a ) );
+	c2v yAd = c2MulmvT( M, A.d );
+	c2v yAe = c2Add( yAp, c2Mulvs( yAd, A.t ) );
+
+	if ( yAe.x * yAp.x < 0 || c2Min( c2Abs( yAe.x ), c2Abs( yAp.x ) ) < B.r )
+	{
+		float c = yAp.x > 0 ? B.r : -B.r;
+		float d = (yAe.x - yAp.x);
+		float t = (c - yAp.x) / d;
+		float y = yAp.y + (yAe.y - yAp.y) * t;
+
+		if ( y < 0 )
+		{
+			c2Circle c;
+			c.p = B.a;
+			c.r = B.r;
+			return c2RaytoCircle( A, c, out );
+		}
+
+		else if ( y > yBb.y )
+		{
+			c2Circle c;
+			c.p = B.b;
+			c.r = B.r;
+			return c2RaytoCircle( A, c, out );
+		}
+
+		else
+		{
+			out->n = c > 0 ? M.x : c2Skew( M.y );
+			out->t = t * A.t;
+			return 1;
+		}
+	}
+
 	return 0;
 }
 

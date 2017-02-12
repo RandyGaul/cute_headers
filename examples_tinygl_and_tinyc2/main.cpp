@@ -475,7 +475,7 @@ void TestBoolean2( )
 	}
 }
 
-void TestRay( )
+void TestRay0( )
 {
 	c2Circle c;
 	c.p = c2V( 0, 0 );
@@ -524,6 +524,33 @@ void TestRay( )
 
 		tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
 	}
+}
+
+void TestRay1( )
+{
+	c2Capsule cap;
+	cap.a = c2V( -100.0f, 60.0f );
+	cap.b = c2V( 50.0f, -40.0f );
+	cap.r = 20.0f;
+
+	c2Ray ray;
+	ray.p = c2V( 75.0f, 100.0f );
+	ray.d = c2Norm( c2Sub( mp, ray.p ) );
+	ray.t = c2Dot( mp, ray.d ) - c2Dot( ray.p, ray.d );
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawCapsule( cap.a, cap.b, cap.r );
+	c2Raycast cast;
+	if ( c2RaytoCapsule( ray, cap, &cast ) )
+	{
+		ray.t = cast.t;
+		c2v impact = c2Impact( ray, ray.t );
+		c2v end = c2Add( impact, c2Mulvs( cast.n, 15.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+	}
+
+	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
 }
 
 int main( )
@@ -618,7 +645,8 @@ int main( )
 		//TestBoolean0( );
 		//TestBoolean1( );
 		//TestBoolean2( );
-		TestRay( );
+		//TestRay0( );
+		TestRay1( );
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized
