@@ -156,11 +156,13 @@ float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* b
 int c2Hull( c2v* verts, int count );
 void c2Norms( c2v* verts, c2v* norms, int count );
 
-// runs c2Hull and c2Norm, assumes p->verts and p->count are both set to valid values
+// runs c2Hull and c2Norms, assumes p->verts and p->count are both set to valid values
 void c2MakePoly( c2Poly* p );
 
 // Generic collision detection routines, useful for games that want to use some poly-
 // morphism to write more generic-styled code. Internally calls various above functions.
+// For AABBs/Circles/Capsules ax and bx are ignored. For polys ax and bx can define
+// model to world transformations, or be NULL for identity transforms.
 int c2Collided( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB );
 void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB, c2Manifold* m );
 
@@ -170,7 +172,7 @@ void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 	#define C2_INLINE __attribute__((always_inline))
 #endif
 
-// adjust these primitives as necessary
+// adjust these primitives as seen fit
 #include <math.h>
 #define c2Sin( radians ) sinf( radians )
 #define c2Cos( radians ) cosf( radians )
@@ -372,7 +374,7 @@ typedef struct
 	int count;
 } c2Simplex;
 
-void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
+static C2_INLINE void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
 {
 	switch ( type )
 	{
@@ -414,7 +416,7 @@ void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
 	}
 }
 
-int c2Support( c2v* verts, int count, c2v d )
+static C2_INLINE int c2Support( c2v* verts, int count, c2v d )
 {
 	int imax = 0;
 	float dmax = c2Dot( verts[ 0 ], d );
@@ -436,7 +438,7 @@ int c2Support( c2v* verts, int count, c2v d )
 #define C2_BARY2( x ) c2Add( C2_BARY( a, x ), C2_BARY( b, x ) )
 #define C2_BARY3( x ) c2Add( c2Add( C2_BARY( a, x ), C2_BARY( b, x ) ), C2_BARY( c, x ) )
 
-c2v c2L( c2Simplex* s )
+static C2_INLINE c2v c2L( c2Simplex* s )
 {
 	float den = 1.0f / s->div;
 	switch ( s->count )
@@ -448,7 +450,7 @@ c2v c2L( c2Simplex* s )
 	}
 }
 
-void c2Witness( c2Simplex* s, c2v* a, c2v* b )
+static C2_INLINE void c2Witness( c2Simplex* s, c2v* a, c2v* b )
 {
 	float den = 1.0f / s->div;
 	switch ( s->count )
@@ -460,7 +462,7 @@ void c2Witness( c2Simplex* s, c2v* a, c2v* b )
 	}
 }
 
-c2v c2D( c2Simplex* s )
+static C2_INLINE c2v c2D( c2Simplex* s )
 {
 	switch ( s->count )
 	{
@@ -476,7 +478,7 @@ c2v c2D( c2Simplex* s )
 	}
 }
 
-void c22( c2Simplex* s )
+static C2_INLINE void c22( c2Simplex* s )
 {
 	c2v a = s->a.p;
 	c2v b = s->b.p;
@@ -507,7 +509,7 @@ void c22( c2Simplex* s )
 	}
 }
 
-void c23( c2Simplex* s )
+static C2_INLINE void c23( c2Simplex* s )
 {
 	c2v a = s->a.p;
 	c2v b = s->b.p;
