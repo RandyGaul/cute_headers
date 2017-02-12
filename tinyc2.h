@@ -88,7 +88,7 @@ typedef struct
 
 // contains all information necessary to resolve a collision, or in other words
 // this is the information needed to separate shapes that are colliding. Doing
-// the resolution step is *not* included in tinyc2
+// the resolution step is *not* included in tinyc2.
 typedef struct
 {
 	int count;
@@ -1014,7 +1014,7 @@ void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 		m->count = 1;
 		m->depths[ 0 ] = r - l;
 		m->contact_points[ 0 ] = c2Mulvs( c2Add( A.p, B.p ), 0.5f );
-		m->normal = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 1.0f, 0 );
+		m->normal = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 0, 1.0f );
 	}
 }
 
@@ -1032,30 +1032,52 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			c2v n = c2Norm( c2Neg( ab ) );
 			m->count = 1;
 			m->depths[ 0 ] = A.r - d;
-			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, d ) );
+			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, -d ) );
 			m->normal = n;
 		}
 
 		else
 		{
 			c2v mid = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
-			c2v d = c2Norm( c2Sub( A.p, mid ) );
+			c2v e = c2Mulvs( c2Sub( B.max, B.min ), 0.5f );
+			c2v d = c2Sub( A.p, mid );
 			c2v abs_d = c2Absv( d );
 			c2v n;
+			c2v p = A.p;
 			float depth;
 			if ( abs_d.x > abs_d.y )
 			{
-				n = c2V( 1.0f, 0 );
-				depth = (B.max.x - B.min.x) * 0.5f;
+				if ( d.x < 0 )
+				{
+					n = c2V( -1.0f, 0 );
+					p.x = mid.x - e.x;
+				}
+
+				else
+				{
+					n = c2V( 1.0f, 0 );
+					p.x = mid.x + e.x;
+				}
+				depth = e.x - abs_d.x;
 			}
 			else
 			{
-				n = c2V( 0, 1.0f );
-				depth = (B.max.y - B.min.y) * 0.5f;
+				if ( d.y < 0 )
+				{
+					n = c2V( 0, -1.0f );
+					p.y = mid.y - e.y;
+				}
+
+				else
+				{
+					n = c2V( 0, 1.0f );
+					p.y = mid.y + e.y;
+				}
+				depth = e.y - abs_d.y;
 			}
 			m->count = 1;
 			m->depths[ 0 ] = depth;
-			m->contact_points[ 0 ] = c2Add( mid, c2Mulvs( n, depth ) );
+			m->contact_points[ 0 ] = p;
 			m->normal = n;
 		}
 	}
@@ -1071,7 +1093,8 @@ void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 		m->count = 1;
 		m->depths[ 0 ] = r - d;
 		m->contact_points[ 0 ] = c2Mulvs( c2Add( a, b ), 0.5f );
-		m->normal = c2Norm( c2Sub( b, a ) );
+		if ( d == 0 ) m->normal = c2Skew( c2Norm( c2Sub( B.b, B.a ) ) );
+		else m->normal = c2Norm( c2Sub( b, a ) );
 	}
 }
 

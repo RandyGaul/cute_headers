@@ -587,6 +587,123 @@ void TestRay2( )
 	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
 }
 
+void DrawManifold( c2Manifold m )
+{
+	c2v n = m.normal;
+	tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+	for ( int i = 0; i < m.count; ++i )
+	{
+		c2v p = m.contact_points[ i ];
+		float d = m.depths[ i ];
+		DrawCircle( p, 3.0f );
+		tgLine( ctx, p.x, p.y, 0, p.x + n.x * d, p.y + n.y * d, 0 );
+	}
+}
+
+void DrawCircles( c2Circle ca, c2Circle cb )
+{
+	c2Manifold m;
+	c2CircletoCircleManifold( ca, cb, &m );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawCircle( ca.p, ca.r );
+	DrawCircle( cb.p, cb.r );
+	DrawManifold( m );
+}
+
+void DrawCircleAABB( c2Circle c, c2AABB bb )
+{
+	c2Manifold m;
+	c2CircletoAABBManifold( c, bb, &m );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawCircle( c.p, c.r );
+	DrawAABB( bb.min, bb.max );
+	DrawManifold( m );
+}
+
+void DrawCircleCapsule( c2Circle c, c2Capsule cap )
+{
+	c2Manifold m;
+	c2CircletoCapsuleManifold( c, cap, &m );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawCircle( c.p, c.r );
+	DrawCapsule( cap.a, cap.b, cap.r );
+	DrawManifold( m );
+}
+
+void TestManifold0( )
+{
+	c2Circle ca;
+	ca.p = c2V( -200.0f, 0 );
+	ca.r = 20.0f;
+	c2Circle cb;
+	cb.p = c2V( -220.0f, 10.0f );
+	cb.r = 15.0f;
+	DrawCircles( ca, cb );
+
+	cb.p = ca.p;
+	cb.r = 10.0f;
+	DrawCircles( ca, cb );
+
+	c2AABB bb;
+	bb.min = c2V( -150.0f, 20.0f );
+	bb.max = c2V( -60.0f, 140.0f );
+
+	// outside
+	ca.p = c2V( -160.0f, 80.0f );
+	ca.r = 15.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -120.0f, 150.0f );
+	ca.r = 15.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -50.0f, 100.0f );
+	ca.r = 15.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -120.0f, 10.0f );
+	ca.r = 15.0f;
+	DrawCircleAABB( ca, bb );
+
+	// inside
+	ca.p = c2V( -140.0f, 60.0f );
+	ca.r = 10.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -100.0f, 40.0f );
+	ca.r = 10.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -80.0f, 70.0f );
+	ca.r = 10.0f;
+	DrawCircleAABB( ca, bb );
+
+	ca.p = c2V( -80.0f, 130.0f );
+	ca.r = 10.0f;
+	DrawCircleAABB( ca, bb );
+
+	// capsule things
+	c2Capsule cap;
+	cap.a = c2V( 100.0f, 0 );
+	cap.b = c2V( 250.0f, 50.0f );
+	cap.r = 20.0f;
+	ca.p = c2V( 120.0f, 30.0f );
+	ca.r = 25.0f;
+	DrawCircleCapsule( ca, cap );
+
+	ca.p = c2V( 150.0f, 45.0f );
+	ca.r = 15.0f;
+	DrawCircleCapsule( ca, cap );
+
+	ca.p = c2V( 100.0f, 0 );
+	ca.r = 15.0f;
+	DrawCircleCapsule( ca, cap );
+
+	ca.p = c2V( 260.0f, 60.0f );
+	ca.r = 10.0f;
+	DrawCircleCapsule( ca, cap );
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -676,8 +793,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 0;
-		if ( arrow_pressed ) code = (code + 1) % 7;
+		static int code = 7;
+		if ( arrow_pressed ) code = (code + 1) % 8;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -687,6 +804,7 @@ int main( )
 		case 4: TestRay0( ); break;
 		case 5: TestRay1( ); break;
 		case 6: TestRay2( ); break;
+		case 7: TestManifold0( ); break;
 		}
 
 		// push a draw call to tinygl
