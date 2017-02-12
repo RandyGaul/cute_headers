@@ -630,6 +630,16 @@ void DrawCircleCapsule( c2Circle c, c2Capsule cap )
 	DrawManifold( m );
 }
 
+void DrawBB( c2AABB ba, c2AABB bb )
+{
+	c2Manifold m;
+	c2AABBtoAABBManifold( ba, bb, &m );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawAABB( ba.min, ba.max );
+	DrawAABB( bb.min, bb.max );
+	DrawManifold( m );
+}
+
 void TestManifold0( )
 {
 	c2Circle ca;
@@ -702,6 +712,30 @@ void TestManifold0( )
 	ca.p = c2V( 260.0f, 60.0f );
 	ca.r = 10.0f;
 	DrawCircleCapsule( ca, cap );
+
+	// bb things
+	c2AABB ba;
+	ba.min = c2V( -50.0f, -200.0f );
+	ba.max = c2V( 50.0f, -100.0f );
+	bb.min = c2V( -10.0f, -110.0f );
+	bb.max = c2V( 10.0f, -80.0f );
+	DrawBB( ba, bb );
+
+	bb.min = c2V( 20.0f, -140.0f );
+	bb.max = c2V( 40.0f, -110.0f );
+	DrawBB( ba, bb );
+
+	bb.min = c2V( -20.0f, -140.0f );
+	bb.max = c2V( -40.0f, -110.0f );
+	DrawBB( ba, bb );
+
+	bb.min = c2V( -10.0f, -205.0f );
+	bb.max = c2V( 10.0f, -190.0f );
+	DrawBB( ba, bb );
+
+	//bb.min = c2Sub( mp, c2V( 20.0f, 5.0f ) );
+	//bb.max = c2Add( mp, c2V( 20.0f, 5.0f ) );
+	//DrawBB( ba, bb );
 }
 
 int main( )

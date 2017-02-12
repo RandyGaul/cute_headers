@@ -1100,6 +1100,57 @@ void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 
 void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 {
+	c2v mid_a = c2Mulvs( c2Add( A.min, A.max ), 0.5f );
+	c2v mid_b = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
+	c2v eA = c2Absv( c2Mulvs( c2Sub( A.max, A.min ), 0.5f ) );
+	c2v eB = c2Absv( c2Mulvs( c2Sub( B.max, B.min ), 0.5f ) );
+	c2v d = c2Sub( mid_b, mid_a );
+
+	float dx = eA.x + eB.x - c2Abs( d.x );
+	if ( dx < 0 ) return;
+	float dy = eA.y + eB.y - c2Abs( d.y );
+	if ( dy < 0 ) return;
+
+	c2v n;
+	float depth;
+	c2v p;
+
+	if ( dx < dy )
+	{
+		if ( d.x < 0 )
+		{
+			depth = dx;
+			n = c2V( -1.0f, 0 );
+			p = c2Sub( mid_a, c2V( eA.x, 0 ) );
+		}
+		else
+		{
+			depth = dx;
+			n = c2V( 1.0f, 0 );
+			p = c2Add( mid_a, c2V( eA.x, 0 ) );
+		}
+	}
+
+	else
+	{
+		if ( d.y < 0 )
+		{
+			depth = dy;
+			n = c2V( 0, -1.0f );
+			p = c2Sub( mid_a, c2V( 0, eA.y ) );
+		}
+		else
+		{
+			depth = dy;
+			n = c2V( 0, 1.0f );
+			p = c2Add( mid_a, c2V( 0, eA.y ) );
+		}
+	}
+
+	m->count = 1;
+	m->contact_points[ 0 ] = p;
+	m->depths[ 0 ] = depth;
+	m->normal = n;
 }
 
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
