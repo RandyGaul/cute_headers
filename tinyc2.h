@@ -1003,14 +1003,74 @@ int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out )
 
 void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 {
+	c2v d = c2Sub( B.p, A.p );
+	float d2 = c2Dot( d, d );
+	float r = A.r + B.r;
+	if ( d2 < r * r )
+	{
+		float l = c2Sqrt( d2 );
+		m->count = 1;
+		m->depths[ 0 ] = r - l;
+		m->contact_points[ 0 ] = c2Mulvs( c2Add( A.p, B.p ), 0.5f );
+		m->normal = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 1.0f, 0 );
+	}
 }
 
 void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 {
+	c2v L = c2Clampv( A.p, B.min, B.max );
+	c2v ab = c2Sub( L, A.p );
+	float d2 = c2Dot( ab, ab );
+	float r2 = A.r * A.r;
+	if ( d2 < r2 )
+	{
+		if ( d2 != 0 )
+		{
+			float d = c2Sqrt( d2 );
+			c2v n = c2Norm( c2Neg( ab ) );
+			m->count = 1;
+			m->depths[ 0 ] = A.r - d;
+			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, d ) );
+			m->normal = n;
+		}
+
+		else
+		{
+			c2v mid = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
+			c2v d = c2Norm( c2Sub( A.p, mid ) );
+			c2v abs_d = c2Absv( d );
+			c2v n;
+			float depth;
+			if ( abs_d.x > abs_d.y )
+			{
+				n = c2V( 1.0f, 0 );
+				depth = (B.max.x - B.min.x) * 0.5f;
+			}
+			else
+			{
+				n = c2V( 0, 1.0f );
+				depth = (B.max.y - B.min.y) * 0.5f;
+			}
+			m->count = 1;
+			m->depths[ 0 ] = depth;
+			m->contact_points[ 0 ] = c2Add( mid, c2Mulvs( n, depth ) );
+			m->normal = n;
+		}
+	}
 }
 
 void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 {
+	c2v a, b;
+	float r = A.r + B.r;
+	float d = c2GJK( &A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
+	if ( d < r )
+	{
+		m->count = 1;
+		m->depths[ 0 ] = r - d;
+		m->contact_points[ 0 ] = c2Mulvs( c2Add( a, b ), 0.5f );
+		m->normal = c2Norm( c2Sub( b, a ) );
+	}
 }
 
 void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
