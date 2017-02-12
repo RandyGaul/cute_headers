@@ -18,6 +18,7 @@ int use_post_fx = 0;
 tgFramebuffer fb;
 tgShader post_fx;
 int spaced_pressed;
+int arrow_pressed;
 void* ctx;
 float screen_w;
 float screen_h;
@@ -62,8 +63,8 @@ void KeyCB( GLFWwindow* window, int key, int scancode, int action, int mods )
 	if ( key == GLFW_KEY_SPACE && action == GLFW_PRESS )
 		spaced_pressed = 1;
 
-	if ( key == GLFW_KEY_SPACE && action == GLFW_RELEASE )
-		spaced_pressed = 0;
+	if ( key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT && action == GLFW_PRESS )
+		arrow_pressed = 1;
 
 	if ( key == GLFW_KEY_P && action == GLFW_PRESS )
 		use_post_fx = !use_post_fx;
@@ -553,6 +554,39 @@ void TestRay1( )
 	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
 }
 
+void TestRay2( )
+{
+	static c2Poly poly;
+	static int first = 1;
+	if ( first )
+	{
+		first = 0;
+		poly.count = C2_MAX_POLYGON_VERTS;
+		for ( int i = 0; i < poly.count; ++i ) poly.verts[ i ] = RandomVec( );
+		c2MakePoly( &poly );
+	}
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawPoly( poly.verts, poly.count );
+
+	c2Ray ray;
+	ray.p = c2V( -75.0f, 100.0f );
+	ray.d = c2Norm( c2Sub( mp, ray.p ) );
+	ray.t = c2Dot( mp, ray.d ) - c2Dot( ray.p, ray.d );
+
+	c2Raycast cast;
+	if ( c2RaytoPoly( ray, &poly, 0, &cast ) )
+	{
+		ray.t = cast.t;
+		c2v impact = c2Impact( ray, ray.t );
+		c2v end = c2Add( impact, c2Mulvs( cast.n, 15.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+	}
+
+	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -631,6 +665,7 @@ int main( )
 	while ( !glfwWindowShouldClose( window ) )
 	{
 		if ( spaced_pressed == 1 ) spaced_pressed = 0;
+		if ( arrow_pressed == 1 ) arrow_pressed = 0;
 		wheel = 0;
 		glfwPollEvents( );
 
@@ -641,12 +676,18 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		//TestDrawPrim( );
-		//TestBoolean0( );
-		//TestBoolean1( );
-		//TestBoolean2( );
-		//TestRay0( );
-		TestRay1( );
+		static int code = 0;
+		if ( arrow_pressed ) code = (code + 1) % 7;
+		switch ( code )
+		{
+		case 0: TestDrawPrim( ); break;
+		case 1: TestBoolean0( ); break;
+		case 2: TestBoolean1( ); break;
+		case 3: TestBoolean2( ); break;
+		case 4: TestRay0( ); break;
+		case 5: TestRay1( ); break;
+		case 6: TestRay2( ); break;
+		}
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized

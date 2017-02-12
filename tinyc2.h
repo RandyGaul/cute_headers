@@ -154,6 +154,10 @@ float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* b
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
 int c2Hull( c2v* verts, int count );
+void c2Norms( c2v* verts, c2v* norms, int count );
+
+// runs c2Hull and c2Norm, assumes p->verts and p->count are both set to valid values
+void c2MakePoly( c2Poly* p );
 
 // Generic collision detection routines, useful for games that want to use some poly-
 // morphism to write more generic-styled code. Internally calls various above functions.
@@ -763,6 +767,23 @@ int c2Hull( c2v* verts, int count )
 	return out_count;
 }
 
+void c2Norms( c2v* verts, c2v* norms, int count )
+{
+	for (int  i = 0; i < count; ++i )
+	{
+		int a = i;
+		int b = i + 1 < count ? i + 1 : 0;
+		c2v e = c2Sub( verts[ b ], verts[ a ] );
+		norms[i] = c2Norm( c2CW90( e ) );
+	}
+}
+
+void c2MakePoly( c2Poly* p )
+{
+	p->count = c2Hull( p->verts, p->count );
+	c2Norms( p->verts, p->norms, p->count );
+}
+
 int c2CircletoCircle( c2Circle A, c2Circle B )
 {
 	c2v c = c2Sub( B.p, A.p );
@@ -883,17 +904,17 @@ int c2RaytoAABB( c2Ray A, c2AABB B, c2Raycast* out )
 	c2v d1 = c2Mulvv( c2Sub( B.max, A.p ), inv );
 	c2v v0 = c2Minv( d0, d1 );
 	c2v v1 = c2Maxv( d0, d1 );
-	float t0 = c2Hmax( v0 );
-	float t1 = c2Hmin( v1 );
+	float lo = c2Hmax( v0 );
+	float hi = c2Hmin( v1 );
 
-	if ( t1 >= 0 && t1 >= t0 && t0 <= A.t )
+	if ( hi >= 0 && hi >= lo && lo <= A.t )
 	{
 		c2v c = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
-		c = c2Sub( c2Impact( A, t0 ), c );
+		c = c2Sub( c2Impact( A, lo ), c );
 		c2v abs_c = c2Absv( c );
 		if ( abs_c.x > abs_c.y ) out->n = c2V( c2Sign( c.x ), 0 );
 		else out->n = c2V( 0, c2Sign( c.y ) );
-		out->t = t0;
+		out->t = lo;
 		return 1;
 	}
 	return 0;
@@ -944,8 +965,39 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 	return 0;
 }
 
-int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx, c2Raycast* out )
+int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out )
 {
+	c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
+	c2v p = c2MulxvT( bx, A.p );
+	c2v d = c2MulrvT( bx.r, A.d );
+	float lo = 0;
+	float hi = A.t;
+	int index = ~0;
+
+	for ( int i = 0; i < B->count; ++i )
+	{
+		float num = c2Dot( B->norms[ i ], c2Sub( B->verts[ i ], p ) );
+		float den = c2Dot( B->norms[ i ], d );
+		if ( num == 0 && den < 0 ) return 0;
+		else
+		{
+			if ( den < 0 && num < lo * den )
+			{
+				lo = num / den;
+				index = i;
+			}
+			else if ( den > 0 && num < hi * den ) hi = num / den;
+		}
+		if ( hi < lo ) return 0;
+	}
+
+	if ( index != ~0 )
+	{
+		out->t = lo;
+		out->n = c2Mulrv( bx.r, B->norms[ index ] );
+		return 1;
+	}
+
 	return 0;
 }
 
