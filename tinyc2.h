@@ -88,7 +88,13 @@ typedef struct
 
 // contains all information necessary to resolve a collision, or in other words
 // this is the information needed to separate shapes that are colliding. Doing
-// the resolution step is *not* included in tinyc2.
+// the resolution step is *not* included in tinyc2. tinyc2 does not include
+// "feature information" that describes which topological features collided.
+// However, modifying the exist ***Manifold funcs can be done to output any
+// needed feature information. Feature info is sometimes needed for certain kinds
+// of simulations that cache information over multiple game-ticks, of which are
+// associated to the collision of specific features. An example implementation
+// is in the qu3e 3D physics engine library: https://github.com/RandyGaul/qu3e
 typedef struct
 {
 	int count;
@@ -118,7 +124,7 @@ int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx );
 int c2RaytoCircle( c2Ray A, c2Circle B, c2Raycast* out );
 int c2RaytoAABB( c2Ray A, c2AABB B, c2Raycast* out );
 int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out );
-int c2RaytoPoly( c2Ray A, c2Poly* B, c2x bx, c2Raycast* out );
+int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out );
 
 // manifold generation
 // these functions are slower than the boolean versions, but will compute one
@@ -193,7 +199,7 @@ C2_INLINE c2v c2Mulvs( c2v a, float b ) { a.x *= b; a.y *= b; return a; }
 C2_INLINE c2v c2Mulvv( c2v a, c2v b ) { a.x *= b.x; a.y *= b.y; return a; }
 C2_INLINE c2v c2Div( c2v a, float b ) { return c2Mulvs( a, 1.0f / b ); }
 C2_INLINE c2v c2Skew( c2v a ) { c2v b; b.x = -a.y; b.y = a.x; return b; }
-C2_INLINE c2v c2CW90( c2v a ) { c2v b; b.x = a.y; b.y = -a.x; return b; }
+C2_INLINE c2v c2CCW90( c2v a ) { c2v b; b.x = a.y; b.y = -a.x; return b; }
 C2_INLINE float c2Det2( c2v a, c2v b ) { return a.x * b.y - a.y * b.x; }
 C2_INLINE c2v c2Minv( c2v a, c2v b ) { return c2V( c2Min( a.x, b.x ), c2Min( a.y, b.y ) ); }
 C2_INLINE c2v c2Maxv( c2v a, c2v b ) { return c2V( c2Max( a.x, b.x ), c2Max( a.y, b.y ) ); }
@@ -204,6 +210,7 @@ C2_INLINE float c2Hmax( c2v a ) { return c2Max( a.x, a.y ); }
 C2_INLINE float c2Len( c2v a ) { return c2Sqrt( c2Dot( a, a ) ); }
 C2_INLINE c2v c2Norm( c2v a ) { return c2Div( a, c2Len( a ) ); }
 C2_INLINE c2v c2Neg( c2v a ) { return c2V( -a.x, -a.y ); }
+C2_INLINE c2v c2Lerp( c2v a, c2v b, float t ) { return c2Add( a, c2Mulvs( c2Sub( b, a ), t ) ); }
 C2_INLINE int c2Parallel( c2v a, c2v b, float kTol )
 {
 	float k = c2Len( a ) / c2Len( b );
@@ -471,7 +478,7 @@ static C2_INLINE c2v c2D( c2Simplex* s )
 	{
 		c2v ab = c2Sub( s->b.p, s->a.p );
 		if ( c2Det2( ab, c2Neg( s->a.p ) ) > 0 ) return c2Skew( ab );
-		return c2CW90( ab );
+		return c2CCW90( ab );
 	}
 	case 3:
 	default: return c2V( 0, 0 );
@@ -776,7 +783,7 @@ void c2Norms( c2v* verts, c2v* norms, int count )
 		int a = i;
 		int b = i + 1 < count ? i + 1 : 0;
 		c2v e = c2Sub( verts[ b ], verts[ a ] );
-		norms[i] = c2Norm( c2CW90( e ) );
+		norms[i] = c2Norm( c2CCW90( e ) );
 	}
 }
 
@@ -926,7 +933,7 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 {
 	c2m M;
 	M.y = c2Norm( c2Sub( B.b, B.a ) );
-	M.x = c2CW90( M.y );
+	M.x = c2CCW90( M.y );
 
 	c2v yBb = c2MulmvT( M, c2Sub( B.b, B.a ) );
 	c2v yAp = c2MulmvT( M, c2Sub( A.p, B.a ) );
@@ -1117,15 +1124,14 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 
 	if ( dx < dy )
 	{
+		depth = dx;
 		if ( d.x < 0 )
 		{
-			depth = dx;
 			n = c2V( -1.0f, 0 );
 			p = c2Sub( mid_a, c2V( eA.x, 0 ) );
 		}
 		else
 		{
-			depth = dx;
 			n = c2V( 1.0f, 0 );
 			p = c2Add( mid_a, c2V( eA.x, 0 ) );
 		}
@@ -1133,15 +1139,14 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 
 	else
 	{
+		depth = dy;
 		if ( d.y < 0 )
 		{
-			depth = dy;
 			n = c2V( 0, -1.0f );
 			p = c2Sub( mid_a, c2V( 0, eA.y ) );
 		}
 		else
 		{
-			depth = dy;
 			n = c2V( 0, 1.0f );
 			p = c2Add( mid_a, c2V( 0, eA.y ) );
 		}
@@ -1155,26 +1160,220 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
 {
+	// make poly and call capsule to poly
 }
 
 void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 {
+	c2v a, b;
+	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
+	if ( d < A.r + B.r )
+	{
+		m->count = 1;
+		m->contact_points[ 0 ] = c2Mulvs( c2Add( a, b ), 0.5f );
+		m->depths[ 0 ] = d;
+		m->normal = c2Norm( c2Sub( b, a ) );
+	}
 }
 
-void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx, c2Manifold* m )
+void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 {
+	c2v a, b;
+	float d = c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx_tr, &a, &b, 0 );
+	if ( d != 0 )
+	{
+		c2v n = c2Sub( b, a );
+		float l = c2Dot( n, n );
+		if ( l < A.r * A.r )
+		{
+			l = c2Sqrt( l );
+			m->count = 1;
+			m->contact_points[ 0 ] = b;
+			m->depths[ 0 ] = l;
+			m->normal = c2Mulvs( n, 1.0f / l );
+		}
+	}
+
+#define C2_PLANE_AT( p, i ) { (p)->norms[ i ], c2Dot( (p)->norms[ i ], (p)->verts[ i ] ) }
+	else
+	{
+		c2x bx = bx_tr ? *bx_tr : c2xIdentity( );
+		float sep = -FLT_MAX;
+		int index = ~0;
+		c2v local = c2MulxvT( bx, A.p );
+
+		for ( int i = 0; i < B->count; ++i )
+		{
+			c2h h = C2_PLANE_AT( B, i );
+			float d = c2Dist( h, local );
+			if ( d > A.r ) return;
+			if ( d > sep )
+			{
+				sep = d;
+				index = i;
+			}
+		}
+
+		c2h h = C2_PLANE_AT( B, index );
+		c2v p = c2Project( h, local );
+		m->count = 1;
+		m->contact_points[ 0 ] = c2Mulxv( bx, p );
+		m->depths[ 0 ] = sep;
+		m->normal = c2Mulrv( bx.r, B->norms[ index ] );
+	}
 }
 
 void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
 {
+	// make poly and call poly to poly
 }
 
 void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx, c2Manifold* m )
 {
+	c2v a, b;
+	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_POLY, bx, &a, &b, 0 );
+
+	// deep
+	if ( d == 0 )
+	{
+	}
+
+	// shallow
+	else if ( d < A.r )
+	{
+		c2v d = c2Sub( b, a );
+		int face_case = 0;
+
+		// loop here
+		//if ( c2Parallel( d, n, 5.0e-4f ) ) 
+		//{
+		//	face_case = 1;
+		//	break;
+		//}
+
+		// 1 contact
+		if ( !face_case )
+		{
+		}
+
+		// 2 contacts
+		else
+		{
+		}
+	}
 }
 
-void c2PolytoPolyManifold( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx, c2Manifold* m )
+static float c2CheckFaces( c2Poly* A, c2x ax, c2Poly* B, c2x bx, int* face_index )
 {
+	c2x b_in_a = c2MulxxT( ax, bx );
+	c2x a_in_b = c2MulxxT( bx, ax );
+	float sep = -FLT_MAX;
+	int index = ~0;
+
+	for ( int i = 0; i < A->count; ++i )
+	{
+		c2h h = C2_PLANE_AT( A, i );
+		int idx = c2Support( B->verts, B->count, c2Mulxv( a_in_b, h.n ) );
+		c2v p = c2Mulxv( b_in_a, B->verts[ idx ] );
+		float d = c2Dist( h, p );
+		if ( d > sep )
+		{
+			sep = d;
+			index = i;
+		}
+	}
+
+	*face_index = index;
+	return sep;
+}
+
+void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
+{
+	c2v n = c2MulrvT( ix.r, c2Mulrv( rx.r, rp->norms[ re ] ) );
+	int index = ~0;
+	float min_dot = FLT_MAX;
+	for ( int i = 0; i < ip->count; ++i )
+	{
+		float dot = c2Dot( n, ip->norms[ i ] );
+		if ( dot < min_dot )
+		{
+			min_dot = dot;
+			index = i;
+		}
+	}
+	incident[ 0 ] = ip->verts[ index ];
+	incident[ 1 ] = ip->verts[ index + 1 == ip->count ? 0 : index + 1 ];
+}
+
+int c2Clip( c2v* face, c2h h )
+{
+	c2v out[ 2 ];
+	int sp = 0;
+	float d0 = c2Dist( h, face[ 0 ] );
+	float d1 = c2Dist( h, face[ 1 ] );
+	if ( d0 < 0 ) out[ sp++ ] = face[ 0 ];
+	if ( d1 < 0 ) out[ sp++ ] = face[ 1 ];
+	if ( d0 * d1 < 0 ) out[ sp++ ] = c2Lerp( face[ 0 ], face[ 1 ], d0 / (d0 - d1) );
+	face[ 0 ] = out[ 0 ]; face[ 1 ] = out[ 1 ];
+	return sp;
+}
+
+void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
+{
+	c2x ax = ax_ptr ? *ax_ptr : c2xIdentity( );
+	c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
+	int ea, eb;
+	float sa, sb;
+	if ( sa = c2CheckFaces( A, ax, B, bx, &ea ) >= 0 ) return;
+	if ( sb = c2CheckFaces( B, bx, A, ax, &eb ) >= 0 ) return;
+
+	c2Poly* rp,* ip;
+	c2x rx, ix;
+	int re, flip;
+	float kRelTol = 0.95f, kAbsTol = 0.01f;
+	if ( sa * kAbsTol > sb + kAbsTol )
+	{
+		rp = A; rx = ax;
+		ip = B; ix = bx;
+		re = ea; flip = 0;
+	}
+	else
+	{
+		rp = B; rx = bx;
+		ip = A; ix = ax;
+		re = eb; flip = 1;
+	}
+
+	c2v incident[ 2 ];
+	c2Incident( incident, ip, ix, rp, rx, re );
+	c2v ra = rp->verts[ re ];
+	c2v rb = rp->verts[ re + 1 == rp->count ? 0 : re + 1 ];
+	ra = c2MulxvT( ix, c2Mulxv( rx, ra ) );
+	rb = c2MulxvT( ix, c2Mulxv( rx, rb ) );
+	c2v rn = c2Norm( c2Sub( incident[ 1 ], incident[ 0 ] ) );
+	c2h left = { c2Neg( rn ), c2Dot( c2Neg( rn ), ra ) };
+	c2h right = { rn, c2Dot( rn, rb ) };
+	rn = c2CCW90( rn );
+
+	int num;
+	if ( num = c2Clip( incident, left ) < 2 ) return;
+	if ( num = c2Clip( incident, right ) < 2 ) return;
+	if ( flip ) rn = c2Neg( rn );
+	c2h rh = { rn, c2Dot( rn, ra ) };
+	int cp = 0;
+	for ( int i = 0; i < num; ++i )
+	{
+		c2v p = incident[ i ];
+		float d = c2Dist( rh, p );
+		if ( d < 0 )
+		{
+			m->contact_points[ i ] = p;
+			m->depths[ i ] = d;
+			++cp;
+		}
+	}
+	m->count = cp;
+	m->normal = rn;
 }
 
 #endif // TINYC2_IMPL
