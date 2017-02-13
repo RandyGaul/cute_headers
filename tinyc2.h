@@ -59,6 +59,9 @@
 	
 	For more code examples and tests please see:
 	https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
+	
+	Here is a past discussion thread on this header:
+	https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
 */
 
 /*
