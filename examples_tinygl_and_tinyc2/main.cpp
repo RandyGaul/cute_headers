@@ -761,7 +761,9 @@ void TestManifold1( )
 	c2x ax = c2Transform( c2V( -50.0f, 0 ), 2.0f );
 	c2x bx = c2Transform( mp, -1.0f );
 
-	if ( 1 )
+	static int which = 0;
+	if ( spaced_pressed ) which = !which;
+	if ( which )
 	{
 		srand( 2 );
 		a.count = C2_MAX_POLYGON_VERTS;
@@ -810,6 +812,27 @@ void TestManifold1( )
 	DrawManifold( m );
 }
 
+void TestManifold2( )
+{
+	static c2Poly a;
+	c2x ax = c2Transform( c2V( -50.0f, 0 ), 2.0f );
+	srand( 3 );
+	a.count = C2_MAX_POLYGON_VERTS;
+	for ( int i = 0; i < a.count; ++i ) a.verts[ i ] = RandomVec( );
+	c2MakePoly( &a );
+
+	c2Capsule cap = GetCapsule( );
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawPoly2( &a, ax );
+	DrawCapsule( cap.a, cap.b, cap.r );
+
+	c2Manifold m;
+	m.count = 0;
+	c2CapsuletoPolyManifold( cap, &a, &ax, &m );
+	DrawManifold( m );
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -823,8 +846,8 @@ int main( )
 	glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 	glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
 
-	int width = 640;
-	int height = 480;
+	int width = 320;
+	int height = 240;
 	window = glfwCreateWindow( width, height, "tinyc2 and tinygl", NULL, NULL );
 
 	if ( !window )
@@ -899,8 +922,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 8;
-		if ( arrow_pressed ) code = (code + 1) % 9;
+		static int code = 9;
+		if ( arrow_pressed ) code = (code + 1) % 10;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -912,6 +935,7 @@ int main( )
 		case 6: TestRay2( ); break;
 		case 7: TestManifold0( ); break;
 		case 8: TestManifold1( ); break;
+		case 9: TestManifold2( ); break;
 		}
 
 		// push a draw call to tinygl

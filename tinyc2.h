@@ -1,3 +1,56 @@
+/*
+	tinyc2.h - v1.0
+
+	SUMMARY:
+	tinyc2 is a single-file header that implements 2D collision detection routines
+	that test for overlap, and optionally can find the collision manifold. The
+	manifold contains all necessary information to prevent shapes from inter-
+	penetrating, which is useful for character controllers, general physics
+	simulation, and user-interface programming.
+
+	This header implements a group of "immediate mode" functions that should be
+	very easily adapted into pre-existing projects.
+
+	DETAILS/ADVICE:
+	This header does not implement a broad-phase, and instead concerns itself with
+	the narrow-phase. This means this header just checks to see if two individual
+	shapes are touching, and can give information about how they are touching.
+
+	Very common 2D broad-phases are tree and grid approaches. Quad trees are good
+	for static geometry that does not move much if at all. Dynamic AABB trees are
+	good for general purpose use, and can handle moving objects very well. Grids
+	are great and are similar to quad trees.
+
+	If implementing a grid it can be wise to have each collideable grid cell hold
+	an integer. This integer refers to a 2D shape that can be passed into the
+	various functions in this header. The shape can be transformed from "model"
+	space to "world" space using c2x -- a transform struct. In this way a grid
+	can be implemented that holds any kind of convex shape (that this header
+	supports) while conserving memory with shape instancing.
+
+	Please email at my address with any questions or comments at:
+	author's last name followed by 1748 at gmail
+*/
+
+/*
+	To create implementation (the function definitions)
+		#define TINYC2_IMPL
+	in *one* C/CPP file (translation unit) that includes this file
+*/
+
+/*
+	Features:
+	* Circles, capsules, AABBs, rays and convex polygons are supported
+	* Fast boolean only result functions (hit yes/no)
+	* Slghtly slower manifold generation for collision normals + depths +points
+	* GJK implementation (finds closest points for disjoint pairs of shapes)
+	* Robust 2D convex hull generator
+	* Lots of correctly implemented and tested 2D math routines
+	* Implemented in portable C, and is readily portable to other languages
+	* Generic c2Collide and c2Collided function (can pass in any shape type)
+	* Extensive examples at: https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
+*/
+
 #if !defined( TINYC2_H )
 
 // this can be adjusted as necessary, but is highly recommended to be kept at 8.
@@ -1166,7 +1219,11 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
 {
-	// make poly and call capsule to poly
+	c2Poly p;
+	c2BBVerts( p.verts, &A );
+	p.count = 4;
+	c2Norms( p.verts, p.norms, 4 );
+	c2CapsuletoPolyManifold( B, &p, 0, m );
 }
 
 void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
@@ -1231,40 +1288,140 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 
 void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
 {
-	// make poly and call poly to poly
+	c2Poly p;
+	c2BBVerts( p.verts, &A );
+	p.count = 4;
+	c2Norms( p.verts, p.norms, 4 );
+	c2PolytoPolyManifold( &p, 0, B, bx, m );
 }
 
-void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx, c2Manifold* m )
+static int c2Clip( c2v* seg, c2h h )
+{
+	c2v out[ 2 ];
+	int sp = 0;
+	float d0, d1;
+	if ( (d0 = c2Dist( h, seg[ 0 ] )) < 0 ) out[ sp++ ] = seg[ 0 ];
+	if ( (d1 = c2Dist( h, seg[ 1 ] )) < 0 ) out[ sp++ ] = seg[ 1 ];
+	if ( d0 * d1 < 0 ) out[ sp++ ] = c2Lerp( seg[ 0 ], seg[ 1 ], d0 / (d0 - d1) );
+	seg[ 0 ] = out[ 0 ]; seg[ 1 ] = out[ 1 ];
+	return sp;
+}
+
+int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
+{
+	c2v ra = c2Mulxv( x, p->verts[ e ] );
+	c2v rb = c2Mulxv( x, p->verts[ e + 1 == p->count ? 0 : e + 1 ] );
+	c2v in = c2Norm( c2Sub( rb, ra ) );
+	c2h left = { c2Neg( in ), c2Dot( c2Neg( in ), ra ) };
+	c2h right = { in, c2Dot( in, rb ) };
+	if ( c2Clip( seg, left ) < 2 ) return 0;
+	if ( c2Clip( seg, right ) < 2 ) return 0;
+	if ( h ) *h = { c2CCW90( in ), c2Dot( c2CCW90( in ), ra ) };
+	return 1;
+}
+
+void c2KeepDeep( c2v* seg, c2h h, c2Manifold* m )
+{
+	int cp = 0;
+	for ( int i = 0; i < 2; ++i )
+	{
+		c2v p = seg[ i ];
+		float d = c2Dist( h, p );
+		if ( d < 0 )
+		{
+			m->contact_points[ cp ] = p;
+			m->depths[ cp ] = -d;
+			++cp;
+		}
+	}
+	m->count = cp;
+	m->normal = h.n;
+}
+
+static C2_INLINE c2v c2CapsuleSupport( c2Capsule A, c2v dir )
+{
+	float da = c2Dot( A.a, dir );
+	float db = c2Dot( A.b, dir );
+	if ( da > db ) return c2Add( A.a, c2Mulvs( dir, A.r ) );
+	else return c2Add( A.b, c2Mulvs( dir, A.r ) );
+}
+
+void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2v* n_out )
+{
+	float sep = -FLT_MAX;
+	int index = ~0;
+	c2v n;
+	for ( int i = 0; i < p->count; ++i )
+	{
+		c2h h = c2Mulxh( x, C2_PLANE_AT( p, i ) );
+		c2v n0 = c2Neg( h.n );
+		c2v s = c2CapsuleSupport( cap, n0 );
+		float d = c2Dist( h, s );
+		if ( d > sep )
+		{
+			sep = d;
+			index = i;
+			n = n0;
+		}
+	}
+	*face_out = index;
+	*n_out = n;
+}
+
+void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
 	c2v a, b;
-	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_POLY, bx, &a, &b, 0 );
+	float d = c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx_ptr, &a, &b, 0 );
 
 	// deep
 	if ( d == 0 )
 	{
+		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
+		c2v n;
+		int index;
+		c2AntinormalFace( A, B, bx, &index, &n );
+		c2v seg[ 2 ] = { c2Add( A.a, c2Mulvs( n, A.r ) ), c2Add( A.b, c2Mulvs( n, A.r ) ) };
+		c2h h;
+		if ( !c2SidePlanes( seg, bx, B, index, &h ) ) return;
+		c2KeepDeep( seg, h, m );
 	}
 
 	// shallow
 	else if ( d < A.r )
 	{
-		c2v d = c2Sub( b, a );
+		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
+		c2v ab = c2Sub( b, a );
 		int face_case = 0;
 
-		// loop here
-		//if ( c2Parallel( d, n, 5.0e-4f ) ) 
-		//{
-		//	face_case = 1;
-		//	break;
-		//}
+		for ( int i = 0; i < B->count; ++i )
+		{
+			c2v n = c2Mulrv( bx.r, B->norms[ i ] );
+			if ( c2Parallel( ab, n, 5.0e-3f ) )
+			{
+				face_case = 1;
+				break;
+			}
+		}
 
 		// 1 contact
 		if ( !face_case )
 		{
+			m->count = 1;
+			m->contact_points[ 0 ] = b;
+			m->depths[ 0 ] = A.r - d;
+			m->normal = c2Mulvs( ab, 1.0f / d );
 		}
 
 		// 2 contacts
 		else
 		{
+			c2v n;
+			int index;
+			c2AntinormalFace( A, B, bx, &index, &n );
+			c2v seg[ 2 ] = { c2Add( A.a, c2Mulvs( n, A.r ) ), c2Add( A.b, c2Mulvs( n, A.r ) ) };
+			c2h h;
+			if ( !c2SidePlanes( seg, bx, B, index, &h ) ) return;
+			c2KeepDeep( seg, h, m );
 		}
 	}
 }
@@ -1293,7 +1450,7 @@ static float c2CheckFaces( c2Poly* A, c2x ax, c2Poly* B, c2x bx, int* face_index
 	return sep;
 }
 
-void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
+static C2_INLINE void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
 {
 	c2v n = c2MulrvT( ix.r, c2Mulrv( rx.r, rp->norms[ re ] ) );
 	int index = ~0;
@@ -1311,24 +1468,6 @@ void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
 	incident[ 1 ] = c2Mulxv( ix, ip->verts[ index + 1 == ip->count ? 0 : index + 1 ] );
 }
 
-int c2Clip( c2v* face, c2h h )
-{
-	c2v out[ 2 ];
-	int sp = 0;
-	float d0 = c2Dist( h, face[ 0 ] );
-	float d1 = c2Dist( h, face[ 1 ] );
-	if ( d0 < 0 ) out[ sp++ ] = face[ 0 ];
-	if ( d1 < 0 ) out[ sp++ ] = face[ 1 ];
-	if ( d0 * d1 < 0 ) out[ sp++ ] = c2Lerp( face[ 0 ], face[ 1 ], d0 / (d0 - d1) );
-	face[ 0 ] = out[ 0 ]; face[ 1 ] = out[ 1 ];
-	return sp;
-}
-
-#define DBG_LINE( a, b ) tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 )
-#define DBG_VECTOR( p, n, d ) tgLine( ctx, p.x, p.y, 0, p.x + n.x * d, p.y + n.y * d, 0 )
-void DrawCircle( c2v p, float r );
-extern void* ctx;
-
 void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
 	c2x ax = ax_ptr ? *ax_ptr : c2xIdentity( );
@@ -1340,64 +1479,26 @@ void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Man
 
 	c2Poly* rp,* ip;
 	c2x rx, ix;
-	int re, flip;
+	int re;
 	float kRelTol = 0.95f, kAbsTol = 0.01f;
 	if ( sa * kRelTol > sb + kAbsTol )
 	{
 		rp = A; rx = ax;
 		ip = B; ix = bx;
-		re = ea; flip = 0;
+		re = ea;
 	}
 	else
 	{
 		rp = B; rx = bx;
 		ip = A; ix = ax;
-		re = eb; flip = 1;
+		re = eb;
 	}
-
-	// incident is GREEN
-	// reference is BLUE
 
 	c2v incident[ 2 ];
 	c2Incident( incident, ip, ix, rp, rx, re );
-	c2v ra = c2Mulxv( rx, rp->verts[ re ] );
-	c2v rb = c2Mulxv( rx, rp->verts[ re + 1 == rp->count ? 0 : re + 1 ] );
-	tgLineColor( ctx, 0.5f, 1.0f, 0 );
-	DBG_LINE( incident[ 0 ], incident[ 1 ] );
-	DrawCircle( incident[ 0 ], 3.0f );
-	DrawCircle( incident[ 1 ], 3.0f );
-	tgLineColor( ctx, 0, 0, 1.0f );
-	DBG_LINE( rb, ra );
-	DrawCircle( ra, 3.0f );
-	DrawCircle( rb, 3.0f );
-	c2v in = c2Norm( c2Sub( rb, ra ) );
-	c2h rh = { c2CCW90( in ), c2Dot( c2CCW90( in ), ra ) };
-	c2h left = { c2Neg( in ), c2Dot( c2Neg( in ), ra ) };
-	c2h right = { in, c2Dot( in, rb ) };
-	DBG_VECTOR( ra, rh.n, 50.0f );
-	DrawCircle( c2Project( rh, c2V( 0, 0 ) ), 5.0f );
-	DBG_VECTOR( ra, left.n, 20.0f );
-	DBG_VECTOR( rb, right.n, 20.0f );
-
-	int num;
-	if ( (num = c2Clip( incident, left )) < 2 ) return;
-	if ( (num = c2Clip( incident, right )) < 2 ) return;
-	//if ( flip ) rh.n = c2Neg( rh.n );
-
-	int cp = 0;
-	for ( int i = 0; i < num; ++i )
-	{
-		c2v p = incident[ i ];
-		float d = c2Dist( rh, p );
-		if ( d < 0 )
-		{
-			m->contact_points[ cp ] = p;
-			m->depths[ cp ] = -d;
-			++cp;
-		}
-	}
-	m->count = cp;
-	m->normal = rh.n;
+	c2h rh;
+	if ( !c2SidePlanes( incident, rx, rp, re, &rh ) ) return;
+	c2KeepDeep( incident, rh, m );
 }
 
 #endif // TINYC2_IMPL
