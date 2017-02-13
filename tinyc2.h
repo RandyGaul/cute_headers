@@ -1071,6 +1071,7 @@ int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out )
 
 void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 {
+	m->count = 0;
 	c2v d = c2Sub( B.p, A.p );
 	float d2 = c2Dot( d, d );
 	float r = A.r + B.r;
@@ -1086,6 +1087,7 @@ void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 
 void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 {
+	m->count = 0;
 	c2v L = c2Clampv( A.p, B.min, B.max );
 	c2v ab = c2Sub( L, A.p );
 	float d2 = c2Dot( ab, ab );
@@ -1151,6 +1153,7 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 
 void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 {
+	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
 	float d = c2GJK( &A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
@@ -1166,6 +1169,7 @@ void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 
 void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 {
+	m->count = 0;
 	c2v mid_a = c2Mulvs( c2Add( A.min, A.max ), 0.5f );
 	c2v mid_b = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
 	c2v eA = c2Absv( c2Mulvs( c2Sub( A.max, A.min ), 0.5f ) );
@@ -1219,6 +1223,7 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
 {
+	m->count = 0;
 	c2Poly p;
 	c2BBVerts( p.verts, &A );
 	p.count = 4;
@@ -1228,6 +1233,7 @@ void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
 
 void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 {
+	m->count = 0;
 	c2v a, b;
 	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
 	if ( d < A.r + B.r )
@@ -1241,6 +1247,7 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 
 void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 {
+	m->count = 0;
 	c2v a, b;
 	float d = c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx_tr, &a, &b, 0 );
 	if ( d != 0 )
@@ -1288,6 +1295,7 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 
 void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
 {
+	m->count = 0;
 	c2Poly p;
 	c2BBVerts( p.verts, &A );
 	p.count = 4;
@@ -1370,6 +1378,7 @@ void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2v* n_ou
 
 void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
+	m->count = 0;
 	c2v a, b;
 	float d = c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx_ptr, &a, &b, 0 );
 
@@ -1470,6 +1479,7 @@ static C2_INLINE void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp,
 
 void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
+	m->count = 0;
 	c2x ax = ax_ptr ? *ax_ptr : c2xIdentity( );
 	c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
 	int ea, eb;
