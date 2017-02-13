@@ -83,6 +83,12 @@ typedef struct
 } c2m;
 
 // 2d transformation "x"
+// These are used especially for c2Poly when a c2Poly is passed to a function.
+// Since polygons are prime for "instancing" a c2x transform can be used to
+// transform a polygon from local space to world space. In functions that take
+// a c2x pointer (like c2PolytoPoly), these pointers can be NULL, which represents
+// an identity transformation and assumes the verts inside of c2Poly are already
+// in world space.
 typedef struct
 {
 	c2v p;
@@ -242,6 +248,16 @@ void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 #define c2Clamp( a, lo, hi ) c2Max( lo, c2Min( a, hi ) )
 C2_INLINE void c2SinCos( float radians, float* s, float* c ) { *c = c2Cos( radians ); *s = c2Sin( radians ); }
 #define c2Sign( a ) (a < 0 ? -1.0f : 1.0f)
+
+// The rest of the functions in the header-only portion are all for internal use
+// and use the author's personal naming conventions. It is recommended to use one's
+// own math library instead of the one embedded here in tinyc2, but for those
+// curious or interested in trying it out here's the details:
+
+// The Mul functions are used to perform multiplication. x stands for transform,
+// v stands for vector, s stands for scalar, r stands for rotation, h stands for
+// halfspace and T stands for transpose.For example c2MulxvT stands for "multiply
+// a transform with a vector, and transpose the transform".
 
 // vector ops
 C2_INLINE c2v c2V( float x, float y ) { c2v a; a.x = x; a.y = y; return a; }
@@ -655,6 +671,8 @@ static C2_INLINE void c23( c2Simplex* s )
 
 #include <float.h>
 
+// Please see http://box2d.org/downloads/ under GDC 2010 for Erin's demo code
+// and PDF slides for documentation on the GJK algorithm.
 float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius )
 {
 	c2x ax;
@@ -994,6 +1012,8 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 	M.y = c2Norm( c2Sub( B.b, B.a ) );
 	M.x = c2CCW90( M.y );
 
+	// rotate capsule to origin, along Y axis
+	// rotate the ray same way
 	c2v yBb = c2MulmvT( M, c2Sub( B.b, B.a ) );
 	c2v yAp = c2MulmvT( M, c2Sub( A.p, B.a ) );
 	c2v yAd = c2MulmvT( M, A.d );
@@ -1006,6 +1026,7 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 		float t = (c - yAp.x) / d;
 		float y = yAp.y + (yAe.y - yAp.y) * t;
 
+		// hit bottom half-circle
 		if ( y < 0 )
 		{
 			c2Circle c;
@@ -1014,6 +1035,7 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 			return c2RaytoCircle( A, c, out );
 		}
 
+		// hit top-half circle
 		else if ( y > yBb.y )
 		{
 			c2Circle c;
@@ -1022,6 +1044,7 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 			return c2RaytoCircle( A, c, out );
 		}
 
+		// hit the middle of capsule
 		else
 		{
 			out->n = c > 0 ? M.x : c2Skew( M.y );
@@ -1042,6 +1065,7 @@ int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out )
 	float hi = A.t;
 	int index = ~0;
 
+	// test ray to each plane, tracking lo/hi times of intersection
 	for ( int i = 0; i < B->count; ++i )
 	{
 		float num = c2Dot( B->norms[ i ], c2Sub( B->verts[ i ], p ) );
@@ -1094,6 +1118,7 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 	float r2 = A.r * A.r;
 	if ( d2 < r2 )
 	{
+		// shallow (center of circle not inside of AABB)
 		if ( d2 != 0 )
 		{
 			float d = c2Sqrt( d2 );
@@ -1104,6 +1129,8 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			m->normal = n;
 		}
 
+		// deep (center of circle inside of AABB)
+		// clamp circle's center to edge of AABB, then form the manifold
 		else
 		{
 			c2v mid = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
@@ -1176,6 +1203,7 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 	c2v eB = c2Absv( c2Mulvs( c2Sub( B.max, B.min ), 0.5f ) );
 	c2v d = c2Sub( mid_b, mid_a );
 
+	// calc overlap on x and y axes
 	float dx = eA.x + eB.x - c2Abs( d.x );
 	if ( dx < 0 ) return;
 	float dy = eA.y + eB.y - c2Abs( d.y );
@@ -1185,6 +1213,7 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 	float depth;
 	c2v p;
 
+	// x axis overlap is smaller
 	if ( dx < dy )
 	{
 		depth = dx;
@@ -1200,6 +1229,7 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 		}
 	}
 
+	// y axis overlap is smaller
 	else
 	{
 		depth = dy;
@@ -1250,6 +1280,9 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 	m->count = 0;
 	c2v a, b;
 	float d = c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx_tr, &a, &b, 0 );
+
+	// shallow, the circle center did not hit the polygon
+	// just use a and b from GJK to define the collision
 	if ( d != 0 )
 	{
 		c2v n = c2Sub( b, a );
@@ -1264,6 +1297,8 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 		}
 	}
 
+	// Circle center is inside the polygon
+	// find the face closest to circle center to form manifold
 #define C2_PLANE_AT( p, i ) { (p)->norms[ i ], c2Dot( (p)->norms[ i ], (p)->verts[ i ] ) }
 	else
 	{
@@ -1293,6 +1328,7 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 	}
 }
 
+// Forms a c2Poly and uses c2PolytoPolyManifold
 void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
 {
 	m->count = 0;
@@ -1303,6 +1339,7 @@ void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
 	c2PolytoPolyManifold( &p, 0, B, bx, m );
 }
 
+// clip a segment to a plane
 static int c2Clip( c2v* seg, c2h h )
 {
 	c2v out[ 2 ];
@@ -1315,6 +1352,9 @@ static int c2Clip( c2v* seg, c2h h )
 	return sp;
 }
 
+// clip a segment to the "side planes" of another segment.
+// side planes are planes orthogonal to a segment and attached to the
+// endpoints of the segment
 int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
 {
 	c2v ra = c2Mulxv( x, p->verts[ e ] );
@@ -1382,7 +1422,7 @@ void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m
 	c2v a, b;
 	float d = c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx_ptr, &a, &b, 0 );
 
-	// deep
+	// deep, treat as segment to poly collision
 	if ( d == 0 )
 	{
 		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
@@ -1395,7 +1435,7 @@ void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m
 		c2KeepDeep( seg, h, m );
 	}
 
-	// shallow
+	// shallow, use GJK results a and b to define manifold
 	else if ( d < A.r )
 	{
 		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
@@ -1421,7 +1461,7 @@ void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m
 			m->normal = c2Mulvs( ab, 1.0f / d );
 		}
 
-		// 2 contacts
+		// 2 contacts if laying on a polygon face nicely
 		else
 		{
 			c2v n;
@@ -1477,6 +1517,14 @@ static C2_INLINE void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp,
 	incident[ 1 ] = c2Mulxv( ix, ip->verts[ index + 1 == ip->count ? 0 : index + 1 ] );
 }
 
+// Please see Dirk Gregorius's 2013 GDC lecture on the Separating Axis Theorem
+// for a full-algorithm overview. The short description is:
+	// Test A against faces of B, test B against faces of A
+	// Define the reference and incident shapes (denoted by r and i respectively)
+	// Define the reference face as the axis of minimum penetration
+	// Find the incident face, which is most anti-normal face
+	// Clip incident face to reference face side planes
+	// Keep all points behind the reference face
 void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
 	m->count = 0;
