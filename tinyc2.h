@@ -10,7 +10,49 @@
 
 	This header implements a group of "immediate mode" functions that should be
 	very easily adapted into pre-existing projects.
+*/
 
+/*
+	THE IMPORTANT PARTS:
+	Most of the math types in this header are for internal use. Users care about
+	the shape types and the collision functions.
+	
+	SHAPE TYPES:
+	* c2Circle
+	* c2Capsule
+	* c2AABB
+	* c2Ray
+	* c2Poly
+	
+	COLLISION FUNCTIONS (*** is a shape name from the above list):
+	* c2***to***         - boolean YES/NO hittest
+	* c2***to***Manifold - construct manifold to describe how shapes hit
+	* c2GJK              - runs GJK algorithm to find closest point pair
+	                       between two shapes
+	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
+	* c2Collided         - generic version of c2***to*** funcs
+	* c2Collide          - generic version of c2***to***Manifold funcs
+	
+	The rest of the header is more or less for internal use. Here is an example of
+	making some shapes and testing for collision:
+	
+		c2Circle c;
+		c.p = position;
+		c.r = radius;
+	
+		c2Capsule cap;
+		cap.a = first_endpoint;
+		cap.b = second_endpoint;
+		cap.r = radius;
+		
+		int hit = c2CircletoCapsule( c, cap );
+		if ( hit )
+		{
+			handle collision here...
+		}
+*/
+
+/*
 	DETAILS/ADVICE:
 	This header does not implement a broad-phase, and instead concerns itself with
 	the narrow-phase. This means this header just checks to see if two individual
