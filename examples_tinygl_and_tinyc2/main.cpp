@@ -846,8 +846,8 @@ int main( )
 	glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
 	glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
 
-	int width = 320;
-	int height = 240;
+	int width = 640;
+	int height = 480;
 	window = glfwCreateWindow( width, height, "tinyc2 and tinygl", NULL, NULL );
 
 	if ( !window )
