@@ -13,6 +13,12 @@
 */
 
 /*
+	To create implementation (the function definitions)
+		#define TINYC2_IMPL
+	in *one* C/CPP file (translation unit) that includes this file
+*/
+
+/*
 	THE IMPORTANT PARTS:
 	Most of the math types in this header are for internal use. Users care about
 	the shape types and the collision functions.
@@ -50,6 +56,9 @@
 		{
 			handle collision here...
 		}
+	
+	For more code examples and tests please see:
+	https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
 */
 
 /*
@@ -72,12 +81,6 @@
 
 	Please email at my address with any questions or comments at:
 	author's last name followed by 1748 at gmail
-*/
-
-/*
-	To create implementation (the function definitions)
-		#define TINYC2_IMPL
-	in *one* C/CPP file (translation unit) that includes this file
 */
 
 /*
