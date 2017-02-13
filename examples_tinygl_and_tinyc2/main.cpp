@@ -165,6 +165,18 @@ void DrawPoly( c2v* verts, int count )
 	}
 }
 
+void DrawPoly2( c2Poly* p, c2x x )
+{
+	for ( int i = 0; i < p->count; ++i )
+	{
+		int iA = i;
+		int iB = (i + 1) % p->count;
+		c2v a = c2Mulxv( x, p->verts[ iA ] );
+		c2v b = c2Mulxv( x, p->verts[ iB ] );
+		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+	}
+}
+
 void DrawAABB( c2v a, c2v b )
 {
 	c2v c = c2V( a.x, b.y );
@@ -180,7 +192,7 @@ void DrawHalfCircle( c2v a, c2v b )
 	c2v u = c2Sub( b, a );
 	float r = c2Len( u );
 	u = c2Skew( u );
-	c2v v = c2CW90( u );
+	c2v v = c2CCW90( u );
 	c2v s = c2Add( v, a );
 	c2m m;
 	m.x = c2Norm( u );
@@ -211,10 +223,10 @@ void DrawCapsule( c2v a, c2v b, float r )
 	DrawHalfCircle( a, c2Add( a, c2Mulvs( n, -r ) ) );
 	DrawHalfCircle( b, c2Add( b, c2Mulvs( n, r ) ) );
 	c2v p0 = c2Add( a, c2Mulvs( c2Skew( n ), r ) );
-	c2v p1 = c2Add( b, c2Mulvs( c2CW90( n ), -r ) );
+	c2v p1 = c2Add( b, c2Mulvs( c2CCW90( n ), -r ) );
 	tgLine( ctx, p0.x, p0.y, 0, p1.x, p1.y, 0 );
 	p0 = c2Add( a, c2Mulvs( c2Skew( n ), -r ) );
-	p1 = c2Add( b, c2Mulvs( c2CW90( n ), r ) );
+	p1 = c2Add( b, c2Mulvs( c2CCW90( n ), r ) );
 	tgLine( ctx, p0.x, p0.y, 0, p1.x, p1.y, 0 );
 }
 
@@ -603,6 +615,7 @@ void DrawManifold( c2Manifold m )
 void DrawCircles( c2Circle ca, c2Circle cb )
 {
 	c2Manifold m;
+	m.count = 0;
 	c2CircletoCircleManifold( ca, cb, &m );
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
 	DrawCircle( ca.p, ca.r );
@@ -613,6 +626,7 @@ void DrawCircles( c2Circle ca, c2Circle cb )
 void DrawCircleAABB( c2Circle c, c2AABB bb )
 {
 	c2Manifold m;
+	m.count = 0;
 	c2CircletoAABBManifold( c, bb, &m );
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
 	DrawCircle( c.p, c.r );
@@ -623,6 +637,7 @@ void DrawCircleAABB( c2Circle c, c2AABB bb )
 void DrawCircleCapsule( c2Circle c, c2Capsule cap )
 {
 	c2Manifold m;
+	m.count = 0;
 	c2CircletoCapsuleManifold( c, cap, &m );
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
 	DrawCircle( c.p, c.r );
@@ -633,6 +648,7 @@ void DrawCircleCapsule( c2Circle c, c2Capsule cap )
 void DrawBB( c2AABB ba, c2AABB bb )
 {
 	c2Manifold m;
+	m.count = 0;
 	c2AABBtoAABBManifold( ba, bb, &m );
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
 	DrawAABB( ba.min, ba.max );
@@ -738,6 +754,62 @@ void TestManifold0( )
 	//DrawBB( ba, bb );
 }
 
+void TestManifold1( )
+{
+	static c2Poly a;
+	static c2Poly b;
+	c2x ax = c2Transform( c2V( -50.0f, 0 ), 2.0f );
+	c2x bx = c2Transform( mp, -1.0f );
+
+	if ( 1 )
+	{
+		srand( 2 );
+		a.count = C2_MAX_POLYGON_VERTS;
+		for ( int i = 0; i < a.count; ++i ) a.verts[ i ] = RandomVec( );
+		c2MakePoly( &a );
+		b.count = C2_MAX_POLYGON_VERTS;
+		for ( int i = 0; i < b.count; ++i ) b.verts[ i ] = RandomVec( );
+		c2MakePoly( &b );
+		static float r;
+		if ( wheel ) r += wheel;
+		bx.r = c2Rot( -1.0f + r * 0.2f );
+		bx.p = mp;
+	}
+
+	else
+	{
+		ax = c2xIdentity( );
+		bx = c2xIdentity( );
+		c2AABB ba;
+		c2AABB bb;
+		ba.min = c2V( -20.0f, -20.0f );
+		ba.max = c2V( 20.0f, 20.0f );
+		bb.min = c2V( -40.0f, -40.0f );
+		bb.max = c2V( -20.0f, -20.0f );
+		ax.r = c2Rot( -1.0f );
+		ax.p = c2V( 50.0f, -50.0f );
+		bx.p = mp;
+		bx.r = c2Rot( 1.0f );
+
+		c2BBVerts( a.verts, &ba );
+		a.count = 4;
+		c2Norms( a.verts, a.norms, 4 );
+
+		c2BBVerts( b.verts, &bb );
+		b.count = 4;
+		c2Norms( b.verts, b.norms, 4 );
+	}
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DrawPoly2( &a, ax );
+	DrawPoly2( &b, bx );
+
+	c2Manifold m;
+	m.count = 0;
+	c2PolytoPolyManifold( &a, &ax, &b, &bx, &m );
+	DrawManifold( m );
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -827,8 +899,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 7;
-		if ( arrow_pressed ) code = (code + 1) % 8;
+		static int code = 8;
+		if ( arrow_pressed ) code = (code + 1) % 9;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -839,6 +911,7 @@ int main( )
 		case 5: TestRay1( ); break;
 		case 6: TestRay2( ); break;
 		case 7: TestManifold0( ); break;
+		case 8: TestManifold1( ); break;
 		}
 
 		// push a draw call to tinygl

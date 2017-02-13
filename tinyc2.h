@@ -240,6 +240,7 @@ C2_INLINE c2v c2Mulxv( c2x a, c2v b ) { return c2Add( c2Mulrv( a.r, b ), a.p ); 
 C2_INLINE c2v c2MulxvT( c2x a, c2v b ) { return c2MulrvT( a.r, c2Sub( b, a.p ) ); }
 C2_INLINE c2x c2Mulxx( c2x a, c2x b ) { c2x c; c.r = c2Mulrr( a.r, b.r ); c.p = c2Add( c2Mulrv( a.r, b.p ), a.p ); return c; }
 C2_INLINE c2x c2MulxxT( c2x a, c2x b ) { c2x c; c.r = c2MulrrT( a.r, b.r ); c.p = c2MulrvT( a.r, c2Sub( b.p, a.p ) ); return c; }
+C2_INLINE c2x c2Transform( c2v p, float radians ) { c2x x; x.r = c2Rot( radians ); x.p = p; return x; }
 
 // halfspace ops
 C2_INLINE c2v c2Origin( c2h h ) { return c2Mulvs( h.n, h.d ); }
@@ -248,6 +249,14 @@ C2_INLINE c2v c2Project( c2h h, c2v p ) { return c2Sub( p, c2Mulvs( h.n, c2Dist(
 C2_INLINE c2h c2Mulxh( c2x a, c2h b ) { c2h c; c.n = c2Mulrv( a.r, b.n ); c.d = c2Dot( c2Mulxv( a, c2Origin( b ) ), c.n ); return c; }
 C2_INLINE c2h c2MulxhT( c2x a, c2h b ) { c2h c; c.n = c2MulrvT( a.r, b.n ); c.d = c2Dot( c2MulxvT( a, c2Origin( b ) ), c.n ); return c; }
 C2_INLINE c2v c2Intersect( c2v a, c2v b, float da, float db ) { return c2Add( a, c2Mulvs( c2Sub( b, a ), (da / (da - db)) ) ); }
+
+C2_INLINE void c2BBVerts( c2v* out, c2AABB* bb )
+{
+	out[ 0 ] = bb->min;
+	out[ 1 ] = c2V( bb->max.x, bb->min.y );
+	out[ 2 ] = bb->max;
+	out[ 3 ] = c2V( bb->min.x, bb->max.y );
+}
 
 #define TINYC2_H
 #endif
@@ -398,10 +407,7 @@ static C2_INLINE void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
 		c2AABB* bb = (c2AABB*)shape;
 		p->radius = 0;
 		p->count = 4;
-		p->verts[ 0 ] = bb->min;
-		p->verts[ 1 ] = c2V( bb->max.x, bb->min.y );
-		p->verts[ 2 ] = bb->max;
-		p->verts[ 3 ] = c2V( bb->min.x, bb->max.y );
+		c2BBVerts( p->verts, bb );
 	}	break;
 
 	case C2_CAPSULE:
@@ -783,7 +789,7 @@ void c2Norms( c2v* verts, c2v* norms, int count )
 		int a = i;
 		int b = i + 1 < count ? i + 1 : 0;
 		c2v e = c2Sub( verts[ b ], verts[ a ] );
-		norms[i] = c2Norm( c2CCW90( e ) );
+		norms[ i ] = c2Norm( c2CCW90( e ) );
 	}
 }
 
@@ -1273,7 +1279,7 @@ static float c2CheckFaces( c2Poly* A, c2x ax, c2Poly* B, c2x bx, int* face_index
 	for ( int i = 0; i < A->count; ++i )
 	{
 		c2h h = C2_PLANE_AT( A, i );
-		int idx = c2Support( B->verts, B->count, c2Mulxv( a_in_b, h.n ) );
+		int idx = c2Support( B->verts, B->count, c2Mulrv( a_in_b.r, c2Neg( h.n ) ) );
 		c2v p = c2Mulxv( b_in_a, B->verts[ idx ] );
 		float d = c2Dist( h, p );
 		if ( d > sep )
@@ -1301,8 +1307,8 @@ void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
 			index = i;
 		}
 	}
-	incident[ 0 ] = ip->verts[ index ];
-	incident[ 1 ] = ip->verts[ index + 1 == ip->count ? 0 : index + 1 ];
+	incident[ 0 ] = c2Mulxv( ix, ip->verts[ index ] );
+	incident[ 1 ] = c2Mulxv( ix, ip->verts[ index + 1 == ip->count ? 0 : index + 1 ] );
 }
 
 int c2Clip( c2v* face, c2h h )
@@ -1318,20 +1324,25 @@ int c2Clip( c2v* face, c2h h )
 	return sp;
 }
 
+#define DBG_LINE( a, b ) tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 )
+#define DBG_VECTOR( p, n, d ) tgLine( ctx, p.x, p.y, 0, p.x + n.x * d, p.y + n.y * d, 0 )
+void DrawCircle( c2v p, float r );
+extern void* ctx;
+
 void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
 {
 	c2x ax = ax_ptr ? *ax_ptr : c2xIdentity( );
 	c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
 	int ea, eb;
 	float sa, sb;
-	if ( sa = c2CheckFaces( A, ax, B, bx, &ea ) >= 0 ) return;
-	if ( sb = c2CheckFaces( B, bx, A, ax, &eb ) >= 0 ) return;
+	if ( (sa = c2CheckFaces( A, ax, B, bx, &ea )) >= 0 ) return;
+	if ( (sb = c2CheckFaces( B, bx, A, ax, &eb )) >= 0 ) return;
 
 	c2Poly* rp,* ip;
 	c2x rx, ix;
 	int re, flip;
 	float kRelTol = 0.95f, kAbsTol = 0.01f;
-	if ( sa * kAbsTol > sb + kAbsTol )
+	if ( sa * kRelTol > sb + kAbsTol )
 	{
 		rp = A; rx = ax;
 		ip = B; ix = bx;
@@ -1344,22 +1355,35 @@ void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Man
 		re = eb; flip = 1;
 	}
 
+	// incident is GREEN
+	// reference is BLUE
+
 	c2v incident[ 2 ];
 	c2Incident( incident, ip, ix, rp, rx, re );
-	c2v ra = rp->verts[ re ];
-	c2v rb = rp->verts[ re + 1 == rp->count ? 0 : re + 1 ];
-	ra = c2MulxvT( ix, c2Mulxv( rx, ra ) );
-	rb = c2MulxvT( ix, c2Mulxv( rx, rb ) );
-	c2v rn = c2Norm( c2Sub( incident[ 1 ], incident[ 0 ] ) );
-	c2h left = { c2Neg( rn ), c2Dot( c2Neg( rn ), ra ) };
-	c2h right = { rn, c2Dot( rn, rb ) };
-	rn = c2CCW90( rn );
+	c2v ra = c2Mulxv( rx, rp->verts[ re ] );
+	c2v rb = c2Mulxv( rx, rp->verts[ re + 1 == rp->count ? 0 : re + 1 ] );
+	tgLineColor( ctx, 0.5f, 1.0f, 0 );
+	DBG_LINE( incident[ 0 ], incident[ 1 ] );
+	DrawCircle( incident[ 0 ], 3.0f );
+	DrawCircle( incident[ 1 ], 3.0f );
+	tgLineColor( ctx, 0, 0, 1.0f );
+	DBG_LINE( rb, ra );
+	DrawCircle( ra, 3.0f );
+	DrawCircle( rb, 3.0f );
+	c2v in = c2Norm( c2Sub( rb, ra ) );
+	c2h rh = { c2CCW90( in ), c2Dot( c2CCW90( in ), ra ) };
+	c2h left = { c2Neg( in ), c2Dot( c2Neg( in ), ra ) };
+	c2h right = { in, c2Dot( in, rb ) };
+	DBG_VECTOR( ra, rh.n, 50.0f );
+	DrawCircle( c2Project( rh, c2V( 0, 0 ) ), 5.0f );
+	DBG_VECTOR( ra, left.n, 20.0f );
+	DBG_VECTOR( rb, right.n, 20.0f );
 
 	int num;
-	if ( num = c2Clip( incident, left ) < 2 ) return;
-	if ( num = c2Clip( incident, right ) < 2 ) return;
-	if ( flip ) rn = c2Neg( rn );
-	c2h rh = { rn, c2Dot( rn, ra ) };
+	if ( (num = c2Clip( incident, left )) < 2 ) return;
+	if ( (num = c2Clip( incident, right )) < 2 ) return;
+	//if ( flip ) rh.n = c2Neg( rh.n );
+
 	int cp = 0;
 	for ( int i = 0; i < num; ++i )
 	{
@@ -1367,13 +1391,32 @@ void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Man
 		float d = c2Dist( rh, p );
 		if ( d < 0 )
 		{
-			m->contact_points[ i ] = p;
-			m->depths[ i ] = d;
+			m->contact_points[ cp ] = p;
+			m->depths[ cp ] = -d;
 			++cp;
 		}
 	}
 	m->count = cp;
-	m->normal = rn;
+	m->normal = rh.n;
 }
 
 #endif // TINYC2_IMPL
+
+/*
+	zlib license:
+	
+	Copyright (c) 2017 Randy Gaul http://www.randygaul.net
+	This software is provided 'as-is', without any express or implied warranty.
+	In no event will the authors be held liable for any damages arising from
+	the use of this software.
+	Permission is granted to anyone to use this software for any purpose,
+	including commercial applications, and to alter it and redistribute it
+	freely, subject to the following restrictions:
+	  1. The origin of this software must not be misrepresented; you must not
+	     claim that you wrote the original software. If you use this software
+	     in a product, an acknowledgment in the product documentation would be
+	     appreciated but is not required.
+	  2. Altered source versions must be plainly marked as such, and must not
+	     be misrepresented as being the original software.
+	  3. This notice may not be removed or altered from any source distribution.
+*/
