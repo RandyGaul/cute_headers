@@ -1404,7 +1404,7 @@ static int c2Clip( c2v* seg, c2h h )
 // clip a segment to the "side planes" of another segment.
 // side planes are planes orthogonal to a segment and attached to the
 // endpoints of the segment
-int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
+static int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
 {
 	c2v ra = c2Mulxv( x, p->verts[ e ] );
 	c2v rb = c2Mulxv( x, p->verts[ e + 1 == p->count ? 0 : e + 1 ] );
@@ -1417,7 +1417,7 @@ int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
 	return 1;
 }
 
-void c2KeepDeep( c2v* seg, c2h h, c2Manifold* m )
+static void c2KeepDeep( c2v* seg, c2h h, c2Manifold* m )
 {
 	int cp = 0;
 	for ( int i = 0; i < 2; ++i )
@@ -1443,7 +1443,7 @@ static C2_INLINE c2v c2CapsuleSupport( c2Capsule A, c2v dir )
 	else return c2Add( A.b, c2Mulvs( dir, A.r ) );
 }
 
-void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2v* n_out )
+static void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2v* n_out )
 {
 	float sep = -FLT_MAX;
 	int index = ~0;
