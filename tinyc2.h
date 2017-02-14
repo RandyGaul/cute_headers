@@ -947,6 +947,7 @@ int c2AABBtoAABB( c2AABB A, c2AABB B )
 	return 1;
 }
 
+// see: http://www.randygaul.net/2014/07/23/distance-point-to-line-segment/
 int c2CircletoCapsule( c2Circle A, c2Capsule B )
 {
 	c2v n = c2Sub( B.b, B.a );
