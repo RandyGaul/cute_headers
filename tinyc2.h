@@ -1,5 +1,5 @@
 /*
-	tinyc2.h - v1.0
+	tinyc2.h - v1.01
 
 	SUMMARY:
 	tinyc2 is a single-file header that implements 2D collision detection routines
@@ -10,6 +10,15 @@
 
 	This header implements a group of "immediate mode" functions that should be
 	very easily adapted into pre-existing projects.
+
+	Revision history:
+		1.0  (02/13/2017) initial release
+		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
+*/
+
+/*
+	Contributors:
+		Plastburk         1.01 - const pointers pull request
 */
 
 /*
