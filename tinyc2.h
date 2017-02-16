@@ -924,8 +924,7 @@ int c2CircletoCircle( c2Circle A, c2Circle B )
 	float d2 = c2Dot( c, c );
 	float r2 = A.r + B.r;
 	r2 = r2 * r2;
-	if ( d2 < r2 ) return 1;
-	return 0;
+	return d2 < r2;
 }
 
 int c2CircletoAABB( c2Circle A, c2AABB B )
@@ -934,8 +933,7 @@ int c2CircletoAABB( c2Circle A, c2AABB B )
 	c2v ab = c2Sub( A.p, L );
 	float d2 = c2Dot( ab, ab );
 	float r2 = A.r * A.r;
-	if ( d2 < r2 ) return 1;
-	return 0;
+	return d2 < r2;
 }
 
 int c2AABBtoAABB( c2AABB A, c2AABB B )
@@ -972,8 +970,7 @@ int c2CircletoCapsule( c2Circle A, c2Capsule B )
 	}
 
 	float r = A.r + B.r;
-	if ( d2 < r * r ) return 1;
-	return 0;
+	return d2 < r * r;
 }
 
 int c2AABBtoCapsule( c2AABB A, c2Capsule B )
