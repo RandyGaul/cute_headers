@@ -940,11 +940,11 @@ int c2CircletoAABB( c2Circle A, c2AABB B )
 
 int c2AABBtoAABB( c2AABB A, c2AABB B )
 {
-	c2v d1 = c2Sub( B.min, A.max );
-	c2v d2 = c2Sub( A.min, B.max );
-	if ( d1.x > 0 || d1.y > 0 ) return 0;
-	if ( d2.x > 0 || d2.y > 0 ) return 0;
-	return 1;
+	int d0 = B.max.x < A.min.x;
+	int d1 = A.max.x < B.min.x;
+	int d2 = B.max.y < A.max.y;
+	int d3 = A.max.y < B.max.y;
+	return !(d0 | d1 | d2 | d3);
 }
 
 // see: http://www.randygaul.net/2014/07/23/distance-point-to-line-segment/
