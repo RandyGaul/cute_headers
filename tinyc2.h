@@ -219,10 +219,10 @@ int c2CircletoCapsule( c2Circle A, c2Capsule B );
 int c2AABBtoAABB( c2AABB A, c2AABB B );
 int c2AABBtoCapsule( c2AABB A, c2Capsule B );
 int c2CapsuletoCapsule( c2Capsule A, c2Capsule B );
-int c2CircletoPoly( c2Circle A, c2Poly* B, c2x* bx );
-int c2AABBtoPoly( c2AABB A, c2Poly* B, c2x* bx );
-int c2CapsuletoPoly( c2Capsule A, c2Poly* B, c2x* bx );
-int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx );
+int c2CircletoPoly( c2Circle A, const c2Poly* B, const c2x* bx );
+int c2AABBtoPoly( c2AABB A, const c2Poly* B, const c2x* bx );
+int c2CapsuletoPoly( c2Capsule A, const c2Poly* B, const c2x* bx );
+int c2PolytoPoly( const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx );
 
 // ray operations
 // output is placed into the c2Raycast struct, which represents the hit location
@@ -231,7 +231,7 @@ int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx );
 int c2RaytoCircle( c2Ray A, c2Circle B, c2Raycast* out );
 int c2RaytoAABB( c2Ray A, c2AABB B, c2Raycast* out );
 int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out );
-int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out );
+int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out );
 
 // manifold generation
 // these functions are slower than the boolean versions, but will compute one
@@ -244,10 +244,10 @@ void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m );
 void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m );
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m );
 void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m );
-void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx, c2Manifold* m );
-void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m );
-void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx, c2Manifold* m );
-void c2PolytoPolyManifold( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx, c2Manifold* m );
+void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2AABBtoPolyManifold( c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
 
 typedef enum
 {
@@ -262,7 +262,7 @@ typedef enum
 // can be NULL, and represent local to world transformations for shapes A and B respectively.
 // use_radius will apply radii for capsules and circles (if set to false, spheres are
 // treated as points and capsules are treated as line segments i.e. rays).
-float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius );
+float c2GJK( const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius );
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
@@ -276,8 +276,8 @@ void c2MakePoly( c2Poly* p );
 // morphism to write more generic-styled code. Internally calls various above functions.
 // For AABBs/Circles/Capsules ax and bx are ignored. For polys ax and bx can define
 // model to world transformations, or be NULL for identity transforms.
-int c2Collided( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB );
-void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB, c2Manifold* m );
+int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB );
+void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m );
 
 #ifdef _WIN32
 	#define C2_INLINE __forceinline
@@ -380,7 +380,7 @@ C2_INLINE void c2BBVerts( c2v* out, c2AABB* bb )
 
 #ifdef TINYC2_IMPL
 
-int c2Collided( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB )
+int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB )
 {
 	switch ( typeA )
 	{
@@ -433,7 +433,7 @@ int c2Collided( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB
 	}
 }
 
-void c2Collide( void* A, c2x* ax, C2_TYPE typeA, void* B, c2x* bx, C2_TYPE typeB, c2Manifold* m )
+void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m )
 {
 	m->count = 0;
 
@@ -507,7 +507,7 @@ typedef struct
 	int count;
 } c2Simplex;
 
-static C2_INLINE void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
+static C2_INLINE void c2MakeProxy( const void* shape, C2_TYPE type, c2Proxy* p )
 {
 	switch ( type )
 	{
@@ -546,7 +546,7 @@ static C2_INLINE void c2MakeProxy( void* shape, C2_TYPE type, c2Proxy* p )
 	}
 }
 
-static C2_INLINE int c2Support( c2v* verts, int count, c2v d )
+static C2_INLINE int c2Support( const c2v* verts, int count, c2v d )
 {
 	int imax = 0;
 	float dmax = c2Dot( verts[ 0 ], d );
@@ -721,7 +721,7 @@ static C2_INLINE void c23( c2Simplex* s )
 
 // Please see http://box2d.org/downloads/ under GDC 2010 for Erin's demo code
 // and PDF slides for documentation on the GJK algorithm.
-float c2GJK( void* A, C2_TYPE typeA, c2x* ax_ptr, void* B, C2_TYPE typeB, c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius )
+float c2GJK( const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius )
 {
 	c2x ax;
 	c2x bx;
@@ -988,25 +988,25 @@ int c2CapsuletoCapsule( c2Capsule A, c2Capsule B )
 	return 1;
 }
 
-int c2CircletoPoly( c2Circle A, c2Poly* B, c2x* bx )
+int c2CircletoPoly( c2Circle A, const c2Poly* B, const c2x* bx )
 {
 	if ( c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
 	return 1;
 }
 
-int c2AABBtoPoly( c2AABB A, c2Poly* B, c2x* bx )
+int c2AABBtoPoly( c2AABB A, const c2Poly* B, const c2x* bx )
 {
 	if ( c2GJK( &A, C2_AABB, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
 	return 1;
 }
 
-int c2CapsuletoPoly( c2Capsule A, c2Poly* B, c2x* bx )
+int c2CapsuletoPoly( c2Capsule A, const c2Poly* B, const c2x* bx )
 {
 	if ( c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
 	return 1;
 }
 
-int c2PolytoPoly( c2Poly* A, c2x* ax, c2Poly* B, c2x* bx )
+int c2PolytoPoly( const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx )
 {
 	if ( c2GJK( A, C2_POLY, ax, B, C2_POLY, bx, 0, 0, 1 ) ) return 0;
 	return 1;
@@ -1105,7 +1105,7 @@ int c2RaytoCapsule( c2Ray A, c2Capsule B, c2Raycast* out )
 	return 0;
 }
 
-int c2RaytoPoly( c2Ray A, c2Poly* B, c2x* bx_ptr, c2Raycast* out )
+int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out )
 {
 	c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
 	c2v p = c2MulxvT( bx, A.p );
@@ -1324,7 +1324,7 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 	}
 }
 
-void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
+void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Manifold* m )
 {
 	m->count = 0;
 	c2v a, b;
@@ -1378,7 +1378,7 @@ void c2CircletoPolyManifold( c2Circle A, c2Poly* B, c2x* bx_tr, c2Manifold* m )
 }
 
 // Forms a c2Poly and uses c2PolytoPolyManifold
-void c2AABBtoPolyManifold( c2AABB A, c2Poly* B, c2x* bx, c2Manifold* m )
+void c2AABBtoPolyManifold( c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m )
 {
 	m->count = 0;
 	c2Poly p;
@@ -1404,7 +1404,7 @@ static int c2Clip( c2v* seg, c2h h )
 // clip a segment to the "side planes" of another segment.
 // side planes are planes orthogonal to a segment and attached to the
 // endpoints of the segment
-static int c2SidePlanes( c2v* seg, c2x x, c2Poly* p, int e, c2h* h )
+static int c2SidePlanes( c2v* seg, c2x x, const c2Poly* p, int e, c2h* h )
 {
 	c2v ra = c2Mulxv( x, p->verts[ e ] );
 	c2v rb = c2Mulxv( x, p->verts[ e + 1 == p->count ? 0 : e + 1 ] );
@@ -1443,7 +1443,7 @@ static C2_INLINE c2v c2CapsuleSupport( c2Capsule A, c2v dir )
 	else return c2Add( A.b, c2Mulvs( dir, A.r ) );
 }
 
-static void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2v* n_out )
+static void c2AntinormalFace( c2Capsule cap, const c2Poly* p, c2x x, int* face_out, c2v* n_out )
 {
 	float sep = -FLT_MAX;
 	int index = ~0;
@@ -1465,7 +1465,7 @@ static void c2AntinormalFace( c2Capsule cap, c2Poly* p, c2x x, int* face_out, c2
 	*n_out = n;
 }
 
-void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
+void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2Manifold* m )
 {
 	m->count = 0;
 	c2v a, b;
@@ -1524,7 +1524,7 @@ void c2CapsuletoPolyManifold( c2Capsule A, c2Poly* B, c2x* bx_ptr, c2Manifold* m
 	}
 }
 
-static float c2CheckFaces( c2Poly* A, c2x ax, c2Poly* B, c2x bx, int* face_index )
+static float c2CheckFaces( const c2Poly* A, c2x ax, const c2Poly* B, c2x bx, int* face_index )
 {
 	c2x b_in_a = c2MulxxT( ax, bx );
 	c2x a_in_b = c2MulxxT( bx, ax );
@@ -1548,7 +1548,7 @@ static float c2CheckFaces( c2Poly* A, c2x ax, c2Poly* B, c2x bx, int* face_index
 	return sep;
 }
 
-static C2_INLINE void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp, c2x rx, int re )
+static C2_INLINE void c2Incident( c2v* incident, const c2Poly* ip, c2x ix, const c2Poly* rp, c2x rx, int re )
 {
 	c2v n = c2MulrvT( ix.r, c2Mulrv( rx.r, rp->norms[ re ] ) );
 	int index = ~0;
@@ -1574,7 +1574,7 @@ static C2_INLINE void c2Incident( c2v* incident, c2Poly* ip, c2x ix, c2Poly* rp,
 	// Find the incident face, which is most anti-normal face
 	// Clip incident face to reference face side planes
 	// Keep all points behind the reference face
-void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Manifold* m )
+void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, const c2x* bx_ptr, c2Manifold* m )
 {
 	m->count = 0;
 	c2x ax = ax_ptr ? *ax_ptr : c2xIdentity( );
@@ -1584,7 +1584,7 @@ void c2PolytoPolyManifold( c2Poly* A, c2x* ax_ptr, c2Poly* B, c2x* bx_ptr, c2Man
 	if ( (sa = c2CheckFaces( A, ax, B, bx, &ea )) >= 0 ) return;
 	if ( (sb = c2CheckFaces( B, bx, A, ax, &eb )) >= 0 ) return;
 
-	c2Poly* rp,* ip;
+	const c2Poly* rp,* ip;
 	c2x rx, ix;
 	int re;
 	float kRelTol = 0.95f, kAbsTol = 0.01f;
