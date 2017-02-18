@@ -448,6 +448,7 @@ static int tdDynamic( tdIState* s )
 // 3.2.3
 static int tdBlock( tdIState* s )
 {
+	printf( "the lz77 data\n" );
 	for (;;)
 	{
 		int symbol = tdTryLookup( s, s->lit, s->nlit );
@@ -684,14 +685,14 @@ TD_INLINE static void tdMatchIndices( int len, int dst, int* base_len, int* base
 	for ( int i = 0; i < 31; ++i )
 	{
 		int base = g_tdDistBase[ i ];
-		if ( base < dst ) dst_index = i;
+		if ( base <= dst ) dst_index = i;
 		else break;
 	}
 	int len_index = 0;
 	for ( int i = 0; i < 29; ++i )
 	{
 		int base = g_tdLenBase[ i ];
-		if ( base < len ) len_index = i;
+		if ( base <= len ) len_index = i;
 		else break;
 	}
 	TD_ASSERT( len_index >=0 && len_index <= 29 );
@@ -1595,21 +1596,7 @@ static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
   return result_size;
 }
 
-static void AddDynamicTree(tdDState* s, const unsigned* ll_lengths,
-                           const unsigned* d_lengths) {
-  int i;
-  int best = 0;
-  int bestsize = 0;
-
-  //for(i = 0; i < 8; i++) {
-  //  int size = EncodeTree(s, ll_lengths, d_lengths,
-  //                           i & 1, i & 2, i & 4);
-  //  if (bestsize == 0 || size < bestsize) {
-  //    bestsize = size;
-  //    best = i;
-  //  }
-  //}
-
+static void AddDynamicTree(tdDState* s, const unsigned* ll_lengths, const unsigned* d_lengths) {
   EncodeTree(s, ll_lengths, d_lengths,
              1, 1, 1);
 }
@@ -1714,7 +1701,6 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	memset( s->buckets, 0, sizeof( s->buckets ) );
 	s->entry_count = 0;
 
-	tdWriteBits( s, 1, 1 );
 	int pair_count = 0;
 	int run_count = 0;
 
@@ -1785,7 +1771,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 			++pair_count;
 			++run_count;
-			s->len[ 256 + base_len ].freq++;
+			s->len[ 257 + base_len ].freq++;
 			s->dst[ base_dst ].freq++;
 			s->window += len;
 
@@ -1794,6 +1780,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			entry.dst = dst;
 			entry.base_len = base_len;
 			entry.base_dst = base_dst;
+			entry.symbol_index = 257 + base_len;
 			s->entries[ s->entry_count++ ] = entry;
 
 			// num children in full binary tree, since we ideally pack in tons of
@@ -1828,29 +1815,30 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	}
 	tdLiteral( s, 256 );
 
+	tdWriteBits( s, 1, 1 ); // final
+	tdWriteBits( s, 2, 2 ); // dynamic
+
 	tdMakeTree( s->len, 286 );
 	tdMakeTree( s->dst, 30 );
-	tdWriteBits( s, 2, 2 ); // dynamic
-	uint32_t lens[ 288 ];
-	uint32_t dsts[ 32 ];
-	for ( int i = 0; i < 288; ++i ) lens[ i ] = s->len[ i ].len;
-	for ( int i = 0; i < 32; ++i ) dsts[ i ] = s->dst[ i ].len;
-	AddDynamicTree( s, lens, dsts );
-	//int tree_bits = tdWriteTree( s, s->len, s->dst, 0 );
-	//tree_bits = (tree_bits + 7) / 8;
+	uint32_t llens[ 288 ];
+	uint32_t dlens[ 32 ];
+	for ( int i = 0; i < 288; ++i ) llens[ i ] = s->len[ i ].len;
+	for ( int i = 0; i < 32; ++i ) dlens[ i ] = s->dst[ i ].len;
+	AddDynamicTree( s, llens, dlens );
 
+	printf( "the lz77 data\n" );
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
 		tdEntry* entry = s->entries + i;
 		if ( entry->dst )
 		{
 			int base_len = entry->base_len;
-			tdLeaf* len = s->len + base_len + 256;
-			tdWriteBits( s, len->code, len->len );
+			tdLeaf* len = s->len + entry->symbol_index;
+			tdWriteBitsRev( s, len->code, len->len );
 			tdWriteBits( s, entry->len - g_tdLenBase[ base_len ], g_tdLenExtraBits[ base_len ] );
 			int base_dst = entry->base_dst;
 			tdLeaf* dst = s->dst + base_dst;
-			tdWriteBits( s, dst->code, dst->len );
+			tdWriteBitsRev( s, dst->code, dst->len );
 			tdWriteBits( s, entry->dst - g_tdDistBase[ base_dst ], g_tdDistExtraBits[ base_dst ] );
 		}
 
@@ -1860,7 +1848,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			int code = symbol->code;
 			int len = symbol->len;
 			TD_ASSERT( !(code & ~((1 << len) - 1)) );
-			tdWriteBits( s, code, len );
+			tdWriteBitsRev( s, code, len );
 		}
 	}
 	tdFlush( s );
