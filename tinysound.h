@@ -91,7 +91,7 @@
 		tsContext* ctx = tsMakeContext( hwnd, frequency, latency, seconds, 0 );
 
 		parameters:
-			hwnd           --  HWND, handle to window
+			hwnd           --  HWND, handle to window (on OSX just pass in 0)
 			frequency      --  int, represents Hz frequency rate in which samples are played
 			latency        --  int, estimated latency in Hz from PlaySound call to speaker output
 			seconds        --  int, number of second of samples internal buffers can hold
@@ -122,7 +122,7 @@
 		tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
 		void tsStopAllSounds( tsContext( ctx );
 
-	Be sure to link against dsound.dll (or dsound.lib).
+	Be sure to link against dsound.dll (or dsound.lib) on Windows.
 
 	Read the rest of the header for specific details on all available functions
 	and struct types.
