@@ -132,7 +132,7 @@
 	Known Limitations:
 
 	* No Linux support -- only Windows/OSX/iOS. tinysound is port-ready! Please consider adding
-		in a CoreAudio port if you have the time to do so.
+		in a Linux port if you have the time to do so.
 	* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
 		guarantee it will work for all kinds of wav files, but it certainly does for the common
 		kind (and can be changed fairly easily if someone wanted to extend it).
