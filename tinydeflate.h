@@ -181,7 +181,7 @@ uint8_t g_tdPermutationOrder[ 19 ] = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14
 uint8_t g_tdLenExtraBits[ 29 + 2 ] = { 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,  0,0 }; // 3.2.5
 uint32_t g_tdLenBase[ 29 + 2 ] = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258,  0,0 }; // 3.2.5
 uint8_t g_tdDistExtraBits[ 30 + 2 ] = { 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,  0,0 }; // 3.2.5
-uint32_t g_tdDistBase[ 30 + 2 ] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577 }; // 3.2.5
+uint32_t g_tdDistBase[ 30 + 2 ] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577, 0,0 }; // 3.2.5
 
 typedef struct
 {
@@ -249,7 +249,6 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
-	printf( "val, bits: %d, %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -262,6 +261,7 @@ TD_INLINE static uint32_t tdReadBits( tdIState* s, int num_bits_to_read )
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_read ) );
 	tdPeakBits( s, num_bits_to_read );
 	uint32_t bits = tdConsumeBits( s, num_bits_to_read );
+	printf( "val, bits: %d %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -533,14 +533,9 @@ td_error:
 	return 0;
 }
 
-// if TD_HASH_COUNT is set to >= TD_WINDOW_SIZE we can use a rolling buffer
 #define TD_WINDOW_SIZE       (1024 * 32)
-#define TD_HASH_COUNT        TD_WINDOW_SIZE
-#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE * 4)
-
-#if TD_HASH_COUNT < TD_WINDOW_SIZE
-#error rolling buffer implementation requires worst case size minimum for hash entry memory
-#endif
+#define TD_HASH_COUNT        (16)
+#define TD_ENTRY_BUFFER_SIZE (16)
 
 TD_INLINE static uint32_t djb2( char* str, char* end )
 {
@@ -562,6 +557,7 @@ typedef struct tdHash
 	uint32_t h;
 	unsigned char* start;
 	struct tdHash* next;
+	struct tdHash* prev;
 } tdHash;
 
 typedef struct
@@ -572,34 +568,6 @@ typedef struct
 	uint16_t len;
 	int dst;
 } tdEntry;
-
-typedef struct
-{
-	int key;
-	int val;
-} tdItem;
-
-typedef struct
-{
-	union
-	{
-		uint16_t freq;
-		uint16_t code;
-	};
-	union
-	{
-		uint16_t parent;
-		uint16_t len;
-	};
-
-	uint16_t depth;
-	uint16_t original;
-
-#if TD_DEBUG_CHECKS
-	uint16_t left;
-	uint16_t right;
-#endif
-} tdNode;
 
 typedef struct
 {
@@ -628,7 +596,7 @@ typedef struct
 	int max_chain_len;
 	int do_lazy_search;
 
-	int hash_rolling;
+	uint32_t hash_rolling;
 	tdHash* buckets[ TD_HASH_COUNT ];
 	tdHash hashes[ TD_HASH_COUNT ];
 
@@ -652,8 +620,7 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
-	if ( value == 4294967294 ) __debugbreak( );
-	printf( "val, bits: %u, %u\n", value, num_bits_to_write );
+	printf( "val, bits: %d %d\n", value, num_bits_to_write );
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
@@ -682,7 +649,7 @@ TD_INLINE static void tdMatchIndices( int len, int dst, int* base_len, int* base
 {
 	TD_ASSERT( dst >= 0 && dst <= 32768 );
 	int dst_index = 0;
-	for ( int i = 0; i < 31; ++i )
+	for ( int i = 0; i < 30; ++i )
 	{
 		int base = g_tdDistBase[ i ];
 		if ( base <= dst ) dst_index = i;
@@ -705,26 +672,6 @@ TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
 {
 	int match_bits = len * 8;
 	return (len_bits + dst_bits) - match_bits;
-}
-
-#include <math.h> // log2f
-
-TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
-{
-	int sum = 0;
-	for ( int i = 0; i < 286; ++i ) sum += freq_in[ i ].freq;
-	float fsum = (float)sum;
-	float entropy = 0;
-	for ( int i = 0; i < 286; ++i )
-	{
-		int freq_int = freq_in[ i ].freq;
-		if ( freq_int )
-		{
-			float freq = (float)freq_int / fsum;
-			entropy -= freq * log2f( freq );
-		}
-	}
-	return entropy;
 }
 
 TD_INLINE static void tdLiteral( tdDState* s, int symbol )
@@ -1011,14 +958,14 @@ void ZopfliLengthsToSymbols(const unsigned* lengths, int n, unsigned maxbits,
   free(next_code);
 }
 
-void tdMakeTree( tdLeaf* tree, int count )
+void tdMakeTree( tdLeaf* tree, int count, int max_bits )
 {
 	int freq[ 288 ] = { 0 };
 	int lens[ 288 ] = { 0 };
 	int code[ 288 ] = { 0 };
 	for ( int i = 0; i < count; ++i ) freq[ i ] = tree[ i ].freq;
-	ZopfliLengthLimitedCodeLengths( freq, count, 15, lens );
-	ZopfliLengthsToSymbols(lens, count, 15, code);
+	ZopfliLengthLimitedCodeLengths( freq, count, max_bits, lens );
+	ZopfliLengthsToSymbols( lens, count, max_bits, code );
 	for ( int i = 0; i < count; ++i )
 	{
 		tree[ i ].code = code[ i ];
@@ -1049,7 +996,14 @@ static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits, int* rle_coun
 		int run = tdRun( tree, i + 1, size, symbol );
 		i += run;
 
-		if ( i == size && !symbol ) break;
+		if ( !symbol )
+		{
+			int x;
+			x = 10;
+		}
+
+		if ( i == size && !symbol )
+			break;
 
 		if ( !symbol && run >= 3 )
 		{
@@ -1119,7 +1073,7 @@ static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 	tdLeaf lenlen_tree[ 19 ] = { 0 };
 	int lenlens[ 19 ] = { 0 };
 	for ( int i = 0; i < 19; ++i ) lenlen_tree[ i ].freq = rle_counts[ i ];
-	tdMakeTree( lenlen_tree, 19 );
+	tdMakeTree( lenlen_tree, 19, 7 );
 	for ( int i = 0; i < 19; ++i ) lenlens[ i ] = lenlen_tree[ i ].len;
 	for ( int i = 0; i < 19; ++i ) TD_ASSERT( lenlens[ i ] >= 0 && lenlens[ i ] <= 7 );
 
@@ -1221,7 +1175,11 @@ static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
     }
     i += count - 1;
 
-	printf( "Zoplfi run of %d, %d times\n", symbol, count );
+		if ( !symbol )
+		{
+			int x;
+			x = 10;
+		}
 
     /* Repetitions of zeroes */
     if (symbol == 0 && count >= 3) {
@@ -1327,175 +1285,37 @@ static int AddDynamicTree(tdDState* s, const unsigned* ll_lengths, const unsigne
              1, 1, 1);
 }
 
-void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
+void tdFlushEntries( tdDState* s, int final )
 {
-	TD_ASSERT( !((int)in & 3) );
-	char* in_buffer = (char*)in;
-	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
-	s->in = (char*)in;
-	s->in_end = s->in + bytes;
-	s->out = (char*)malloc( bytes );
-	s->out_end = s->out + bytes;
-	s->window = s->in;
-
-	s->words = (uint32_t*)s->out;
-	s->word_count = (bytes + 3) / sizeof( uint32_t );
-	s->bits_left = bytes * 8;
-	int bits_left = s->bits_left;
-
-	if ( options )
+	// manually insert end-of-block entry
 	{
-		s->max_chain_len = options->max_chain_len;
-		s->do_lazy_search = options->do_lazy_search;
+		tdEntry entry = { 0 };
+		entry.symbol_index = 256;
+		s->entries[ s->entry_count++ ] = entry;
+		s->len[ 256 ].freq++;
 	}
 
-	else
-	{
-		// TODO think about these defaults
-		// and actually use them
-		s->max_chain_len = 1024;
-		s->do_lazy_search = 1;
-	}
-
-	while ( s->window < s->in_end - 3 )
-	{
-		// move sliding window over one byte
-		// make 3 byte hash
-		char* start = s->window;
-		char* end = s->window + 3;
-		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
-		tdHash* chain = s->buckets[ h ];
-
-		int hash_index = s->hash_rolling++ % TD_HASH_COUNT;
-		tdHash* hash = s->hashes + hash_index;
-		hash->h = h;
-		hash->start = start;
-		hash->next = chain;
-		s->buckets[ h ] = hash;
-
-		if ( chain )
-		{
-			// loop over chain
-			// keep track of best bit reduction
-			tdHash* list = chain;
-			tdHash* best_match = 0;
-			int best_base_len;
-			int best_base_dst;
-			int best_len_bits;
-			int best_dst_bits;
-			int best_dst;
-			int best_len;
-			int lowest_cost = INT_MAX;
-			int chain_count = 0;
-			while ( list )
-			{
-				char* a = hash->start;
-				char* b = list->start;
-				int dst = (int)(a - b);
-				int len = 0;
-				//if ( strncmp( a, "``alphabet", 10 ) == 0 ) __debugbreak( );
-				while ( len < 258 && *a == *b && a < s->in_end )
-				{
-					++a; ++ b;
-					++len;
-				}
-				if ( len >= 3 )
-				{
-					TD_ASSERT( len <= 258 );
-					TD_ASSERT( dst == (int)(s->window - list->start) );
-					int base_len, base_dst;
-					tdMatchIndices( len, dst, &base_len, &base_dst );
-					int len_bits = g_tdLenExtraBits[ base_len ];
-					int dst_bits = g_tdDistExtraBits[ base_dst ];
-					int cost = tdMatchCost( len, len_bits, dst_bits );
-					if ( cost < lowest_cost )
-					{
-						lowest_cost = cost;
-						best_match = list;
-						best_base_len = base_len;
-						best_base_dst = base_dst;
-						best_len_bits = len_bits;
-						best_dst_bits = dst_bits;
-						best_dst = dst;
-						best_len = len;
-					}
-				}
-				list = list->next;
-				chain_count++;
-				if ( chain_count == 5 )
-					;//break;
-			}
-
-			if ( !best_match )
-				goto literal;
-
-			if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
-			{
-				// if pair does not fit in block_buffer
-				// dump tree
-				__debugbreak( );
-			}
-
-			s->len[ 257 + best_base_len ].freq++;
-			s->dst[ best_base_dst ].freq++;
-			TD_ASSERT( !strncmp( s->window, s->window - best_dst, best_len ) );
-			s->window += best_len;
-
-			tdEntry entry;
-			TD_ASSERT( best_len >= 3 );
-			entry.len = best_len;
-			entry.dst = best_dst;
-			entry.base_len = best_base_len;
-			entry.base_dst = best_base_dst;
-			entry.symbol_index = 257 + best_base_len;
-			s->entries[ s->entry_count++ ] = entry;
-
-			// num children in full binary tree, since we ideally pack in tons of
-			// leaves with bit length less than 9, for fast decoder lookups.
-			//int two_to_ninth = 512;
-			//if ( run_count > two_to_ninth )
-			//{
-			//	float entropy = tdEntropy( s->len );
-			//	float golden = 1.61803398875f;
-			//	float factor = golden * golden;
-			//	if ( (int)(entropy * factor + 0.5f) > 15 )
-			//	{
-			//		tdMakeTree( s->len, 286 );
-			//		tdMakeTree( s->dst, 30 );
-			//		tdWriteTree( s, s->len, s->dst, 0 );
-			//	}
-			//}
-
-			continue;
-		}
-
-	literal:
-		tdLiteral( s, *s->window );
-	}
-
-	while ( s->window < s->in_end )
-	{
-		tdLiteral( s, *s->window );
-		s->window += 1;
-	}
-	tdLiteral( s, 256 );
-
-	tdWriteBits( s, 1, 1 ); // final
+	if ( final ) tdWriteBits( s, 1, 1 );
+	else tdWriteBits( s, 0, 1 );
 	tdWriteBits( s, 2, 2 ); // dynamic
 
-	tdMakeTree( s->len, 286 );
-	tdMakeTree( s->dst, 30 );
+	tdMakeTree( s->len, 286, 15 );
+	tdMakeTree( s->dst, 30, 15 );
 
 	uint32_t llens[ 288 ];
 	uint32_t dlens[ 32 ];
 	for ( int i = 0; i < 288; ++i ) llens[ i ] = s->len[ i ].len;
 	for ( int i = 0; i < 32; ++i ) dlens[ i ] = s->dst[ i ].len;
-	//int sz = AddDynamicTree( s, llens, dlens );
-	int sz = tdWriteTree( s, s->len, s->dst, 0 );
 
-	printf( "the lz77 data\n" );
+	int sz;
+	//printf( "zopfli tree\n" );
+	sz = AddDynamicTree( s, llens, dlens );
+	//printf( "custom tree\n" );
+	//sz = tdWriteTree( s, s->len, s->dst, 0 );
+
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
+		//if ( i == 7626 ) __debugbreak( );
 		tdEntry* entry = s->entries + i;
 		if ( entry->dst )
 		{
@@ -1518,8 +1338,183 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			tdWriteBitsRev( s, code, len );
 		}
 	}
+	s->entry_count = 0;
 	tdFlush( s );
-	printf( "------------\n" );
+	//memset( s->entries, 0, sizeof( s->entries ) );
+	memset( s->len, 0, sizeof( s->len ) );
+	memset( s->dst, 0, sizeof( s->dst ) );
+	//memset( s->hashes, 0, sizeof( s->hashes ) );
+	//memset( s->buckets, 0, sizeof( s->buckets ) );
+
+	//for ( int i = 0; i < TD_HASH_COUNT; ++i )
+	//{
+	//	tdHash* h = s->hashes + i;
+	//	h->next = h;
+	//	h->prev = h;
+	//}
+}
+
+void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
+{
+	TD_ASSERT( !((int)in & 3) );
+	char* in_buffer = (char*)in;
+	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
+	s->in = (unsigned char*)in;
+	s->in_end = s->in + bytes;
+	s->out = (unsigned char*)malloc( bytes * 5 );
+	s->out_end = s->out + bytes * 5;
+	s->window = s->in;
+
+	s->words = (uint32_t*)s->out;
+	s->word_count = (bytes * 5 + 3) / sizeof( uint32_t );
+	s->bits_left = bytes * 5 * 8;
+	int bits_left = s->bits_left;
+
+	if ( options )
+	{
+		s->max_chain_len = options->max_chain_len;
+		s->do_lazy_search = options->do_lazy_search;
+	}
+
+	else
+	{
+		// TODO think about these defaults
+		// and actually use them
+		s->max_chain_len = 1024;
+		s->do_lazy_search = 1;
+	}
+
+	for ( int i = 0; i < TD_HASH_COUNT; ++i )
+	{
+		tdHash* h = s->hashes + i;
+		h->next = h;
+		h->prev = h;
+	}
+
+	while ( s->window < s->in_end - 3 )
+	{
+		if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
+			tdFlushEntries( s, 0 );
+
+		// move sliding window over one byte
+		// make 3 byte hash
+		char* start = s->window;
+		char* end = s->window + 3;
+		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
+		tdHash* chain = s->buckets[ h ];
+
+#define TD_DBG_BRK( str ) if ( strncmp( start, str, strlen( str ) ) == 0 ) __debugbreak( )
+		//TD_DBG_BRK( "Assizes" );
+
+		uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
+		tdHash* hash = s->hashes + hash_index;
+		hash->prev->next = hash->next;
+		hash->next->prev = hash->prev;
+		hash->h = h;
+		hash->start = start;
+		s->buckets[ h ] = hash;
+
+		if ( chain )
+		{
+			hash->next = chain;
+			hash->prev = chain->prev;
+			chain->prev = hash;
+			hash->prev->next = hash;
+		}
+
+		else
+		{
+			hash->next = hash;
+			hash->prev = hash;
+		}
+
+		if ( chain )
+		{
+			// loop over chain
+			// keep track of best bit reduction
+			tdHash* list = chain;
+			tdHash* best_match = 0;
+			int best_base_len;
+			int best_base_dst;
+			int best_len_bits;
+			int best_dst_bits;
+			int best_dst;
+			int best_len;
+			int lowest_cost = INT_MAX;
+			int chain_count = 0;
+			while ( list != hash )
+			{
+				char* a = hash->start;
+				char* b = list->start;
+				int dst = (int)(a - b);
+				if ( dst > 32768 ) break;
+				int len = 0;
+				while ( len < 258 && *a == *b && a < s->in_end )
+				{
+					++a; ++ b;
+					++len;
+				}
+				if ( len >= 3 )
+				{
+					TD_ASSERT( len <= 258 );
+					TD_ASSERT( dst == (int)(s->window - list->start) );
+					int base_len, base_dst;
+					tdMatchIndices( len, dst, &base_len, &base_dst );
+					if ( base_len >= 286 ) __debugbreak( );
+					if ( base_dst >= 30 ) __debugbreak( );
+					int len_bits = g_tdLenExtraBits[ base_len ];
+					int dst_bits = g_tdDistExtraBits[ base_dst ];
+					int cost = tdMatchCost( len, len_bits, dst_bits );
+					if ( cost < lowest_cost )
+					{
+						lowest_cost = cost;
+						best_match = list;
+						best_base_len = base_len;
+						best_base_dst = base_dst;
+						best_len_bits = len_bits;
+						best_dst_bits = dst_bits;
+						best_dst = dst;
+						best_len = len;
+					}
+				}
+
+				list = list->next;
+				chain_count++;
+				if ( chain_count == 5 )
+					;//break;
+			}
+
+			if ( !best_match )
+				goto literal;
+
+			s->len[ 257 + best_base_len ].freq++;
+			s->dst[ best_base_dst ].freq++;
+			TD_ASSERT( !strncmp( s->window, s->window - best_dst, best_len ) );
+			s->window += best_len;
+
+			tdEntry entry;
+			TD_ASSERT( best_len >= 3 );
+			entry.len = best_len;
+			entry.dst = best_dst;
+			entry.base_len = best_base_len;
+			entry.base_dst = best_base_dst;
+			entry.symbol_index = 257 + best_base_len;
+			s->entries[ s->entry_count++ ] = entry;
+
+			continue;
+		}
+
+	literal:
+		tdLiteral( s, *s->window );
+	}
+
+	while ( s->window < s->in_end )
+		tdLiteral( s, *s->window );
+
+	tdFlushEntries( s, 1 );
+	tdFlush( s );
+
+	printf( "------\n" );
 
 	int bits_written = bits_left - s->bits_left;
 	int bytes_written = (bits_written + 7) / 8;
@@ -1551,7 +1546,6 @@ td_error:
 }
 
 #if TD_PNG
-
 
 static uint8_t tdPaeth( uint8_t a, uint8_t b, uint8_t c )
 {
