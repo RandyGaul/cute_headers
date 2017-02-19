@@ -68,6 +68,19 @@
 	#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
 	#include <malloc.h> // alloca
 
+	// for debugging purposes
+	#if 1
+		#include <crtdbg.h>
+		#define TD_CHECK_MEM( ) \
+			do \
+			{ \
+				if ( !_CrtCheckMemory( ) ) \
+				{ \
+					_CrtDbgBreak( ); \
+				} \
+			} while( 0 )
+	#endif
+
 #else
 
 	#define TD_INLINE __attribute__((always_inline))
@@ -80,6 +93,10 @@
 	#undef TD_INLINE
 	#define TD_INLINE __attribute__((always_inline)) inline
 	
+#endif
+
+#if !defined( TD_CHECK_MEM )
+#define TD_CHECK_MEM( )
 #endif
 
 // turn these off to reduce compile time and compile size for un-needed features
@@ -215,7 +232,7 @@ TD_INLINE static int tdWouldOverflow( int bits_left, int num_bits )
 TD_INLINE static char* tdPtr( tdIState* s )
 {
 	TD_ASSERT( !(s->bits_left & 7) );
-	return ((char*)s->words) + s->count;
+	return (char*)(s->words + s->word_index) - (s->count / 8);
 }
 
 TD_INLINE static uint64_t tdPeakBits( tdIState* s, int num_bits_to_read )
@@ -352,11 +369,12 @@ static int tdStored( tdIState* s )
 
 	// 3.2.4
 	// read LEN and NLEN, should complement each other
-	uint32_t LEN = tdReadBits( s, 16 );
-	uint32_t NLEN = tdReadBits( s, 16 );
-	TD_CHECK( LEN == ~NLEN, "Failed to find LEN and NLEN as complements within stored (uncompressed) stream." );
-	TD_CHECK( s->bits_left * 8 <= (int)LEN, "Stored block extends beyond end of input stream." );
-	memcpy( s->out, tdPtr( s ), LEN );
+	uint16_t LEN = tdReadBits( s, 16 );
+	uint16_t NLEN = tdReadBits( s, 16 );
+	TD_CHECK( LEN == (uint16_t)(~NLEN), "Failed to find LEN and NLEN as complements within stored (uncompressed) stream." );
+	TD_CHECK( s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream." );
+	char* p = tdPtr( s );
+	memcpy( s->out, p, LEN );
 	s->out += LEN;
 	return 1;
 
@@ -537,8 +555,8 @@ td_err:
 }
 
 #define TD_WINDOW_SIZE       (1024 * 32)
-#define TD_HASH_COUNT        (TD_WINDOW_SIZE * 4)
-#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE / 128)
+#define TD_HASH_COUNT        (TD_WINDOW_SIZE)
+#define TD_ENTRY_BUFFER_SIZE (16)
 
 TD_INLINE static uint32_t djb2( char* str, char* end )
 {
@@ -676,13 +694,18 @@ TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
 	return (len_bits + dst_bits) - match_bits;
 }
 
-TD_INLINE static void tdLiteral( tdDState* s, int symbol )
+TD_INLINE static int tdLiteral( tdDState* s, int symbol )
 {
+	if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
+		return 0;
+
 	tdEntry entry = { 0 };
 	entry.symbol_index = symbol;
 	s->window++;
 	s->entries[ s->entry_count++ ] = entry;
 	s->len[ symbol ].freq++;
+
+	return 1;
 }
 
 typedef struct tdNode tdNode;
@@ -1095,6 +1118,7 @@ void tdFlushEntries( tdDState* s, int final )
 	{
 		tdEntry entry = { 0 };
 		entry.symbol_index = 256;
+		TD_ASSERT( s->entry_count < TD_ENTRY_BUFFER_SIZE );
 		s->entries[ s->entry_count++ ] = entry;
 		s->len[ 256 ].freq++;
 	}
@@ -1137,9 +1161,24 @@ void tdFlushEntries( tdDState* s, int final )
 		}
 	}
 	s->entry_count = 0;
-	tdFlush( s );
 	memset( s->len, 0, sizeof( s->len ) );
 	memset( s->dst, 0, sizeof( s->dst ) );
+}
+
+// RFC-1951 - section 3.2.4
+void tdEncodeStored( tdDState* s )
+{
+	tdWriteBits( s, 1, 1 ); // final
+	tdWriteBits( s, 0, 2 ); // stored (uncompressed)
+	int ignored = (32 - s->count) & 7;
+	tdWriteBits( s, 0, ignored );
+	uint16_t LEN = (uint16_t)(s->in_end - s->window);
+	uint16_t NLEN = ~LEN;
+	tdWriteBits( s, LEN, 16 );
+	tdWriteBits( s, NLEN, 16 );
+
+	while ( s->window < s->in_end )
+		tdWriteBits( s, *s->window++, 8 );
 }
 
 // TODO (randy)
@@ -1194,6 +1233,9 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		char* end = s->window + 3;
 		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
 		tdHash* chain = s->buckets[ h ];
+
+#define TD_DBG_BRK( str ) if ( strncmp( start, str, strlen( str ) ) == 0 ) __debugbreak( )
+		//TD_DBG_BRK( "ADVENTURES OF" );
 
 		uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
 		tdHash* hash = s->hashes + hash_index;
@@ -1256,7 +1298,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 					TD_ASSERT( dst == (int)(s->window - list->start) );
 					int base_len, base_dst;
 					tdMatchIndices( len, dst, &base_len, &base_dst );
-					TD_ASSERT( base_len < 286 );
+					TD_ASSERT( base_len < 29 );
 					TD_ASSERT( base_dst < 30 );
 					int len_bits = g_tdLenExtraBits[ base_len ];
 					int dst_bits = g_tdDistExtraBits[ base_dst ];
@@ -1305,10 +1347,17 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	}
 
 	while ( s->window < s->in_end )
-		tdLiteral( s, *s->window );
+		if ( !tdLiteral( s, *s->window ) ) break;
 
-	tdFlushEntries( s, 1 );
+	if ( s->window == s->in_end ) tdFlushEntries( s, 1 );
+	else
+	{
+		tdFlushEntries( s, 0 );
+		tdEncodeStored( s );
+	}
+
 	tdFlush( s );
+	TD_CHECK_MEM( );
 
 	int bits_written = bits_left - s->bits_left;
 	int bytes_written = (bits_written + 7) / 8;
