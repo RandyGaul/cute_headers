@@ -559,14 +559,14 @@ TD_INLINE static uint32_t djb2( char* str, char* end )
 typedef struct tdHash
 {
 	uint32_t h;
-	char* start;
+	unsigned char* start;
 	struct tdHash* next;
 } tdHash;
 
 typedef struct
 {
-	char base_len;
-	char base_dst;
+	unsigned char base_len;
+	unsigned char base_dst;
 	uint16_t symbol_index;
 	uint16_t len;
 	int dst;
@@ -609,11 +609,11 @@ typedef struct
 
 typedef struct
 {
-	char* in;
-	char* in_end;
-	char* out;
-	char* out_end;
-	char* window;
+	unsigned char* in;
+	unsigned char* in_end;
+	unsigned char* out;
+	unsigned char* out_end;
+	unsigned char* window;
 	tdLeaf len[ 286 ];
 	tdLeaf dst[ 30 ];
 
@@ -728,6 +728,7 @@ TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
 
 TD_INLINE static void tdLiteral( tdDState* s, int symbol )
 {
+	if ( symbol < 0 ) __debugbreak( );
 	tdEntry entry = { 0 };
 	entry.symbol_index = symbol;
 	s->window++;
@@ -1048,7 +1049,6 @@ static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits, int* rle_coun
 		i += run;
 
 		if ( i == size && !symbol ) break;
-		printf( "td run of %d, %d times\n", symbol, run );
 
 		if ( !symbol && run >= 3 )
 		{
@@ -1102,167 +1102,6 @@ static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits, int* rle_coun
 	return rle_count;
 }
 
-#define ZOPFLI_APPEND_DATA(/* T */ value, /* T** */ data, /* int* */ size) {\
-  if (!((*size) & ((*size) - 1))) {\
-    /*double alloc size if it's a power of two*/\
-    (*data) = (*size) == 0 ? malloc(sizeof(**data))\
-                           : realloc((*data), (*size) * 2 * sizeof(**data));\
-  }\
-  (*data)[(*size)] = (value);\
-  (*size)++;\
-}
-
-static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
-                         const unsigned* d_lengths,
-                         int use_16, int use_17, int use_18) {
-  unsigned lld_total;  /* Total amount of literal, length, distance codes. */
-  /* Runlength encoded version of lengths of litlen and dist trees. */
-  unsigned* rle = 0;
-  unsigned* rle_bits = 0;  /* Extra bits for rle values 16, 17 and 18. */
-  unsigned rle_size = 0;  /* Size of rle array. */
-  int rle_bits_size = 0;  /* Should have same value as rle_size. */
-  unsigned hlit = 29;  /* 286 - 257 */
-  unsigned hdist = 29;  /* 32 - 1, but gzip does not like hdist > 29.*/
-  unsigned hclen;
-  unsigned hlit2;
-  unsigned i, j;
-  int clcounts[19];
-  unsigned clcl[19];  /* Code length code lengths. */
-  unsigned clsymbols[19];
-  /* The order in which code length code lengths are encoded as per deflate. */
-  static const unsigned order[19] = {
-    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
-  };
-  int size_only = 0;
-  int result_size = 0;
-
-  for(i = 0; i < 19; i++) clcounts[i] = 0;
-
-  /* Trim zeros. */
-  while (hlit > 0 && ll_lengths[257 + hlit - 1] == 0) hlit--;
-  while (hdist > 0 && d_lengths[1 + hdist - 1] == 0) hdist--;
-  hlit2 = hlit + 257;
-
-  lld_total = hlit2 + hdist + 1;
-
-  for (i = 0; i < lld_total; i++) {
-    /* This is an encoding of a huffman tree, so now the length is a symbol */
-    unsigned char symbol = i < hlit2 ? ll_lengths[i] : d_lengths[i - hlit2];
-    unsigned count = 1;
-    if(use_16 || (symbol == 0 && (use_17 || use_18))) {
-      for (j = i + 1; j < lld_total && symbol ==
-          (j < hlit2 ? ll_lengths[j] : d_lengths[j - hlit2]); j++) {
-        count++;
-      }
-    }
-    i += count - 1;
-
-	printf( "Zoplfi run of %d, %d times\n", symbol, count );
-
-    /* Repetitions of zeroes */
-    if (symbol == 0 && count >= 3) {
-      if (use_18) {
-        while (count >= 11) {
-          unsigned count2 = count > 138 ? 138 : count;
-          if (!size_only) {
-            ZOPFLI_APPEND_DATA(18, &rle, &rle_size);
-            ZOPFLI_APPEND_DATA(count2 - 11, &rle_bits, &rle_bits_size);
-          }
-          clcounts[18]++;
-          count -= count2;
-        }
-      }
-      if (use_17) {
-        while (count >= 3) {
-          unsigned count2 = count > 10 ? 10 : count;
-          if (!size_only) {
-            ZOPFLI_APPEND_DATA(17, &rle, &rle_size);
-            ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
-          }
-          clcounts[17]++;
-          count -= count2;
-        }
-      }
-    }
-
-    /* Repetitions of any symbol */
-    if (use_16 && count >= 4) {
-      count--;  /* Since the first one is hardcoded. */
-      clcounts[symbol]++;
-      if (!size_only) {
-        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
-        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
-      }
-      while (count >= 3) {
-        unsigned count2 = count > 6 ? 6 : count;
-        if (!size_only) {
-          ZOPFLI_APPEND_DATA(16, &rle, &rle_size);
-          ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
-        }
-        clcounts[16]++;
-        count -= count2;
-      }
-    }
-
-    /* No or insufficient repetition */
-    clcounts[symbol] += count;
-    while (count > 0) {
-      if (!size_only) {
-        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
-        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
-      }
-      count--;
-    }
-  }
-
-  ZopfliLengthLimitedCodeLengths(clcounts, 19, 7, clcl);
-  if (!size_only) ZopfliLengthsToSymbols(clcl, 19, 7, clsymbols);
-
-  hclen = 15;
-  /* Trim zeros. */
-  while (hclen > 0 && clcounts[order[hclen + 4 - 1]] == 0) hclen--;
-
-  if (!size_only) {
-    tdWriteBits(s, hlit, 5);
-    tdWriteBits(s, hdist, 5);
-    tdWriteBits(s, hclen, 4);
-
-    for (i = 0; i < hclen + 4; i++) {
-      tdWriteBits(s, clcl[order[i]], 3);
-    }
-
-    for (i = 0; i < rle_size; i++) {
-      unsigned symbol = clsymbols[rle[i]];
-      tdWriteBitsRev(s, symbol, clcl[rle[i]]);
-      /* Extra bits. */
-      if (rle[i] == 16) tdWriteBits(s, rle_bits[i], 2);
-      else if (rle[i] == 17) tdWriteBits(s, rle_bits[i], 3);
-      else if (rle[i] == 18) tdWriteBits(s, rle_bits[i], 7);
-    }
-  }
-
-  result_size += 14;  /* hlit, hdist, hclen bits */
-  result_size += (hclen + 4) * 3;  /* clcl bits */
-  for(i = 0; i < 19; i++) {
-    result_size += clcl[i] * clcounts[i];
-  }
-  /* Extra bits. */
-  result_size += clcounts[16] * 2;
-  result_size += clcounts[17] * 3;
-  result_size += clcounts[18] * 7;
-
-  /* Note: in case of "size_only" these are null pointers so no effect. */
-  free(rle);
-  free(rle_bits);
-
-  return result_size;
-}
-
-static void AddDynamicTree(tdDState* s, const unsigned* ll_lengths, const unsigned* d_lengths) {
-  EncodeTree(s, ll_lengths, d_lengths,
-             1, 1, 1);
-}
-
 static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 {
 	int nlit = 286 - 257;
@@ -1273,24 +1112,22 @@ static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 	int rle_bits[ 286 + 32 ];
 	int rle_counts[ 19 ] = { 0 };
 
-	while ( nlit > 0 && !len[ 257 + nlit - 1 ].len ) nlit--;
-	while ( ndst > 0 && !dst[ 1 + ndst - 1 ].len ) ndst--;
-
 	int rle_count = tdRLE( len, 286, rle, rle_bits, rle_counts );
 	rle_count += tdRLE( dst, 32, rle + rle_count, rle_bits + rle_count, rle_counts );
 
 	tdLeaf lenlen_tree[ 19 ] = { 0 };
 	int lenlens[ 19 ] = { 0 };
 	for ( int i = 0; i < 19; ++i ) lenlen_tree[ i ].freq = rle_counts[ i ];
-	//for ( int i = 0; i < rle_count; ++i ) lenlen_tree[ rle[ i ] ].freq++;
 	tdMakeTree( lenlen_tree, 19 );
 	for ( int i = 0; i < 19; ++i ) lenlens[ i ] = lenlen_tree[ i ].len;
 	for ( int i = 0; i < 19; ++i ) TD_ASSERT( lenlens[ i ] >= 0 && lenlens[ i ] <= 7 );
 
+	while ( nlit > 0 && !len[ 257 + nlit - 1 ].len ) nlit--;
+	while ( ndst > 0 && !dst[ 1 + ndst - 1 ].len ) ndst--;
 	while ( nlen > 0 && !lenlens[ g_tdPermutationOrder[ nlen + 4 - 1 ] ] ) nlen--;
-	TD_ASSERT( nlit >= 0 && nlit < (286 - 257) );
-	TD_ASSERT( ndst >= 0 && ndst < (32 - 1) );
-	TD_ASSERT( nlen >= 0 && nlen < (19 - 4) );
+	TD_ASSERT( nlit >= 0 && nlit <= (286 - 257) );
+	TD_ASSERT( ndst >= 0 && ndst <= (32 - 1) );
+	TD_ASSERT( nlen >= 0 && nlen <= (19 - 4) );
 
 	int bits_used = s->bits_left;
 	if ( !size_only )
@@ -1328,11 +1165,9 @@ static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 	return tree_size;
 }
 
-// TODO: remove = 0, we already calloc
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
 	TD_ASSERT( !((int)in & 3) );
-	TD_ASSERT( !((int)bytes & 3) ); // TODO: get rid of this
 	char* in_buffer = (char*)in;
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
 	s->in = (char*)in;
@@ -1341,12 +1176,9 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	s->out_end = s->out + bytes;
 	s->window = s->in;
 
-	s->bits = 0;
-	s->count = 0;
 	s->words = (uint32_t*)s->out;
-	s->word_count = bytes / sizeof( uint32_t );
-	s->word_index = 0;
-	s->bits_left = s->word_count * sizeof( uint32_t ) * 8;
+	s->word_count = (bytes + 3) / sizeof( uint32_t );
+	s->bits_left = bytes * 8;
 	int bits_left = s->bits_left;
 
 	if ( options )
@@ -1363,14 +1195,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		s->do_lazy_search = 1;
 	}
 
-	s->hash_rolling = 0;
-	memset( s->buckets, 0, sizeof( s->buckets ) );
-	s->entry_count = 0;
-
-	int pair_count = 0;
-	int run_count = 0;
-
-	while ( s->window != s->in_end - 3 )
+	while ( s->window < s->in_end - 3 )
 	{
 		// move sliding window over one byte
 		// make 3 byte hash
@@ -1392,37 +1217,51 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			// keep track of best bit reduction
 			tdHash* list = chain;
 			tdHash* best_match = 0;
-			int len = 0;
-			int dst;
-			int base_len;
-			int base_dst;
-			int len_bits;
-			int dst_bits;
+			int best_base_len;
+			int best_base_dst;
+			int best_len_bits;
+			int best_dst_bits;
+			int best_dst;
+			int best_len;
 			int lowest_cost = INT_MAX;
+			int chain_count = 0;
 			while ( list )
 			{
 				char* a = hash->start;
 				char* b = list->start;
-				while ( len <= 258 && *a == *b && a < s->in_end )
+				int dst = (int)(a - b);
+				int len = 0;
+				//if ( strncmp( a, "``alphabet", 10 ) == 0 ) __debugbreak( );
+				while ( len < 258 && *a == *b && a < s->in_end )
 				{
-					*a++ = *b++;
+					++a; ++ b;
 					++len;
 				}
 				if ( len )
 				{
 					TD_ASSERT( len <= 258 );
-					dst = (int)(int)(s->window - list->start);
+					TD_ASSERT( dst == (int)(s->window - list->start) );
+					int base_len, base_dst;
 					tdMatchIndices( len, dst, &base_len, &base_dst );
-					len_bits = g_tdLenExtraBits[ base_len ];
-					dst_bits = g_tdDistExtraBits[ base_dst ];
+					int len_bits = g_tdLenExtraBits[ base_len ];
+					int dst_bits = g_tdDistExtraBits[ base_dst ];
 					int cost = tdMatchCost( len, len_bits, dst_bits );
 					if ( cost < lowest_cost )
 					{
 						lowest_cost = cost;
 						best_match = list;
+						best_base_len = base_len;
+						best_base_dst = base_dst;
+						best_len_bits = len_bits;
+						best_dst_bits = dst_bits;
+						best_dst = dst;
+						best_len = len;
 					}
 				}
 				list = list->next;
+				chain_count++;
+				if ( chain_count == 5 )
+					;//break;
 			}
 
 			if ( !best_match )
@@ -1435,35 +1274,35 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 				__debugbreak( );
 			}
 
-			++pair_count;
-			++run_count;
-			s->len[ 257 + base_len ].freq++;
-			s->dst[ base_dst ].freq++;
-			s->window += len;
+			s->len[ 257 + best_base_len ].freq++;
+			s->dst[ best_base_dst ].freq++;
+			printf( "match: %.*s\n", best_len, s->window );
+			printf( "to:    %.*s\n", best_len, s->window - best_dst );
+			s->window += best_len;
 
 			tdEntry entry;
-			entry.len = len;
-			entry.dst = dst;
-			entry.base_len = base_len;
-			entry.base_dst = base_dst;
-			entry.symbol_index = 257 + base_len;
+			entry.len = best_len;
+			entry.dst = best_dst;
+			entry.base_len = best_base_len;
+			entry.base_dst = best_base_dst;
+			entry.symbol_index = 257 + best_base_len;
 			s->entries[ s->entry_count++ ] = entry;
 
 			// num children in full binary tree, since we ideally pack in tons of
 			// leaves with bit length less than 9, for fast decoder lookups.
-			int two_to_ninth = 512;
-			if ( run_count > two_to_ninth )
-			{
-				float entropy = tdEntropy( s->len );
-				float golden = 1.61803398875f;
-				float factor = golden * golden;
-				if ( (int)(entropy * factor + 0.5f) > 15 )
-				{
-					tdMakeTree( s->len, 286 );
-					tdMakeTree( s->dst, 30 );
-					tdWriteTree( s, s->len, s->dst, 0 );
-				}
-			}
+			//int two_to_ninth = 512;
+			//if ( run_count > two_to_ninth )
+			//{
+			//	float entropy = tdEntropy( s->len );
+			//	float golden = 1.61803398875f;
+			//	float factor = golden * golden;
+			//	if ( (int)(entropy * factor + 0.5f) > 15 )
+			//	{
+			//		tdMakeTree( s->len, 286 );
+			//		tdMakeTree( s->dst, 30 );
+			//		tdWriteTree( s, s->len, s->dst, 0 );
+			//	}
+			//}
 
 			continue;
 		}
@@ -1472,12 +1311,10 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		tdLiteral( s, *s->window );
 	}
 
-	if ( s->window != s->in_end )
+	while ( s->window < s->in_end )
 	{
-		TD_ASSERT( s->window + 3 == s->in_end );
 		tdLiteral( s, *s->window );
-		tdLiteral( s, *s->window );
-		tdLiteral( s, *s->window );
+		s->window += 1;
 	}
 	tdLiteral( s, 256 );
 
@@ -1486,17 +1323,12 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 	tdMakeTree( s->len, 286 );
 	tdMakeTree( s->dst, 30 );
-	uint32_t llens[ 288 ];
-	uint32_t dlens[ 32 ];
-	for ( int i = 0; i < 288; ++i ) llens[ i ] = s->len[ i ].len;
-	for ( int i = 0; i < 32; ++i ) dlens[ i ] = s->dst[ i ].len;
-	//AddDynamicTree( s, llens, dlens );
 	tdWriteTree( s, s->len, s->dst, 0 );
 
-	printf( "the lz77 data\n" );
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
 		tdEntry* entry = s->entries + i;
+		if ( i == 849 ) __debugbreak( );
 		if ( entry->dst )
 		{
 			int base_len = entry->base_len;
