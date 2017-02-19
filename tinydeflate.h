@@ -620,7 +620,7 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
-	printf( "val, bits: %d %d\n", value, num_bits_to_write );
+	//printf( "val, bits: %d %d\n", value, num_bits_to_write );
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
@@ -676,7 +676,6 @@ TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
 
 TD_INLINE static void tdLiteral( tdDState* s, int symbol )
 {
-	if ( symbol < 0 ) __debugbreak( );
 	tdEntry entry = { 0 };
 	entry.symbol_index = symbol;
 	s->window++;
@@ -684,28 +683,30 @@ TD_INLINE static void tdLiteral( tdDState* s, int symbol )
 	s->len[ symbol ].freq++;
 }
 
-typedef struct Node Node;
-
 /*
 Nodes forming chains. Also used to represent leaves.
 */
-struct Node {
-  int weight;  /* Total weight (symbol count) of this chain. */
-  Node* tail;  /* Previous node(s) of this chain, or 0 if none. */
-  int count;  /* Leaf symbol index, or number of leaves before this chain. */
+typedef struct Node Node;
+struct Node
+{
+	int weight;  /* Total weight (symbol count) of this chain. */
+	Node* tail;  /* Previous node(s) of this chain, or 0 if none. */
+	int count;  /* Leaf symbol index, or number of leaves before this chain. */
 };
 
 /*
 Memory pool for nodes.
 */
-typedef struct NodePool {
+typedef struct
+{
   Node* next;  /* Pointer to a free node in the pool. */
 } NodePool;
 
 /*
 Initializes a chain node with the given values and marks it as in use.
 */
-static void InitNode(int weight, int count, Node* tail, Node* node) {
+static void InitNode( int weight, int count, Node* tail, Node* node )
+{
   node->weight = weight;
   node->count = count;
   node->tail = tail;
@@ -722,73 +723,78 @@ numsymbols: Number of leaves.
 pool: the node memory pool.
 index: The index of the list in which a new chain or leaf is required.
 */
-static void BoundaryPM(Node* (*lists)[2], Node* leaves, int numsymbols,
-                       NodePool* pool, int index) {
-  Node* newchain;
-  Node* oldchain;
-  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+static void BoundaryPM( Node* (*lists)[ 2 ], Node* leaves, int numsymbols, NodePool* pool, int index )
+{
+	Node* newchain;
+	Node* oldchain;
+	int lastcount = lists[ index ][ 1 ]->count; /* Count of last chain of list. */
+	if ( index == 0 && lastcount >= numsymbols ) return;
 
-  if (index == 0 && lastcount >= numsymbols) return;
+	newchain = pool->next++;
+	oldchain = lists[index][1];
 
-  newchain = pool->next++;
-  oldchain = lists[index][1];
+	/* These are set up before the recursive calls below, so that there is a list
+	pointing to the new node, to let the garbage collection know it's in use. */
+	lists[ index ][ 0 ] = oldchain;
+	lists[ index ][ 1 ] = newchain;
 
-  /* These are set up before the recursive calls below, so that there is a list
-  pointing to the new node, to let the garbage collection know it's in use. */
-  lists[index][0] = oldchain;
-  lists[index][1] = newchain;
+	if ( !index )
+	{
+		/* New leaf node in list 0. */
+		InitNode( leaves[ lastcount ].weight, lastcount + 1, 0, newchain );
+	}
 
-  if (index == 0) {
-    /* New leaf node in list 0. */
-    InitNode(leaves[lastcount].weight, lastcount + 1, 0, newchain);
-  } else {
-    int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
-    if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
-      /* New leaf inserted in list, so count is incremented. */
-      InitNode(leaves[lastcount].weight, lastcount + 1, oldchain->tail,
-          newchain);
-    } else {
-      InitNode(sum, lastcount, lists[index - 1][1], newchain);
-      /* Two lookahead chains of previous list used up, create new ones. */
-      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
-      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
-    }
-  }
+	else
+	{
+		int sum = lists[ index - 1 ][ 0 ]->weight + lists[ index - 1 ][ 1 ]->weight;
+		if ( lastcount < numsymbols && sum > leaves[ lastcount ].weight )
+		{
+			/* New leaf inserted in list, so count is incremented. */
+			InitNode( leaves[lastcount].weight, lastcount + 1, oldchain->tail, newchain);
+		}
+
+		else
+		{
+			InitNode( sum, lastcount, lists[ index - 1 ][ 1 ], newchain );
+			/* Two lookahead chains of previous list used up, create new ones. */
+			BoundaryPM( lists, leaves, numsymbols, pool, index - 1 );
+			BoundaryPM( lists, leaves, numsymbols, pool, index - 1 );
+		}
+	}
 }
 
-static void BoundaryPMFinal(Node* (*lists)[2],
-    Node* leaves, int numsymbols, NodePool* pool, int index) {
-  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+static void BoundaryPMFinal( Node* (*lists)[ 2 ], Node* leaves, int numsymbols, NodePool* pool, int index )
+{
+	int lastcount = lists[ index ][ 1 ]->count;  /* Count of last chain of list. */
+	int sum = lists[ index - 1 ][ 0 ]->weight + lists[ index - 1 ][ 1 ]->weight;
 
-  int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
+	if ( lastcount < numsymbols && sum > leaves[ lastcount ].weight )
+	{
+		Node* newchain = pool->next;
+		Node* oldchain = lists[ index ][ 1 ]->tail;
 
-  if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
-    Node* newchain = pool->next;
-    Node* oldchain = lists[index][1]->tail;
-
-    lists[index][1] = newchain;
-    newchain->count = lastcount + 1;
-    newchain->tail = oldchain;
-  } else {
-    lists[index][1]->tail = lists[index - 1][1];
-  }
+		lists[ index ][ 1 ] = newchain;
+		newchain->count = lastcount + 1;
+		newchain->tail = oldchain;
+	}
+	else lists[ index ][ 1 ]->tail = lists[ index - 1 ][ 1 ];
 }
 
 /*
 Initializes each list with as lookahead chains the two leaves with lowest
 weights.
 */
-static void InitLists(
-    NodePool* pool, const Node* leaves, int maxbits, Node* (*lists)[2]) {
-  int i;
-  Node* node0 = pool->next++;
-  Node* node1 = pool->next++;
-  InitNode(leaves[0].weight, 1, 0, node0);
-  InitNode(leaves[1].weight, 2, 0, node1);
-  for (i = 0; i < maxbits; i++) {
-    lists[i][0] = node0;
-    lists[i][1] = node1;
-  }
+static void InitLists( NodePool* pool, const Node* leaves, int maxbits, Node* (*lists)[ 2 ] )
+{
+	Node* node0 = pool->next++;
+	Node* node1 = pool->next++;
+	InitNode( leaves[ 0 ].weight, 1, 0, node0 );
+	InitNode( leaves[ 1 ].weight, 2, 0, node1 );
+	for ( int i = 0; i < maxbits; i++ )
+	{
+		lists[ i ][ 0 ] = node0;
+		lists[ i ][ 1 ] = node1;
+	}
 }
 
 /*
@@ -796,26 +802,23 @@ Converts result of boundary package-merge to the bitlengths. The result in the
 last chain of the last list contains the amount of active leaves in each list.
 chain: Chain to extract the bit length from (last chain from last list).
 */
-static void ExtractBitLengths(Node* chain, Node* leaves, unsigned* bitlengths) {
-  int counts[16] = {0};
-  unsigned end = 16;
-  unsigned ptr = 15;
-  unsigned value = 1;
-  Node* node;
-  int val;
+static void ExtractBitLengths( Node* chain, Node* leaves, unsigned* bitlengths ) 
+{
+	int counts[ 16 ] = { 0 };
+	unsigned end = 16;
+	unsigned ptr = 15;
+	unsigned value = 1;
 
-  for (node = chain; node; node = node->tail) {
-    counts[--end] = node->count;
-  }
+	for ( Node* node = chain; node; node = node->tail )
+		counts[ --end ] = node->count;
 
-  val = counts[15];
-  while (ptr >= end) {
-    for (; val > counts[ptr - 1]; val--) {
-      bitlengths[leaves[val - 1].count] = value;
-    }
-    ptr--;
-    value++;
-  }
+	int val = counts[ 15 ];
+	while ( ptr >= end ) {
+		for (; val > counts[ ptr - 1 ]; val--)
+			bitlengths[ leaves[ val - 1 ].count ] = value;
+		ptr--;
+		value++;
+	}
 }
 
 /*
@@ -825,137 +828,139 @@ static int LeafComparator(const void* a, const void* b) {
   return ((const Node*)a)->weight - ((const Node*)b)->weight;
 }
 
-int ZopfliLengthLimitedCodeLengths(
-    const int* frequencies, int n, int maxbits, unsigned* bitlengths) {
-  NodePool pool;
-  int i;
-  int numsymbols = 0;  /* Amount of symbols with frequency > 0. */
-  int numBoundaryPMRuns;
-  Node* nodes;
+int ZopfliLengthLimitedCodeLengths( int* freq, int count, int maxbits, int* bitlengths )
+{
+	NodePool pool;
+	int numsymbols = 0;
+	int numBoundaryPMRuns;
+	Node* nodes;
 
-  /* Array of lists of chains. Each list requires only two lookahead chains at
-  a time, so each list is a array of two Node*'s. */
-  Node* (*lists)[2];
+	/* Array of lists of chains. Each list requires only two lookahead chains at
+	a time, so each list is a array of two Node*'s. */
+	Node* (*lists)[ 2 ];
 
-  /* One leaf per symbol. Only numsymbols leaves will be used. */
-  Node* leaves = (Node*)malloc(n * sizeof(*leaves));
+	/* One leaf per symbol. Only numsymbols leaves will be used. */
+	Node* leaves = (Node*)malloc( sizeof( Node ) * count );
+	memset( bitlengths, 0, sizeof( int ) * count );
 
-  /* Initialize all bitlengths at 0. */
-  for (i = 0; i < n; i++) {
-    bitlengths[i] = 0;
-  }
+	/* Count used symbols and place them in the leaves. */
+	for ( int i = 0; i < count; i++ )
+	{
+		if ( freq[ i ] )
+		{
+			leaves[ numsymbols ].weight = freq[ i ];
+			leaves[ numsymbols ].count = i; /* Index of symbol this leaf represents. */
+			numsymbols++;
+		}
+	}
 
-  /* Count used symbols and place them in the leaves. */
-  for (i = 0; i < n; i++) {
-    if (frequencies[i]) {
-      leaves[numsymbols].weight = frequencies[i];
-      leaves[numsymbols].count = i;  /* Index of symbol this leaf represents. */
-      numsymbols++;
-    }
-  }
+	/* Check special cases and error conditions. */
+	if ( (1 << maxbits) < numsymbols )
+	{
+		free( leaves );
+		return 1; /* Error, too few maxbits to represent symbols. */
+	}
 
-  /* Check special cases and error conditions. */
-  if ((1 << maxbits) < numsymbols) {
-    free(leaves);
-    return 1;  /* Error, too few maxbits to represent symbols. */
-  }
-  if (numsymbols == 0) {
-    free(leaves);
-    return 0;  /* No symbols at all. OK. */
-  }
-  if (numsymbols == 1) {
-    bitlengths[leaves[0].count] = 1;
-    free(leaves);
-    return 0;  /* Only one symbol, give it bitlength 1, not 0. OK. */
-  }
-  if (numsymbols == 2) {
-    bitlengths[leaves[0].count]++;
-    bitlengths[leaves[1].count]++;
-    free(leaves);
-    return 0;
-  }
+	if ( !numsymbols )
+	{
+		free( leaves );
+		return 0; /* No symbols at all. OK. */
+	}
 
-  /* Sort the leaves from lightest to heaviest. Add count into the same
-  variable for stable sorting. */
-  for (i = 0; i < numsymbols; i++) {
-    if (leaves[i].weight >=
-        ((int)1 << (sizeof(leaves[0].weight) * CHAR_BIT - 9))) {
-      free(leaves);
-      return 1;  /* Error, we need 9 bits for the count. */
-    }
-    leaves[i].weight = (leaves[i].weight << 9) | leaves[i].count;
-  }
-  qsort(leaves, numsymbols, sizeof(Node), LeafComparator);
-  for (i = 0; i < numsymbols; i++) {
-    leaves[i].weight >>= 9;
-  }
+	if ( numsymbols == 1 )
+	{
+		bitlengths[ leaves[ 0 ].count ] = 1;
+		free( leaves );
+		return 0; /* Only one symbol, give it bitlength 1, not 0. OK. */
+	}
 
-  if (numsymbols - 1 < maxbits) {
-    maxbits = numsymbols - 1;
-  }
+	if ( numsymbols == 2 )
+	{
+		bitlengths[ leaves[ 0 ].count ]++;
+		bitlengths[ leaves[ 1 ].count ]++;
+		free( leaves );
+		return 0;
+	}
 
-  /* Initialize node memory pool. */
-  nodes = (Node*)malloc(maxbits * 2 * numsymbols * sizeof(Node));
-  pool.next = nodes;
+	/* Sort the leaves from lightest to heaviest. Add count into the same
+	variable for stable sorting. */
+	for ( int i = 0; i < numsymbols; i++ )
+	{
+		if ( leaves[ i ].weight >= ((int)1 << (sizeof( leaves[ 0 ].weight ) * CHAR_BIT - 9)) )
+		{
+			free( leaves );
+			return 1; /* Error, we need 9 bits for the count. */
+		}
+		leaves[ i ].weight = (leaves[ i ].weight << 9) | leaves[ i ].count;
+	}
 
-  lists = (Node* (*)[2])malloc(maxbits * sizeof(*lists));
-  InitLists(&pool, leaves, maxbits, lists);
+	qsort( leaves, numsymbols, sizeof( Node ), LeafComparator );
 
-  /* In the last list, 2 * numsymbols - 2 active chains need to be created. Two
-  are already created in the initialization. Each BoundaryPM run creates one. */
-  numBoundaryPMRuns = 2 * numsymbols - 4;
-  for (i = 0; i < numBoundaryPMRuns - 1; i++) {
-    BoundaryPM(lists, leaves, numsymbols, &pool, maxbits - 1);
-  }
-  BoundaryPMFinal(lists, leaves, numsymbols, &pool, maxbits - 1);
+	for ( int i = 0; i < numsymbols; i++ )
+		leaves[ i ].weight >>= 9;
 
-  ExtractBitLengths(lists[maxbits - 1][1], leaves, bitlengths);
+	if ( numsymbols - 1 < maxbits )
+		maxbits = numsymbols - 1;
 
-  free(lists);
-  free(leaves);
-  free(nodes);
-  return 0;  /* OK. */
+	/* Initialize node memory pool. */
+	nodes = (Node*)malloc( maxbits * 2 * numsymbols * sizeof( Node ) );
+	pool.next = nodes;
+
+	lists = (Node* (*)[ 2 ])malloc( sizeof( *lists ) * maxbits );
+	InitLists( &pool, leaves, maxbits, lists );
+
+	/* In the last list, 2 * numsymbols - 2 active chains need to be created. Two
+	are already created in the initialization. Each BoundaryPM run creates one. */
+	numBoundaryPMRuns = 2 * numsymbols - 4;
+	for ( int i = 0; i < numBoundaryPMRuns - 1; ++i )
+		BoundaryPM( lists, leaves, numsymbols, &pool, maxbits - 1 );
+	BoundaryPMFinal( lists, leaves, numsymbols, &pool, maxbits - 1 );
+
+	ExtractBitLengths( lists[ maxbits - 1 ][ 1 ], leaves, bitlengths );
+
+	free( lists );
+	free( leaves );
+	free( nodes );
+	return 0; /* OK. */
 }
 
-void ZopfliLengthsToSymbols(const unsigned* lengths, int n, unsigned maxbits,
-                            unsigned* symbols) {
-  int* bl_count = (int*)malloc(sizeof(int) * (maxbits + 1));
-  int* next_code = (int*)malloc(sizeof(int) * (maxbits + 1));
-  unsigned bits, i;
-  unsigned code;
+static void tdLengthsToSymbols( unsigned* lengths, int count, int maxbits, unsigned* symbols )
+{
+	int bl_count[ 16 ] = { 0 };
+	int next_code[ 16 ];
+	memset( symbols, 0, sizeof( unsigned ) * count );
 
-  for (i = 0; i < (unsigned)n; i++) {
-    symbols[i] = 0;
-  }
+	// 1)
+	//Count the number of codes for each code length. Let bl_count[N] be the
+	// number of codes of length N, N >= 1
+	for ( int i = 0; i < count; i++ )
+	{
+		TD_ASSERT( lengths[ i ] <= (unsigned)maxbits );
+		bl_count[ lengths[ i ] ]++;
+	}
 
-  /* 1) Count the number of codes for each code length. Let bl_count[N] be the
-  number of codes of length N, N >= 1. */
-  for (bits = 0; bits <= maxbits; bits++) {
-    bl_count[bits] = 0;
-  }
-  for (i = 0; i < (unsigned)n; i++) {
-    assert(lengths[i] <= maxbits);
-    bl_count[lengths[i]]++;
-  }
-  /* 2) Find the numerical value of the smallest code for each code length. */
-  code = 0;
-  bl_count[0] = 0;
-  for (bits = 1; bits <= maxbits; bits++) {
-    code = (code + bl_count[bits-1]) << 1;
-    next_code[bits] = code;
-  }
-  /* 3) Assign numerical values to all codes, using consecutive values for all
-  codes of the same length with the base values determined at step 2. */
-  for (i = 0;  i < (unsigned)n; i++) {
-    unsigned len = lengths[i];
-    if (len != 0) {
-      symbols[i] = next_code[len];
-      next_code[len]++;
-    }
-  }
+	// 2)
+	// Find the numerical value of the smallest code for each code length
+	int code = 0;
+	bl_count[ 0 ] = 0;
+	for ( int bits = 1; bits <= maxbits; bits++ )
+	{
+		code = (code + bl_count[ bits - 1 ]) << 1;
+		next_code[ bits ] = code;
+	}
 
-  free(bl_count);
-  free(next_code);
+	// 3)
+	// Assign numerical values to all codes, using consecutive values for all
+	// codes of the same length with the base values determined at step 2
+	for ( int i = 0;  i < count; i++ )
+	{
+		unsigned len = lengths[ i ];
+		if ( len )
+		{
+			symbols[ i ] = next_code[ len ];
+			next_code[ len ]++;
+		}
+	}
 }
 
 void tdMakeTree( tdLeaf* tree, int count, int max_bits )
@@ -965,7 +970,7 @@ void tdMakeTree( tdLeaf* tree, int count, int max_bits )
 	int code[ 288 ] = { 0 };
 	for ( int i = 0; i < count; ++i ) freq[ i ] = tree[ i ].freq;
 	ZopfliLengthLimitedCodeLengths( freq, count, max_bits, lens );
-	ZopfliLengthsToSymbols( lens, count, max_bits, code );
+	tdLengthsToSymbols( lens, count, max_bits, code );
 	for ( int i = 0; i < count; ++i )
 	{
 		tree[ i ].code = code[ i ];
@@ -974,315 +979,118 @@ void tdMakeTree( tdLeaf* tree, int count, int max_bits )
 	}
 }
 
-TD_INLINE static int tdRun( tdLeaf* tree, int i, int N, int match )
+static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengths )
 {
-	int start = i - 1;
-	while ( i < N )
-	{
-		tdLeaf* symbol = tree + i;
-		if ( symbol->len != match ) return i - start;
-		++i;
-	}
-	return i - start;
-}
-
-static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits, int* rle_counts )
-{
-	int rle_count = 0;
-	for ( int i = 0; i < size; )
-	{
-		int symbol = tree[ i ].len;
-		TD_ASSERT( !(symbol & ~0xF) );
-		int run = tdRun( tree, i + 1, size, symbol );
-		i += run;
-
-		if ( !symbol )
-		{
-			int x;
-			x = 10;
-		}
-
-		if ( i == size && !symbol )
-			break;
-
-		if ( !symbol && run >= 3 )
-		{
-			while ( run >= 11 )
-			{
-				int count = run;
-				if ( count > 138 ) count = 138;
-				rle_bits[ rle_count ] = count - 11;
-				rle[ rle_count++ ] = 18;
-				rle_counts[ 18 ]++;
-				run -= count;
-			}
-
-			while ( run >= 3 )
-			{
-				int count = run;
-				if ( count > 10 ) count = 10;
-				rle_bits[ rle_count ] = count - 3;
-				rle[ rle_count++ ] = 17;
-				rle_counts[ 17 ]++;
-				run -= count;
-			}
-		}
-
-		if ( run >= 4 )
-		{
-			--run;
-			rle_counts[ symbol ]++;
-			rle_bits[ rle_count ] = 0;
-			rle[ rle_count++ ] = symbol;
-
-			while ( run >= 3 )
-			{
-				int count = run;
-				if ( count > 6 ) count = 6;
-				rle_bits[ rle_count ] = count - 3;
-				rle[ rle_count++ ] = 16;
-				rle_counts[ 16 ]++;
-				run -= count;
-			}
-		}
-
-		rle_counts[ symbol ] += run;
-		while ( run > 0 )
-		{
-			rle_bits[ rle_count ] = 0;
-			rle[ rle_count++ ] = symbol;
-			--run;
-		}
-	}
-	return rle_count;
-}
-
-static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
-{
-	int nlit = 286 - 257;
-	int ndst = 32 - 1;
-	int nlen = 15;
-
 	int rle[ 286 + 32 ];
 	int rle_bits[ 286 + 32 ];
-	int rle_counts[ 19 ] = { 0 };
+	int rle_index = 0;
+	int hlit = 29; // 286 - 257
+	int hdist = 29; // 32 - 1, but gzip does not like hdist > 29
+	int clcounts[ 19 ] = { 0 };
+	unsigned clcl[ 19 ];
+	unsigned clsymbols[ 19 ];
 
-	int rle_count = tdRLE( len, 286, rle, rle_bits, rle_counts );
-	rle_count += tdRLE( dst, 32, rle + rle_count, rle_bits + rle_count, rle_counts );
+	while ( hlit > 0 && !ll_lengths[ 257 + hlit - 1 ] ) hlit--;
+	while ( hdist > 0 && !d_lengths[ 1 + hdist - 1 ] ) hdist--;
+	int hlit2 = hlit + 257;
+	int lld_total = hlit2 + hdist + 1;
 
-	tdLeaf lenlen_tree[ 19 ] = { 0 };
-	int lenlens[ 19 ] = { 0 };
-	for ( int i = 0; i < 19; ++i ) lenlen_tree[ i ].freq = rle_counts[ i ];
-	tdMakeTree( lenlen_tree, 19, 7 );
-	for ( int i = 0; i < 19; ++i ) lenlens[ i ] = lenlen_tree[ i ].len;
-	for ( int i = 0; i < 19; ++i ) TD_ASSERT( lenlens[ i ] >= 0 && lenlens[ i ] <= 7 );
+	for ( int i = 0; i < lld_total; i++ )
+	{
+		unsigned char symbol = i < hlit2 ? ll_lengths[ i ] : d_lengths[ i - hlit2 ];
+		unsigned count = 1;
 
-	while ( nlit > 0 && !len[ 257 + nlit - 1 ].len ) nlit--;
-	while ( ndst > 0 && !dst[ 1 + ndst - 1 ].len ) ndst--;
-	while ( nlen > 0 && !lenlens[ g_tdPermutationOrder[ nlen + 4 - 1 ] ] ) nlen--;
-	TD_ASSERT( nlit >= 0 && nlit <= (286 - 257) );
-	TD_ASSERT( ndst >= 0 && ndst <= (32 - 1) );
-	TD_ASSERT( nlen >= 0 && nlen <= (19 - 4) );
+		for ( int j = i + 1;
+			j < lld_total && symbol == (j < hlit2 ? ll_lengths[ j ] : d_lengths[ j - hlit2 ]);
+			j++ )
+		{
+			count++;
+		}
+		i += count - 1;
+
+		if ( !symbol && count >= 3 )
+		{
+			while ( count >= 11 )
+			{
+				unsigned count2 = count > 138 ? 138 : count;
+				rle[ rle_index ] = 18;
+				rle_bits[ rle_index++ ] = count2 - 11;
+				clcounts[ 18 ]++;
+				count -= count2;
+			}
+
+			while ( count >= 3 ) {
+				unsigned count2 = count > 10 ? 10 : count;
+				rle[ rle_index ] = 17;
+				rle_bits[ rle_index++ ] = count2 - 3;
+				clcounts[ 17 ]++;
+				count -= count2;
+			}
+		}
+
+		if ( count >= 4 )
+		{
+			--count;
+			clcounts[ symbol ]++;
+			rle[ rle_index ] = symbol;
+			rle_bits[ rle_index++ ] = 0;
+
+			while ( count >= 3 )
+			{
+				unsigned count2 = count > 6 ? 6 : count;
+				rle[ rle_index ] = 16;
+				rle_bits[ rle_index++ ] = count2 - 3;
+				clcounts[ 16 ]++;
+				count -= count2;
+			}
+		}
+
+		clcounts[ symbol ] += count;
+		while ( count > 0 )
+		{
+			rle[ rle_index ] = symbol;
+			rle_bits[ rle_index++ ] = 0;
+			count--;
+		}
+	}
+
+	ZopfliLengthLimitedCodeLengths( clcounts, 19, 7, clcl );
+	tdLengthsToSymbols( clcl, 19, 7, clsymbols );
+
+	int hclen = 15;
+	while ( hclen > 0 && !clcounts[ g_tdPermutationOrder[ hclen + 4 - 1 ] ] ) hclen--;
 
 	int bits_used = s->bits_left;
-	if ( !size_only )
+	tdWriteBits( s, hlit, 5 );
+	tdWriteBits( s, hdist, 5 );
+	tdWriteBits( s, hclen, 4 );
+	int done = hclen + 4;
+	for ( int i = 0; i < done; ++i )
+		tdWriteBits( s, clcl[ g_tdPermutationOrder[ i ] ], 3 );
+	for ( int i = 0; i < rle_index; ++i )
 	{
-		tdWriteBits( s, nlit, 5 );
-		tdWriteBits( s, ndst, 5 );
-		tdWriteBits( s, nlen, 4 );
-		int done = nlen + 4;
-		for ( int i = 0; i < done; ++i )
-			tdWriteBits( s, lenlens[ g_tdPermutationOrder[ i ] ], 3 );
-		for ( int i = 0; i < rle_count; ++i )
+		int symbol = rle[ i ];
+		int code = clsymbols[symbol];
+		int len = clcl[ symbol ];
+		TD_ASSERT( !(code & ~((1 << len) - 1)) );
+		tdWriteBitsRev( s, code, len );
+		switch ( symbol )
 		{
-			int symbol = rle[ i ];
-			int code = lenlen_tree[ symbol ].code;
-			int len = lenlen_tree[ symbol ].len;
-			TD_ASSERT( !(code & ~((1 << len) - 1)) );
-			tdWriteBitsRev( s, code, len );
-			switch ( symbol )
-			{
-			case 16: tdWriteBits( s, rle_bits[ i ], 2 ); break;
-			case 17: tdWriteBits( s, rle_bits[ i ], 3 ); break;
-			case 18: tdWriteBits( s, rle_bits[ i ], 7 ); break;
-			}
+		case 16: tdWriteBits( s, rle_bits[ i ], 2 ); break;
+		case 17: tdWriteBits( s, rle_bits[ i ], 3 ); break;
+		case 18: tdWriteBits( s, rle_bits[ i ], 7 ); break;
 		}
 	}
 	bits_used = bits_used - s->bits_left;
 
 	int tree_size = 14;
-	tree_size += (nlen + 4) * 3;
-	for ( int i = 0; i < 19; i++ ) tree_size += lenlen_tree[ i ].len * lenlen_tree[ i ].freq;
-	tree_size += lenlen_tree[ 16 ].freq * 2;
-	tree_size += lenlen_tree[ 17 ].freq * 3;
-	tree_size += lenlen_tree[ 18 ].freq * 7;
+	tree_size += (hclen + 4) * 3;
+	for ( int i = 0; i < 19; ++i ) tree_size += clcl[ i ] * clcounts[ i ];
+	tree_size += clcounts[ 16 ] * 2;
+	tree_size += clcounts[ 17 ] * 3;
+	tree_size += clcounts[ 18 ] * 7;
 	TD_ASSERT( bits_used == tree_size );
 	return tree_size;
-}
-
-#define ZOPFLI_APPEND_DATA(/* T */ value, /* T** */ data, /* int* */ size) {\
-  if (!((*size) & ((*size) - 1))) {\
-    /*double alloc size if it's a power of two*/\
-    (*data) = (*size) == 0 ? malloc(sizeof(**data))\
-                           : realloc((*data), (*size) * 2 * sizeof(**data));\
-  }\
-  (*data)[(*size)] = (value);\
-  (*size)++;\
-}
-
-static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
-                         const unsigned* d_lengths,
-                         int use_16, int use_17, int use_18) {
-  unsigned lld_total;  /* Total amount of literal, length, distance codes. */
-  /* Runlength encoded version of lengths of litlen and dist trees. */
-  unsigned* rle = 0;
-  unsigned* rle_bits = 0;  /* Extra bits for rle values 16, 17 and 18. */
-  unsigned rle_size = 0;  /* Size of rle array. */
-  int rle_bits_size = 0;  /* Should have same value as rle_size. */
-  unsigned hlit = 29;  /* 286 - 257 */
-  unsigned hdist = 29;  /* 32 - 1, but gzip does not like hdist > 29.*/
-  unsigned hclen;
-  unsigned hlit2;
-  unsigned i, j;
-  int clcounts[19];
-  unsigned clcl[19];  /* Code length code lengths. */
-  unsigned clsymbols[19];
-  /* The order in which code length code lengths are encoded as per deflate. */
-  static const unsigned order[19] = {
-    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
-  };
-  int size_only = 0;
-  int result_size = 0;
-
-  for(i = 0; i < 19; i++) clcounts[i] = 0;
-
-  /* Trim zeros. */
-  while (hlit > 0 && ll_lengths[257 + hlit - 1] == 0) hlit--;
-  while (hdist > 0 && d_lengths[1 + hdist - 1] == 0) hdist--;
-  hlit2 = hlit + 257;
-
-  lld_total = hlit2 + hdist + 1;
-
-  for (i = 0; i < lld_total; i++) {
-    /* This is an encoding of a huffman tree, so now the length is a symbol */
-    unsigned char symbol = i < hlit2 ? ll_lengths[i] : d_lengths[i - hlit2];
-    unsigned count = 1;
-    if(use_16 || (symbol == 0 && (use_17 || use_18))) {
-      for (j = i + 1; j < lld_total && symbol ==
-          (j < hlit2 ? ll_lengths[j] : d_lengths[j - hlit2]); j++) {
-        count++;
-      }
-    }
-    i += count - 1;
-
-		if ( !symbol )
-		{
-			int x;
-			x = 10;
-		}
-
-    /* Repetitions of zeroes */
-    if (symbol == 0 && count >= 3) {
-      if (use_18) {
-        while (count >= 11) {
-          unsigned count2 = count > 138 ? 138 : count;
-          if (!size_only) {
-            ZOPFLI_APPEND_DATA(18, &rle, &rle_size);
-            ZOPFLI_APPEND_DATA(count2 - 11, &rle_bits, &rle_bits_size);
-          }
-          clcounts[18]++;
-          count -= count2;
-        }
-      }
-      if (use_17) {
-        while (count >= 3) {
-          unsigned count2 = count > 10 ? 10 : count;
-          if (!size_only) {
-            ZOPFLI_APPEND_DATA(17, &rle, &rle_size);
-            ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
-          }
-          clcounts[17]++;
-          count -= count2;
-        }
-      }
-    }
-
-    /* Repetitions of any symbol */
-    if (use_16 && count >= 4) {
-      count--;  /* Since the first one is hardcoded. */
-      clcounts[symbol]++;
-      if (!size_only) {
-        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
-        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
-      }
-      while (count >= 3) {
-        unsigned count2 = count > 6 ? 6 : count;
-        if (!size_only) {
-          ZOPFLI_APPEND_DATA(16, &rle, &rle_size);
-          ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
-        }
-        clcounts[16]++;
-        count -= count2;
-      }
-    }
-
-    /* No or insufficient repetition */
-    clcounts[symbol] += count;
-    while (count > 0) {
-      if (!size_only) {
-        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
-        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
-      }
-      count--;
-    }
-  }
-
-  ZopfliLengthLimitedCodeLengths(clcounts, 19, 7, clcl);
-  if (!size_only) ZopfliLengthsToSymbols(clcl, 19, 7, clsymbols);
-
-  hclen = 15;
-  /* Trim zeros. */
-  while (hclen > 0 && clcounts[order[hclen + 4 - 1]] == 0) hclen--;
-
-  if (!size_only) {
-    tdWriteBits(s, hlit, 5);
-    tdWriteBits(s, hdist, 5);
-    tdWriteBits(s, hclen, 4);
-
-    for (i = 0; i < hclen + 4; i++) {
-      tdWriteBits(s, clcl[order[i]], 3);
-    }
-
-    for (i = 0; i < rle_size; i++) {
-      unsigned symbol = clsymbols[rle[i]];
-      tdWriteBitsRev(s, symbol, clcl[rle[i]]);
-      /* Extra bits. */
-      if (rle[i] == 16) tdWriteBits(s, rle_bits[i], 2);
-      else if (rle[i] == 17) tdWriteBits(s, rle_bits[i], 3);
-      else if (rle[i] == 18) tdWriteBits(s, rle_bits[i], 7);
-    }
-  }
-
-  result_size += 14;  /* hlit, hdist, hclen bits */
-  result_size += (hclen + 4) * 3;  /* clcl bits */
-  for(i = 0; i < 19; i++) {
-    result_size += clcl[i] * clcounts[i];
-  }
-  /* Extra bits. */
-  result_size += clcounts[16] * 2;
-  result_size += clcounts[17] * 3;
-  result_size += clcounts[18] * 7;
-
-  /* Note: in case of "size_only" these are null pointers so no effect. */
-  free(rle);
-  free(rle_bits);
-
-  return result_size;
-}
-
-static int AddDynamicTree(tdDState* s, const unsigned* ll_lengths, const unsigned* d_lengths) {
-  return EncodeTree(s, ll_lengths, d_lengths,
-             1, 1, 1);
 }
 
 void tdFlushEntries( tdDState* s, int final )
@@ -1302,16 +1110,11 @@ void tdFlushEntries( tdDState* s, int final )
 	tdMakeTree( s->len, 286, 15 );
 	tdMakeTree( s->dst, 30, 15 );
 
-	uint32_t llens[ 288 ];
-	uint32_t dlens[ 32 ];
-	for ( int i = 0; i < 288; ++i ) llens[ i ] = s->len[ i ].len;
-	for ( int i = 0; i < 32; ++i ) dlens[ i ] = s->dst[ i ].len;
-
-	int sz;
-	//printf( "zopfli tree\n" );
-	sz = AddDynamicTree( s, llens, dlens );
-	//printf( "custom tree\n" );
-	//sz = tdWriteTree( s, s->len, s->dst, 0 );
+	uint32_t llens[ 286 ];
+	uint32_t dlens[ 30 ];
+	for ( int i = 0; i < 286; ++i ) llens[ i ] = s->len[ i ].len;
+	for ( int i = 0; i < 30; ++i ) dlens[ i ] = s->dst[ i ].len;
+	tdEncodeDynamic( s, llens, dlens );
 
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
@@ -1340,18 +1143,8 @@ void tdFlushEntries( tdDState* s, int final )
 	}
 	s->entry_count = 0;
 	tdFlush( s );
-	//memset( s->entries, 0, sizeof( s->entries ) );
 	memset( s->len, 0, sizeof( s->len ) );
 	memset( s->dst, 0, sizeof( s->dst ) );
-	//memset( s->hashes, 0, sizeof( s->hashes ) );
-	//memset( s->buckets, 0, sizeof( s->buckets ) );
-
-	//for ( int i = 0; i < TD_HASH_COUNT; ++i )
-	//{
-	//	tdHash* h = s->hashes + i;
-	//	h->next = h;
-	//	h->prev = h;
-	//}
 }
 
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
@@ -1402,9 +1195,6 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		char* end = s->window + 3;
 		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
 		tdHash* chain = s->buckets[ h ];
-
-#define TD_DBG_BRK( str ) if ( strncmp( start, str, strlen( str ) ) == 0 ) __debugbreak( )
-		//TD_DBG_BRK( "Assizes" );
 
 		uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
 		tdHash* hash = s->hashes + hash_index;
@@ -1513,8 +1303,6 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 	tdFlushEntries( s, 1 );
 	tdFlush( s );
-
-	printf( "------\n" );
 
 	int bits_written = bits_left - s->bits_left;
 	int bytes_written = (bits_written + 7) / 8;
