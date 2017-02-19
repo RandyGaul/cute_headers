@@ -26,6 +26,7 @@ int main( )
 
 	int feldpar_size;
 	const char* str = tdReadFileToMemory( "feldspar.txt", &feldpar_size );
+	++feldpar_size;
 
 	int out_size;
 	void* out = tdDeflateMem( str, feldpar_size, &out_size, 0 );
@@ -45,7 +46,7 @@ int main( )
 
 	int a = strcmp( str, deflated );
 	FILE* fp = fopen( "feldspar_deflated.txt", "wb" );
-	fwrite( deflated, out_size, 1, fp );
+	fwrite( deflated, feldpar_size - 1, 1, fp );
 	fclose( fp );
 	return 0;
 }

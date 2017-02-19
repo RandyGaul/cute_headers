@@ -249,6 +249,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
+	printf( "val, bits: %d, %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -651,8 +652,8 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
-
-	printf( "val, bits: %d, %d\n", value, num_bits_to_write );
+	if ( value == 4294967294 ) __debugbreak( );
+	printf( "val, bits: %u, %u\n", value, num_bits_to_write );
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
@@ -1165,6 +1166,167 @@ static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
 	return tree_size;
 }
 
+#define ZOPFLI_APPEND_DATA(/* T */ value, /* T** */ data, /* int* */ size) {\
+  if (!((*size) & ((*size) - 1))) {\
+    /*double alloc size if it's a power of two*/\
+    (*data) = (*size) == 0 ? malloc(sizeof(**data))\
+                           : realloc((*data), (*size) * 2 * sizeof(**data));\
+  }\
+  (*data)[(*size)] = (value);\
+  (*size)++;\
+}
+
+static int EncodeTree(tdDState* s, const unsigned* ll_lengths,
+                         const unsigned* d_lengths,
+                         int use_16, int use_17, int use_18) {
+  unsigned lld_total;  /* Total amount of literal, length, distance codes. */
+  /* Runlength encoded version of lengths of litlen and dist trees. */
+  unsigned* rle = 0;
+  unsigned* rle_bits = 0;  /* Extra bits for rle values 16, 17 and 18. */
+  unsigned rle_size = 0;  /* Size of rle array. */
+  int rle_bits_size = 0;  /* Should have same value as rle_size. */
+  unsigned hlit = 29;  /* 286 - 257 */
+  unsigned hdist = 29;  /* 32 - 1, but gzip does not like hdist > 29.*/
+  unsigned hclen;
+  unsigned hlit2;
+  unsigned i, j;
+  int clcounts[19];
+  unsigned clcl[19];  /* Code length code lengths. */
+  unsigned clsymbols[19];
+  /* The order in which code length code lengths are encoded as per deflate. */
+  static const unsigned order[19] = {
+    16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
+  };
+  int size_only = 0;
+  int result_size = 0;
+
+  for(i = 0; i < 19; i++) clcounts[i] = 0;
+
+  /* Trim zeros. */
+  while (hlit > 0 && ll_lengths[257 + hlit - 1] == 0) hlit--;
+  while (hdist > 0 && d_lengths[1 + hdist - 1] == 0) hdist--;
+  hlit2 = hlit + 257;
+
+  lld_total = hlit2 + hdist + 1;
+
+  for (i = 0; i < lld_total; i++) {
+    /* This is an encoding of a huffman tree, so now the length is a symbol */
+    unsigned char symbol = i < hlit2 ? ll_lengths[i] : d_lengths[i - hlit2];
+    unsigned count = 1;
+    if(use_16 || (symbol == 0 && (use_17 || use_18))) {
+      for (j = i + 1; j < lld_total && symbol ==
+          (j < hlit2 ? ll_lengths[j] : d_lengths[j - hlit2]); j++) {
+        count++;
+      }
+    }
+    i += count - 1;
+
+	printf( "Zoplfi run of %d, %d times\n", symbol, count );
+
+    /* Repetitions of zeroes */
+    if (symbol == 0 && count >= 3) {
+      if (use_18) {
+        while (count >= 11) {
+          unsigned count2 = count > 138 ? 138 : count;
+          if (!size_only) {
+            ZOPFLI_APPEND_DATA(18, &rle, &rle_size);
+            ZOPFLI_APPEND_DATA(count2 - 11, &rle_bits, &rle_bits_size);
+          }
+          clcounts[18]++;
+          count -= count2;
+        }
+      }
+      if (use_17) {
+        while (count >= 3) {
+          unsigned count2 = count > 10 ? 10 : count;
+          if (!size_only) {
+            ZOPFLI_APPEND_DATA(17, &rle, &rle_size);
+            ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
+          }
+          clcounts[17]++;
+          count -= count2;
+        }
+      }
+    }
+
+    /* Repetitions of any symbol */
+    if (use_16 && count >= 4) {
+      count--;  /* Since the first one is hardcoded. */
+      clcounts[symbol]++;
+      if (!size_only) {
+        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
+        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
+      }
+      while (count >= 3) {
+        unsigned count2 = count > 6 ? 6 : count;
+        if (!size_only) {
+          ZOPFLI_APPEND_DATA(16, &rle, &rle_size);
+          ZOPFLI_APPEND_DATA(count2 - 3, &rle_bits, &rle_bits_size);
+        }
+        clcounts[16]++;
+        count -= count2;
+      }
+    }
+
+    /* No or insufficient repetition */
+    clcounts[symbol] += count;
+    while (count > 0) {
+      if (!size_only) {
+        ZOPFLI_APPEND_DATA(symbol, &rle, &rle_size);
+        ZOPFLI_APPEND_DATA(0, &rle_bits, &rle_bits_size);
+      }
+      count--;
+    }
+  }
+
+  ZopfliLengthLimitedCodeLengths(clcounts, 19, 7, clcl);
+  if (!size_only) ZopfliLengthsToSymbols(clcl, 19, 7, clsymbols);
+
+  hclen = 15;
+  /* Trim zeros. */
+  while (hclen > 0 && clcounts[order[hclen + 4 - 1]] == 0) hclen--;
+
+  if (!size_only) {
+    tdWriteBits(s, hlit, 5);
+    tdWriteBits(s, hdist, 5);
+    tdWriteBits(s, hclen, 4);
+
+    for (i = 0; i < hclen + 4; i++) {
+      tdWriteBits(s, clcl[order[i]], 3);
+    }
+
+    for (i = 0; i < rle_size; i++) {
+      unsigned symbol = clsymbols[rle[i]];
+      tdWriteBitsRev(s, symbol, clcl[rle[i]]);
+      /* Extra bits. */
+      if (rle[i] == 16) tdWriteBits(s, rle_bits[i], 2);
+      else if (rle[i] == 17) tdWriteBits(s, rle_bits[i], 3);
+      else if (rle[i] == 18) tdWriteBits(s, rle_bits[i], 7);
+    }
+  }
+
+  result_size += 14;  /* hlit, hdist, hclen bits */
+  result_size += (hclen + 4) * 3;  /* clcl bits */
+  for(i = 0; i < 19; i++) {
+    result_size += clcl[i] * clcounts[i];
+  }
+  /* Extra bits. */
+  result_size += clcounts[16] * 2;
+  result_size += clcounts[17] * 3;
+  result_size += clcounts[18] * 7;
+
+  /* Note: in case of "size_only" these are null pointers so no effect. */
+  free(rle);
+  free(rle_bits);
+
+  return result_size;
+}
+
+static int AddDynamicTree(tdDState* s, const unsigned* ll_lengths, const unsigned* d_lengths) {
+  return EncodeTree(s, ll_lengths, d_lengths,
+             1, 1, 1);
+}
+
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
 	TD_ASSERT( !((int)in & 3) );
@@ -1237,7 +1399,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 					++a; ++ b;
 					++len;
 				}
-				if ( len )
+				if ( len >= 3 )
 				{
 					TD_ASSERT( len <= 258 );
 					TD_ASSERT( dst == (int)(s->window - list->start) );
@@ -1276,11 +1438,11 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 			s->len[ 257 + best_base_len ].freq++;
 			s->dst[ best_base_dst ].freq++;
-			printf( "match: %.*s\n", best_len, s->window );
-			printf( "to:    %.*s\n", best_len, s->window - best_dst );
+			TD_ASSERT( !strncmp( s->window, s->window - best_dst, best_len ) );
 			s->window += best_len;
 
 			tdEntry entry;
+			TD_ASSERT( best_len >= 3 );
 			entry.len = best_len;
 			entry.dst = best_dst;
 			entry.base_len = best_base_len;
@@ -1323,12 +1485,18 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 	tdMakeTree( s->len, 286 );
 	tdMakeTree( s->dst, 30 );
-	tdWriteTree( s, s->len, s->dst, 0 );
 
+	uint32_t llens[ 288 ];
+	uint32_t dlens[ 32 ];
+	for ( int i = 0; i < 288; ++i ) llens[ i ] = s->len[ i ].len;
+	for ( int i = 0; i < 32; ++i ) dlens[ i ] = s->dst[ i ].len;
+	//int sz = AddDynamicTree( s, llens, dlens );
+	int sz = tdWriteTree( s, s->len, s->dst, 0 );
+
+	printf( "the lz77 data\n" );
 	for ( int i = 0; i < s->entry_count; ++i )
 	{
 		tdEntry* entry = s->entries + i;
-		if ( i == 849 ) __debugbreak( );
 		if ( entry->dst )
 		{
 			int base_len = entry->base_len;
@@ -1351,6 +1519,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		}
 	}
 	tdFlush( s );
+	printf( "------------\n" );
 
 	int bits_written = bits_left - s->bits_left;
 	int bytes_written = (bits_written + 7) / 8;
