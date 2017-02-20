@@ -179,7 +179,8 @@ extern const char* g_tdDeflateErrorReason;
 #include <string.h> // memcpy
 
 const char* g_tdDeflateErrorReason;
-#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; goto td_err; } } while ( 0 )
+#define TD_FAIL( ) do { goto td_err; } while ( 0 )
+#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
 #define TD_CALL( X ) do { if ( !(X) ) goto td_err; } while ( 0 )
 #define TD_LOOKUP_BITS 9
 #define TD_LOOKUP_COUNT (1 << TD_LOOKUP_BITS)
@@ -214,6 +215,7 @@ typedef struct
 
 	char* out;
 	char* out_end;
+	char* begin;
 
 	uint16_t lookup[ TD_LOOKUP_COUNT ];
 	uint32_t lit[ 288 ];
@@ -224,7 +226,7 @@ typedef struct
 	uint32_t nlen;
 } tdIState;
 
-TD_INLINE static int tdWouldOverflow( int bits_left, int num_bits )
+TD_INLINE static int tdWouldOverflow( uint64_t bits_left, int num_bits )
 {
 	return bits_left - num_bits < 0;
 }
@@ -266,6 +268,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
+	printf( "read %d %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -484,7 +487,7 @@ static int tdBlock( tdIState* s )
 			int length = tdReadBits( s, g_tdLenExtraBits[ symbol ] ) + g_tdLenBase[ symbol ];
 			int distance_symbol = tdDecode( s, s->dst, s->ndst );
 			int backwards_distance = tdReadBits( s, g_tdDistExtraBits[ distance_symbol ] ) + g_tdDistBase[ distance_symbol ];
-			if ( s->out + length > s->out_end ) __debugbreak( );
+			TD_CHECK( s->out - backwards_distance >= s->begin, "Attempted to write before out buffer (invalid backwards distance)." );
 			TD_CHECK( s->out + length <= s->out_end, "Attempted to overwrite out buffer while outputting a string." );
 			char* src = s->out - backwards_distance;
 			char* dst = s->out;
@@ -529,6 +532,7 @@ int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 
 	s->out = (char*)out;
 	s->out_end = s->out + out_bytes;
+	s->begin = (char*)out;
 
 	int count = 0;
 	int bfinal;
@@ -622,7 +626,7 @@ typedef struct
 	uint32_t* words;
 	int word_count;
 	int word_index;
-	int bits_left;
+	uint64_t bits_left;
 
 	int max_chain_len;
 	int do_lazy_search;
@@ -641,17 +645,18 @@ typedef struct
 	int do_lazy_search;
 } tdDeflateOptions;
 
-#undef TD_CHECK
-#define TD_FAIL( ) do { goto td_err; } while ( 0 )
-#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
-
 static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write )
 {
 	TD_ASSERT( num_bits_to_write <= 32 );
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
-	//printf( "%d %d\n", value, num_bits_to_write );
+	printf( "write %d %d\n", value, num_bits_to_write );
+	if ( value == 255 )
+	{
+		int x;
+		x = 10;
+	}
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
@@ -711,6 +716,7 @@ TD_INLINE static int tdLiteral( tdDState* s, int symbol )
 		return 0;
 
 	tdEntry entry = { 0 };
+	TD_ASSERT( symbol >= 0 && symbol <= 256 );
 	entry.symbol_index = symbol;
 	entry.string = s->window;
 	s->window++;
@@ -1296,7 +1302,7 @@ static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengt
 	while ( hclen > 0 && !clcounts[ g_tdPermutationOrder[ hclen + 4 - 1 ] ] ) hclen--;
 
 	// RFC-1951 section 3.2.7
-	int bits_used = s->bits_left;
+	uint64_t bits_used = s->bits_left;
 	tdWriteBits( s, hlit, 5 );
 	tdWriteBits( s, hdist, 5 );
 	tdWriteBits( s, hclen, 4 );
@@ -1419,8 +1425,8 @@ void tdFlushEntries( tdDState* s, int final )
 		}
 	}
 	s->entry_count = 0;
-	memset( s->len, 0, sizeof( s->len ) );
-	memset( s->dst, 0, sizeof( s->dst ) );
+	//memset( s->len, 0, sizeof( s->len ) );
+	//memset( s->dst, 0, sizeof( s->dst ) );
 	TD_ASSERT( length - 1 == s->processed_length ); // -1 for 256 end of block literal
 	s->processed_length = 0;
 
@@ -1486,7 +1492,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	s->words = (uint32_t*)s->out;
 	s->word_count = (bytes * 5 + 3) / sizeof( uint32_t );
 	s->bits_left = bytes * 5 * 8;
-	int bits_left = s->bits_left;
+	uint64_t bits_left = s->bits_left;
 
 	if ( options )
 	{
@@ -1696,12 +1702,13 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	tdFlush( s );
 	TD_CHECK_MEM( );
 
-	int bits_written = bits_left - s->bits_left;
-	int bytes_written = (bits_written + 7) / 8;
-	int out_size = bytes_written;
-	if ( out_bytes ) *out_bytes = out_size;
+	uint64_t bits_written = bits_left - s->bits_left;
+	uint64_t bytes_written = (bits_written + 7) / 8;
+	uint64_t out_size = bytes_written;
+	if ( out_bytes ) *out_bytes = (int)out_size;
 	void* out = s->out;
 	free( s );
+	printf( "---\n" );
 	return out;
 }
 

@@ -33,7 +33,7 @@ int main( )
 	char* deflated = (char*)calloc( 1, feldpar_size * 2 );
 	int inflatedSize = tdInflate( out, out_size, deflated, feldpar_size * 2 );
 
-	tdDeflate( "feldspar.txt", "deflated.txt", 0 );
+	//tdDeflate( "feldspar.txt", "deflated.txt", 0 );
 
 	//TestAtlas( );
 	//tdImage img = tdLoadPNG( "atlas.png" );
