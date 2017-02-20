@@ -11,7 +11,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++ | zlib
 **[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++ | zlib
 **[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.0 | C++ | zlib
-**[tinydeflate](tinydeflate.h)** | DEFLATE compliant compressor/decompressor, load/save PNG, texture atlas compiler | 1.0 | C/C++ | public domain
+**[tinydeflate](tinydeflate.h)** | DEFLATE compliant compressor/decompressor, load/save PNG, texture atlas compiler | 1.01 | C/C++ | public domain
 **[tinygl](tinygl.h)** | OpenGL wrapper with carefully designed API to foster fast iteration | 1.0 | C/C++ | zlib
 **[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.01 | C/C++ | zlib
 
