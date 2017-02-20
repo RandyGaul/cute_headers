@@ -24,14 +24,14 @@ int main( )
 	//TestAtlas( );
 	////tdImage img = tdLoadPNG( "atlas.png" );
 
-	//int feldpar_size;
-	//const char* str = tdReadFileToMemory( "feldspar.txt", &feldpar_size );
-	//++feldpar_size;
+	int feldpar_size;
+	const char* str = tdReadFileToMemory( "feldspar.txt", &feldpar_size );
+	++feldpar_size;
 
-	//int out_size;
-	//void* out = tdDeflateMem( str, feldpar_size, &out_size, 0 );
-	//char* deflated = (char*)calloc( 1, feldpar_size * 2 );
-	//int inflatedSize = tdInflate( out, out_size, deflated, feldpar_size * 2 );
+	int out_size;
+	void* out = tdDeflateMem( str, feldpar_size, &out_size, 0 );
+	char* deflated = (char*)calloc( 1, feldpar_size * 2 );
+	int inflatedSize = tdInflate( out, out_size, deflated, feldpar_size * 2 );
 
 	tdDeflate( "feldspar.txt", "deflated.txt", 0 );
 
@@ -47,8 +47,8 @@ int main( )
 	//tdInflate( out, out_size, deflated, len );
 
 	//int a = strcmp( str, deflated );
-	//FILE* fp = fopen( "feldspar_deflated.txt", "wb" );
-	//fwrite( deflated, strlen( deflated ), 1, fp );
-	//fclose( fp );
+	FILE* fp = fopen( "feldspar_deflated.txt", "wb" );
+	fwrite( deflated, strlen( deflated ), 1, fp );
+	fclose( fp );
 	return 0;
 }
