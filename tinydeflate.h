@@ -68,19 +68,6 @@
 	#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
 	#include <malloc.h> // alloca
 
-	// for debugging purposes
-	#if 1
-		#include <crtdbg.h>
-		#define TD_CHECK_MEM( ) \
-			do \
-			{ \
-				if ( !_CrtCheckMemory( ) ) \
-				{ \
-					_CrtDbgBreak( ); \
-				} \
-			} while( 0 )
-	#endif
-
 #else
 
 	#define TD_INLINE __attribute__((always_inline))
@@ -93,10 +80,6 @@
 	#undef TD_INLINE
 	#define TD_INLINE __attribute__((always_inline)) inline
 	
-#endif
-
-#if !defined( TD_CHECK_MEM )
-#define TD_CHECK_MEM( )
 #endif
 
 // turn these off to reduce compile time and compile size for un-needed features
@@ -163,10 +146,29 @@ extern const char* g_tdDeflateErrorReason;
 	#include <assert.h>
 	#define TD_ASSERT assert
 
+	#if defined( _WIN32 )
+		#include <crtdbg.h>
+		#define TD_CHECK_MEM( ) \
+			do \
+			{ \
+				if ( !_CrtCheckMemory( ) ) \
+				{ \
+					_CrtDbgBreak( ); \
+				} \
+			} while( 0 )
+	#endif
+
+	#define TD_LOG printf
+
 #else
 
 	#define TD_ASSERT( ... )
+	#define TD_LOG( ... )
 
+#endif
+
+#if !defined( TD_CHECK_MEM )
+#define TD_CHECK_MEM( )
 #endif
 
 #define TINYDEFLATE_H
@@ -226,7 +228,7 @@ typedef struct
 	uint32_t nlen;
 } tdIState;
 
-TD_INLINE static int tdWouldOverflow( uint64_t bits_left, int num_bits )
+TD_INLINE static int tdWouldOverflow( int64_t bits_left, int num_bits )
 {
 	return bits_left - num_bits < 0;
 }
@@ -268,7 +270,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
-	printf( "read %d %d\n", bits, num_bits_to_read );
+	TD_LOG( "read %d %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -419,15 +421,15 @@ static int tdDecode( tdIState* s, uint32_t* tree, int hi )
 
 static int tdTryLookup( tdIState* s, uint32_t* tree, int hi )
 {
-	uint64_t bits = tdPeakBits( s, 16 );
-	int index = bits & TD_LOOKUP_MASK;
-	uint32_t code = s->lookup[ index ];
+	//uint64_t bits = tdPeakBits( s, 16 );
+	//int index = bits & TD_LOOKUP_MASK;
+	//uint32_t code = s->lookup[ index ];
 
-	if ( code )
-	{
-		tdConsumeBits( s, code >> 9 );
-		return code & TD_LOOKUP_MASK;
-	}
+	//if ( code )
+	//{
+	//	tdConsumeBits( s, code >> 9 );
+	//	return code & TD_LOOKUP_MASK;
+	//}
 
 	return tdDecode( s, tree, hi );
 }
@@ -563,7 +565,7 @@ td_err:
 
 #define TD_WINDOW_SIZE       (1024 * 32)
 #define TD_HASH_COUNT        (TD_WINDOW_SIZE)
-#define TD_ENTRY_BUFFER_SIZE (256)
+#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE / 16)
 
 #if TD_HASH_COUNT > 4294967294
 #error (uint32_t)~0) - 1 is the max size allowed
@@ -590,7 +592,6 @@ typedef struct tdHash
 	unsigned char* start;
 	struct tdHash* next;
 	struct tdHash* prev;
-	uint32_t bucket;
 } tdHash;
 
 typedef struct
@@ -600,7 +601,6 @@ typedef struct
 	uint16_t symbol_index;
 	uint16_t len;
 	int dst;
-	char* string;
 } tdEntry;
 
 typedef struct
@@ -626,7 +626,7 @@ typedef struct
 	uint32_t* words;
 	int word_count;
 	int word_index;
-	uint64_t bits_left;
+	int64_t bits_left;
 
 	int max_chain_len;
 	int do_lazy_search;
@@ -651,18 +651,20 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
-	printf( "write %d %d\n", value, num_bits_to_write );
+	TD_LOG( "write %d %d\n", value, num_bits_to_write );
 	if ( value == 255 )
 	{
 		int x;
 		x = 10;
 	}
+
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
 
 	if ( s->count >= 32 )
 	{
+		TD_ASSERT( s->word_index < s->word_count );
 		s->words[ s->word_index ] = (uint32_t)(s->bits & ((uint32_t)~0));
 		s->bits >>= 32;
 		s->count -= 32;
@@ -718,7 +720,6 @@ TD_INLINE static int tdLiteral( tdDState* s, int symbol )
 	tdEntry entry = { 0 };
 	TD_ASSERT( symbol >= 0 && symbol <= 256 );
 	entry.symbol_index = symbol;
-	entry.string = s->window;
 	s->window++;
 	s->entries[ s->entry_count++ ] = entry;
 	s->len[ symbol ].freq++;
@@ -1013,7 +1014,6 @@ td_err:
 	return 0;
 }
 
-
 /* Gets the amount of extra bits for the given dist, cfr. the DEFLATE spec. */
 static int ZopfliGetDistExtraBits(int dist) {
 #ifdef ZOPFLI_HAS_BUILTIN_CLZ
@@ -1302,7 +1302,7 @@ static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengt
 	while ( hclen > 0 && !clcounts[ g_tdPermutationOrder[ hclen + 4 - 1 ] ] ) hclen--;
 
 	// RFC-1951 section 3.2.7
-	uint64_t bits_used = s->bits_left;
+	int64_t bits_used = s->bits_left;
 	tdWriteBits( s, hlit, 5 );
 	tdWriteBits( s, hdist, 5 );
 	tdWriteBits( s, hclen, 4 );
@@ -1337,13 +1337,7 @@ static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengt
 
 void tdFlushEntries( tdDState* s, int final )
 {
-	static int count;
-	if ( count == 10 )
-	{
-		int x;
-		x = 10;
-	}
-	//printf( "--> lz77 data %d\n", count++ );
+	TD_LOG( "--> lz77 data\n" );
 	// manually insert end-of-block entry
 	{
 		tdEntry entry = { 0 };
@@ -1362,6 +1356,7 @@ void tdFlushEntries( tdDState* s, int final )
 
 	uint32_t llens[ 286 ];
 	uint32_t dlens[ 30 ];
+
 	for ( int i = 0; i < 286; ++i ) llens[ i ] = s->len[ i ].len;
 	for ( int i = 0; i < 30; ++i ) dlens[ i ] = s->dst[ i ].len;
 	tdEncodeDynamic( s, llens, dlens );
@@ -1424,21 +1419,23 @@ void tdFlushEntries( tdDState* s, int final )
 			++length;
 		}
 	}
+
 	s->entry_count = 0;
-	//memset( s->len, 0, sizeof( s->len ) );
-	//memset( s->dst, 0, sizeof( s->dst ) );
+	memset( s->len, 0, sizeof( s->len ) );
+	memset( s->dst, 0, sizeof( s->dst ) );
+	//memset( s->entries, 0, sizeof( s->entries ) );
 	TD_ASSERT( length - 1 == s->processed_length ); // -1 for 256 end of block literal
 	s->processed_length = 0;
 
 	// ODDLY SUSPICIOUS
-	//memset( s->hashes, 0, sizeof( s->hashes ) );
-	//memset( s->buckets, 0, sizeof( s->buckets ) );
-	//for ( int i = 0; i < TD_HASH_COUNT; ++i )
-	//{
-	//	tdHash* h = s->hashes + i;
-	//	h->next = h;
-	//	h->prev = h;
-	//}
+//	memset( s->hashes, 0, sizeof( s->hashes ) );
+//	memset( s->buckets, 0, sizeof( s->buckets ) );
+//	for ( int i = 0; i < TD_HASH_COUNT; ++i )
+//	{
+//		tdHash* h = s->hashes + i;
+//		h->next = h;
+//		h->prev = h;
+//	}
 }
 
 // RFC-1951 - section 3.2.4
@@ -1460,24 +1457,10 @@ void tdEncodeStored( tdDState* s )
 	}
 }
 
-TD_INLINE static void tdPatchHash( tdDState* s, tdHash* h )
-{
-	// update bucket pointer if this node gets recycled
-	if ( h->bucket != ~0 )
-	{
-		uint32_t index = h->bucket;
-		TD_ASSERT( index < TD_HASH_COUNT );
-		if ( s->buckets[ index ] == h )
-		{
-			if ( h->next == h ) s->buckets[ index ] = 0;
-			else s->buckets[ index ] = h->next;
-		}
-	}
-}
-
 // TODO (randy)
 // gracefully handle case of file getting larger
 // find any other possible errors, gracefully handle and report them
+#define TD_EXTRA_DBG_MEMORY (1024 * 1024)
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
 	TD_ASSERT( !((int)in & 3) );
@@ -1485,14 +1468,14 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
 	s->in = (unsigned char*)in;
 	s->in_end = s->in + bytes;
-	s->out = (unsigned char*)malloc( bytes * 5 );
-	s->out_end = s->out + bytes * 5;
+	s->out = (unsigned char*)malloc( bytes + TD_EXTRA_DBG_MEMORY );
+	s->out_end = s->out + bytes + TD_EXTRA_DBG_MEMORY;
 	s->window = s->in;
 
 	s->words = (uint32_t*)s->out;
-	s->word_count = (bytes * 5 + 3) / sizeof( uint32_t );
-	s->bits_left = bytes * 5 * 8;
-	uint64_t bits_left = s->bits_left;
+	s->word_count = (bytes + TD_EXTRA_DBG_MEMORY + 3) / sizeof( uint32_t );
+	s->bits_left = bytes * 8 + TD_EXTRA_DBG_MEMORY * 8;
+	int64_t bits_left = s->bits_left;
 
 	if ( options )
 	{
@@ -1514,12 +1497,12 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		tdHash* h = s->hashes + i;
 		h->next = h;
 		h->prev = h;
-		h->bucket = ~0;
 	}
 
 	int count = 0;
 	while ( s->window < s->in_end - 3 )
 	{
+		//TD_CHECK_MEM( );
 		if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
 		{
 			tdFlushEntries( s, 0 );
@@ -1552,19 +1535,18 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 		uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
 		tdHash* hash = s->hashes + hash_index;
-		hash = (tdHash*)malloc( sizeof( tdHash ) );
+		//hash = (tdHash*)malloc( sizeof( tdHash ) );
 
 		// Unlink the oldest node from its chain (if not in a chain the node
 		// only points to itself, so no harm done).
-		//hash->prev->next = hash->next;
-		//hash->next->prev = hash->prev;
+		hash->prev->next = hash->next;
+		hash->next->prev = hash->prev;
 
 		//tdPatchHash( s, hash );
 
 		hash->h = h;
 		hash->start = start;
 		s->buckets[ h ] = hash;
-		hash->bucket = h;
 
 		// Insert new node *before* the chain. This keeps the chain a circular
 		// doubly linked list, and the inserted node can be used as the sentinel
@@ -1665,7 +1647,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			s->len[ 257 + best_base_len ].freq++;
 			s->dst[ best_base_dst ].freq++;
 			TD_ASSERT( !strncmp( s->window, s->window - best_dst, best_len ) );
-			//printf( "%.*s", best_len, s->window );
+			TD_LOG( "%.*s", best_len, s->window );
 			s->window += best_len;
 			s->processed_length += best_len;
 
@@ -1677,7 +1659,6 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 			entry.base_dst = best_base_dst;
 			entry.symbol_index = 257 + best_base_len;
 			TD_ASSERT( entry.symbol_index > 256 < 288 );
-			entry.string = s->window;
 			TD_ASSERT( s->entry_count < TD_ENTRY_BUFFER_SIZE );
 			s->entries[ s->entry_count++ ] = entry;
 
@@ -1685,7 +1666,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		}
 
 	literal:
-		//printf( "%c", *s->window );
+		TD_LOG( "%c", *s->window );
 		tdLiteral( s, *s->window );
 	}
 
@@ -1702,13 +1683,13 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	tdFlush( s );
 	TD_CHECK_MEM( );
 
-	uint64_t bits_written = bits_left - s->bits_left;
-	uint64_t bytes_written = (bits_written + 7) / 8;
-	uint64_t out_size = bytes_written;
+	int64_t bits_written = bits_left - s->bits_left;
+	int64_t bytes_written = (bits_written + 7) / 8;
+	int64_t out_size = bytes_written;
 	if ( out_bytes ) *out_bytes = (int)out_size;
 	void* out = s->out;
 	free( s );
-	printf( "---\n" );
+	TD_LOG( "---\n" );
 	return out;
 }
 
