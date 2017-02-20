@@ -1,10 +1,14 @@
 ﻿/*
-	tinydeflate - v1.0
+	tinydeflate - v1.1
 
 	SUMMARY:
 
 		This header is a conglomeration of a DEFLATE compliant decompressor, and some
 		functions for dealing with PNGs (load, save and atlas creation).
+
+	Revision history:
+		1.0  (12/23/2016) initial release
+		1.01 (02/19/2017) tdDeflate -- custom compressor for dynamic trees
 
 
 	EXAMPLES:
@@ -38,6 +42,10 @@
 			// does *not* do any internal realloc! Will return errors if an
 			// attempt to overwrite the out buffer is made
 
+		DEFLATE memory into a stream of DEFLATE blocks (compresses file)
+			tdDeflate( "in.txt", "out.txt", 0 );
+
+
 	LONG WINDED INFO:
 
 		Most of this code is either a direct port of Richard Mitton's tigr library. A
@@ -48,7 +56,9 @@
 		reporting, etc. Also, a couple tricks were referenced from stb_image by Sean
 		Barrett. One was the lookup table for decoding, and I don't recall the other
 		tricks, though I am sure a few are laying around in the source. Cheers to Sean
-		for his great public domain library!
+		for his great public domain library! Also thanks to guys at Google for their
+		Zopfli library, some pieces of which made their way into this file after some
+		modifications (namely the Package-Merge algorithm).
 
 
 	ENCODING IMAGES:
@@ -137,6 +147,26 @@ int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 tdImage tdLoadPNG( const char *fileName );
 tdImage tdLoadPNGMem( const void *png_data, int png_length );
 
+// Used for tdDeflate and tdDeflateMem (can be NULL in both functions)
+typedef struct
+{
+	// 0 means infinite, caps internal chain searches to a finite number of searches.
+	// lower means more speed, but less compression
+	int max_chain_len;
+
+	// Performs lazy evaluation iterations. Generally only one or two will give any
+	// good results. Higher will heavily decrease performance and may worsen the
+	// overall compression ratio.
+	int do_lazy_search;
+} tdDeflateOptions;
+
+// DEFLATEs input file into a stream of DEFLATE blocks (compresses the file)
+// good for general purpose compression
+void* tdDeflate( const char* in_path, const char* out_path, tdDeflateOptions* options );
+
+// Same as above but operates in-memory only. Returns DEFLATE blocks as a stream of bytes.
+void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options );
+
 // read this whenever one of the above functions returns an error
 extern const char* g_tdDeflateErrorReason;
 
@@ -146,10 +176,29 @@ extern const char* g_tdDeflateErrorReason;
 	#include <assert.h>
 	#define TD_ASSERT assert
 
+	#if defined( _WIN32 )
+		#include <crtdbg.h>
+		#define TD_CHECK_MEM( ) \
+			do \
+			{ \
+				if ( !_CrtCheckMemory( ) ) \
+				{ \
+					_CrtDbgBreak( ); \
+				} \
+			} while( 0 )
+	#endif
+
+	#define TD_LOG printf
+
 #else
 
 	#define TD_ASSERT( ... )
+	#define TD_LOG( ... )
 
+#endif
+
+#if !defined( TD_CHECK_MEM )
+#define TD_CHECK_MEM( )
 #endif
 
 #define TINYDEFLATE_H
@@ -162,8 +211,9 @@ extern const char* g_tdDeflateErrorReason;
 #include <string.h> // memcpy
 
 const char* g_tdDeflateErrorReason;
-#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; return 0; } } while ( 0 )
-#define TD_CALL( X ) do { if ( !(X) ) goto td_error; } while ( 0 )
+#define TD_FAIL( ) do { goto td_err; } while ( 0 )
+#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
+#define TD_CALL( X ) do { if ( !(X) ) goto td_err; } while ( 0 )
 #define TD_LOOKUP_BITS 9
 #define TD_LOOKUP_COUNT (1 << TD_LOOKUP_BITS)
 #define TD_LOOKUP_MASK (TD_LOOKUP_COUNT - 1)
@@ -181,7 +231,7 @@ uint8_t g_tdPermutationOrder[ 19 ] = { 16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14
 uint8_t g_tdLenExtraBits[ 29 + 2 ] = { 0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0,  0,0 }; // 3.2.5
 uint32_t g_tdLenBase[ 29 + 2 ] = { 3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258,  0,0 }; // 3.2.5
 uint8_t g_tdDistExtraBits[ 30 + 2 ] = { 0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13,  0,0 }; // 3.2.5
-uint32_t g_tdDistBase[ 30 + 2 ] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577 }; // 3.2.5
+uint32_t g_tdDistBase[ 30 + 2 ] = { 1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577, 0,0 }; // 3.2.5
 
 typedef struct
 {
@@ -197,6 +247,7 @@ typedef struct
 
 	char* out;
 	char* out_end;
+	char* begin;
 
 	uint16_t lookup[ TD_LOOKUP_COUNT ];
 	uint32_t lit[ 288 ];
@@ -207,7 +258,7 @@ typedef struct
 	uint32_t nlen;
 } tdIState;
 
-TD_INLINE static int tdWouldOverflow( int bits_left, int num_bits )
+TD_INLINE static int tdWouldOverflow( int64_t bits_left, int num_bits )
 {
 	return bits_left - num_bits < 0;
 }
@@ -215,7 +266,7 @@ TD_INLINE static int tdWouldOverflow( int bits_left, int num_bits )
 TD_INLINE static char* tdPtr( tdIState* s )
 {
 	TD_ASSERT( !(s->bits_left & 7) );
-	return ((char*)s->words) + s->count;
+	return (char*)(s->words + s->word_index) - (s->count / 8);
 }
 
 TD_INLINE static uint64_t tdPeakBits( tdIState* s, int num_bits_to_read )
@@ -249,6 +300,7 @@ TD_INLINE static uint32_t tdConsumeBits( tdIState* s, int num_bits_to_read )
 	s->bits >>= num_bits_to_read;
 	s->count -= num_bits_to_read;
 	s->bits_left -= num_bits_to_read;
+	TD_LOG( "read %d %d\n", bits, num_bits_to_read );
 	return bits;
 }
 
@@ -300,21 +352,19 @@ TD_INLINE static uint32_t tdRev( uint32_t a, uint32_t len )
 }
 
 // RFC 1951 section 3.2.2
-// Slots arrays starts as "bl_count"
-// Added 2.5) to stransform slots from "bl_count" into an array that
-// represents first indices for each code length in the final tree
 static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 {
-	int n, codes[16], first[16], counts[16]={0};
+	int n, codes[ 16 ], first[ 16 ], counts[ 16 ] = { 0 };
 
 	// Frequency count.
-	for (n=0;n<sym_count;n++) counts[lens[n]]++;
+	for ( n = 0; n < sym_count; n++ ) counts[ lens[ n ] ]++;
 
 	// Distribute codes.
-	counts[0] = codes[0] = first[0] = 0;
-	for (n=1;n<=15;n++) {
-		codes[n] = (codes[n-1] + counts[n-1]) << 1;
-		first[n] = first[n-1] + counts[n-1];
+	counts[ 0 ] = codes[ 0 ] = first[ 0 ] = 0;
+	for ( n = 1; n <= 15; ++n )
+	{
+		codes[ n ] = (codes[ n - 1 ] + counts[ n - 1 ]) << 1;
+		first[ n ] = first[ n - 1 ] + counts[ n - 1 ];
 	}
 
 	if ( s ) memset( s->lookup, 0, sizeof( 512 * sizeof( uint32_t ) ) );
@@ -353,13 +403,17 @@ static int tdStored( tdIState* s )
 
 	// 3.2.4
 	// read LEN and NLEN, should complement each other
-	uint32_t LEN = tdReadBits( s, 16 );
-	uint32_t NLEN = tdReadBits( s, 16 );
-	TD_CHECK( LEN == ~NLEN, "Failed to find LEN and NLEN as complements within stored (uncompressed) stream." );
-	TD_CHECK( s->bits_left * 8 <= (int)LEN, "Stored block extends beyond end of input stream." );
-	memcpy( s->out, tdPtr( s ), LEN );
+	uint16_t LEN = tdReadBits( s, 16 );
+	uint16_t NLEN = tdReadBits( s, 16 );
+	TD_CHECK( LEN == (uint16_t)(~NLEN), "Failed to find LEN and NLEN as complements within stored (uncompressed) stream." );
+	TD_CHECK( s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream." );
+	char* p = tdPtr( s );
+	memcpy( s->out, p, LEN );
 	s->out += LEN;
 	return 1;
+
+td_err:
+	return 0;
 }
 
 // 3.2.6
@@ -396,15 +450,15 @@ static int tdDecode( tdIState* s, uint32_t* tree, int hi )
 
 static int tdTryLookup( tdIState* s, uint32_t* tree, int hi )
 {
-	uint64_t bits = tdPeakBits( s, 16 );
-	int index = bits & TD_LOOKUP_MASK;
-	uint32_t code = s->lookup[ index ];
+	//uint64_t bits = tdPeakBits( s, 16 );
+	//int index = bits & TD_LOOKUP_MASK;
+	//uint32_t code = s->lookup[ index ];
 
-	if ( code )
-	{
-		tdConsumeBits( s, code >> 9 );
-		return code & TD_LOOKUP_MASK;
-	}
+	//if ( code )
+	//{
+	//	tdConsumeBits( s, code >> 9 );
+	//	return code & TD_LOOKUP_MASK;
+	//}
 
 	return tdDecode( s, tree, hi );
 }
@@ -422,7 +476,7 @@ static int tdDynamic( tdIState* s )
 		lenlens[ g_tdPermutationOrder[ i ] ] = (uint8_t)tdReadBits( s, 3 );
 
 	// Build the tree for decoding code lengths
-	int lenlens2[19] = { 0 };
+	int lenlens2[ 19 ] = { 0 };
 	for ( int i = 0; i < 19; ++i ) lenlens2[ i ] = lenlens[ i ];
 	s->nlen = tdBuild( 0, s->len, lenlens, 19 );
 	uint8_t lens[ 288 + 32 ];
@@ -447,8 +501,7 @@ static int tdDynamic( tdIState* s )
 // 3.2.3
 static int tdBlock( tdIState* s )
 {
-	printf( "the lz77 data\n" );
-	for (;;)
+	while ( 1 )
 	{
 		int symbol = tdTryLookup( s, s->lit, s->nlit );
 
@@ -465,7 +518,7 @@ static int tdBlock( tdIState* s )
 			int length = tdReadBits( s, g_tdLenExtraBits[ symbol ] ) + g_tdLenBase[ symbol ];
 			int distance_symbol = tdDecode( s, s->dst, s->ndst );
 			int backwards_distance = tdReadBits( s, g_tdDistExtraBits[ distance_symbol ] ) + g_tdDistBase[ distance_symbol ];
-			if ( s->out + length > s->out_end ) __debugbreak( );
+			TD_CHECK( s->out - backwards_distance >= s->begin, "Attempted to write before out buffer (invalid backwards distance)." );
 			TD_CHECK( s->out + length <= s->out_end, "Attempted to overwrite out buffer while outputting a string." );
 			char* src = s->out - backwards_distance;
 			char* dst = s->out;
@@ -484,6 +537,9 @@ static int tdBlock( tdIState* s )
 	}
 
 	return 1;
+
+td_err:
+	return 0;
 }
 
 // 3.2.3
@@ -507,7 +563,9 @@ int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 
 	s->out = (char*)out;
 	s->out_end = s->out + out_bytes;
+	s->begin = (char*)out;
 
+	int count = 0;
 	int bfinal;
 	do
 	{
@@ -521,24 +579,25 @@ int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 		case 2: tdDynamic( s ); TD_CALL( tdBlock( s ) ); break;
 		case 3: TD_CHECK( 0, "Detected unknown block type within input stream." );
 		}
+
+		++count;
 	}
 	while ( !bfinal );
 
 	free( s );
 	return 1;
 
-td_error:
+td_err:
 	free( s );
 	return 0;
 }
 
-// if TD_HASH_COUNT is set to >= TD_WINDOW_SIZE we can use a rolling buffer
 #define TD_WINDOW_SIZE       (1024 * 32)
-#define TD_HASH_COUNT        TD_WINDOW_SIZE
-#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE * 4)
+#define TD_HASH_COUNT        (TD_WINDOW_SIZE)
+#define TD_ENTRY_BUFFER_SIZE (TD_WINDOW_SIZE / 16)
 
-#if TD_HASH_COUNT < TD_WINDOW_SIZE
-#error rolling buffer implementation requires worst case size minimum for hash entry memory
+#if TD_HASH_COUNT > 4294967294
+#error (uint32_t)~0) - 1 is the max size allowed
 #endif
 
 TD_INLINE static uint32_t djb2( char* str, char* end )
@@ -561,6 +620,7 @@ typedef struct tdHash
 	uint32_t h;
 	unsigned char* start;
 	struct tdHash* next;
+	struct tdHash* prev;
 } tdHash;
 
 typedef struct
@@ -570,35 +630,8 @@ typedef struct
 	uint16_t symbol_index;
 	uint16_t len;
 	int dst;
+	int cost;
 } tdEntry;
-
-typedef struct
-{
-	int key;
-	int val;
-} tdItem;
-
-typedef struct
-{
-	union
-	{
-		uint16_t freq;
-		uint16_t code;
-	};
-	union
-	{
-		uint16_t parent;
-		uint16_t len;
-	};
-
-	uint16_t depth;
-	uint16_t original;
-
-#if TD_DEBUG_CHECKS
-	uint16_t left;
-	uint16_t right;
-#endif
-} tdNode;
 
 typedef struct
 {
@@ -617,17 +650,18 @@ typedef struct
 	tdLeaf len[ 286 ];
 	tdLeaf dst[ 30 ];
 
+	int processed_length;
 	uint64_t bits;
 	int count;
 	uint32_t* words;
 	int word_count;
 	int word_index;
-	int bits_left;
+	int64_t bits_left;
 
 	int max_chain_len;
 	int do_lazy_search;
 
-	int hash_rolling;
+	uint32_t hash_rolling;
 	tdHash* buckets[ TD_HASH_COUNT ];
 	tdHash hashes[ TD_HASH_COUNT ];
 
@@ -635,30 +669,21 @@ typedef struct
 	tdEntry entries[ TD_ENTRY_BUFFER_SIZE ];
 } tdDState;
 
-typedef struct
-{
-	int max_chain_len;
-	int do_lazy_search;
-} tdDeflateOptions;
-
-#undef TD_CHECK
-#define TD_FAIL( ) do { goto td_error; } while ( 0 )
-#define TD_CHECK( X, Y ) do { if ( !(X) ) { g_tdDeflateErrorReason = Y; TD_FAIL( ); } } while ( 0 )
-
 static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write )
 {
 	TD_ASSERT( num_bits_to_write <= 32 );
 	TD_ASSERT( s->bits_left > 0 );
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
+	TD_LOG( "write %d %d\n", value, num_bits_to_write );
 
-	printf( "val, bits: %d, %d\n", value, num_bits_to_write );
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
 	s->bits_left -= num_bits_to_write;
 
 	if ( s->count >= 32 )
 	{
+		TD_ASSERT( s->word_index < s->word_count );
 		s->words[ s->word_index ] = (uint32_t)(s->bits & ((uint32_t)~0));
 		s->bits >>= 32;
 		s->count -= 32;
@@ -681,7 +706,7 @@ TD_INLINE static void tdMatchIndices( int len, int dst, int* base_len, int* base
 {
 	TD_ASSERT( dst >= 0 && dst <= 32768 );
 	int dst_index = 0;
-	for ( int i = 0; i < 31; ++i )
+	for ( int i = 0; i < 30; ++i )
 	{
 		int base = g_tdDistBase[ i ];
 		if ( base <= dst ) dst_index = i;
@@ -694,8 +719,8 @@ TD_INLINE static void tdMatchIndices( int len, int dst, int* base_len, int* base
 		if ( base <= len ) len_index = i;
 		else break;
 	}
-	TD_ASSERT( len_index >=0 && len_index <= 29 );
-	TD_ASSERT( dst_index >=0 && dst_index <= 31 );
+	TD_ASSERT( len_index >=0 && len_index < 29 );
+	TD_ASSERT( dst_index >=0 && dst_index < 30 );
 	*base_len = len_index;
 	*base_dst = dst_index;
 }
@@ -706,480 +731,670 @@ TD_INLINE static int tdMatchCost( int len, int len_bits, int dst_bits )
 	return (len_bits + dst_bits) - match_bits;
 }
 
-#include <math.h> // log2f
-
-TD_INLINE static float tdEntropy( tdLeaf freq_in[ 286 ] )
+TD_INLINE static int tdLiteral( tdDState* s, int symbol )
 {
-	int sum = 0;
-	for ( int i = 0; i < 286; ++i ) sum += freq_in[ i ].freq;
-	float fsum = (float)sum;
-	float entropy = 0;
-	for ( int i = 0; i < 286; ++i )
-	{
-		int freq_int = freq_in[ i ].freq;
-		if ( freq_int )
-		{
-			float freq = (float)freq_int / fsum;
-			entropy -= freq * log2f( freq );
-		}
-	}
-	return entropy;
-}
+	if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
+		return 0;
 
-TD_INLINE static void tdLiteral( tdDState* s, int symbol )
-{
-	if ( symbol < 0 ) __debugbreak( );
 	tdEntry entry = { 0 };
+	TD_ASSERT( symbol >= 0 && symbol <= 256 );
 	entry.symbol_index = symbol;
 	s->window++;
 	s->entries[ s->entry_count++ ] = entry;
 	s->len[ symbol ].freq++;
+	s->processed_length += 1;
+
+	return 1;
 }
 
-typedef struct Node Node;
-
-/*
-Nodes forming chains. Also used to represent leaves.
-*/
-struct Node {
-  int weight;  /* Total weight (symbol count) of this chain. */
-  Node* tail;  /* Previous node(s) of this chain, or 0 if none. */
-  int count;  /* Leaf symbol index, or number of leaves before this chain. */
+typedef struct tdNode tdNode;
+struct tdNode
+{
+	int weight;   // Total weight (symbol count) of this chain.
+	tdNode* tail; // Previous node(s) of this chain, or 0 if none.
+	int count;    // Leaf symbol index, or number of leaves before this chain.
 };
 
-/*
-Memory pool for nodes.
-*/
-typedef struct NodePool {
-  Node* next;  /* Pointer to a free node in the pool. */
-} NodePool;
+typedef struct
+{
+	tdNode* A;
+	tdNode* B;
+} tdNodePair;
 
-/*
-Initializes a chain node with the given values and marks it as in use.
-*/
-static void InitNode(int weight, int count, Node* tail, Node* node) {
+TD_INLINE static void tdInitNode( tdNode* node, int weight, int count, tdNode* tail )
+{
   node->weight = weight;
   node->count = count;
   node->tail = tail;
 }
 
-/*
-Performs a Boundary Package-Merge step. Puts a new chain in the given list. The
-new chain is, depending on the weights, a leaf or a combination of two chains
-from the previous list.
-lists: The lists of chains.
-maxbits: Number of lists.
-leaves: The leaves, one per symbol.
-numsymbols: Number of leaves.
-pool: the node memory pool.
-index: The index of the list in which a new chain or leaf is required.
-*/
-static void BoundaryPM(Node* (*lists)[2], Node* leaves, int numsymbols,
-                       NodePool* pool, int index) {
-  Node* newchain;
-  Node* oldchain;
-  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+// Performs a Boundary Package-Merge step. Puts a new chain in the given list. The
+// new chain is, depending on the weights, a leaf or a combination of two chains
+// from the previous list. From the paper "A Fast and Space-Economical Algorithm
+// for Length-Limited Coding" by Katajainen et al.
+static void tdBoundaryPM( tdNodePair* lists, tdNode* leaves, int numsymbols, tdNode** pool, int index )
+{
+	tdNode* newchain;
+	tdNode* oldchain;
+	int lastcount = lists[ index ].B->count;
+	if ( index == 0 && lastcount >= numsymbols ) return;
 
-  if (index == 0 && lastcount >= numsymbols) return;
+	newchain = (*pool)++;
+	oldchain = lists[ index ].B;
 
-  newchain = pool->next++;
-  oldchain = lists[index][1];
+	// These are set up before the recursive calls below, so that there is a list
+	// pointing to the new node, to let the garbage collection know it's in use
+	lists[ index ].A = oldchain;
+	lists[ index ].B = newchain;
 
-  /* These are set up before the recursive calls below, so that there is a list
-  pointing to the new node, to let the garbage collection know it's in use. */
-  lists[index][0] = oldchain;
-  lists[index][1] = newchain;
+	if ( !index )
+	{
+		// New leaf node in list 0
+		tdInitNode( newchain, leaves[ lastcount ].weight, lastcount + 1, 0 );
+	}
 
-  if (index == 0) {
-    /* New leaf node in list 0. */
-    InitNode(leaves[lastcount].weight, lastcount + 1, 0, newchain);
-  } else {
-    int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
-    if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
-      /* New leaf inserted in list, so count is incremented. */
-      InitNode(leaves[lastcount].weight, lastcount + 1, oldchain->tail,
-          newchain);
-    } else {
-      InitNode(sum, lastcount, lists[index - 1][1], newchain);
-      /* Two lookahead chains of previous list used up, create new ones. */
-      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
-      BoundaryPM(lists, leaves, numsymbols, pool, index - 1);
-    }
-  }
+	else
+	{
+		int sum = lists[ index - 1 ].A->weight + lists[ index - 1 ].B->weight;
+		if ( lastcount < numsymbols && sum > leaves[ lastcount ].weight )
+		{
+			// New leaf inserted in list, so count is incremented
+			tdInitNode( newchain, leaves[lastcount].weight, lastcount + 1, oldchain->tail );
+		}
+
+		else
+		{
+			tdInitNode( newchain, sum, lastcount, lists[ index - 1 ].B );
+			// Two lookahead chains of previous list used up, create new ones
+			tdBoundaryPM( lists, leaves, numsymbols, pool, index - 1 );
+			tdBoundaryPM( lists, leaves, numsymbols, pool, index - 1 );
+		}
+	}
 }
 
-static void BoundaryPMFinal(Node* (*lists)[2],
-    Node* leaves, int numsymbols, NodePool* pool, int index) {
-  int lastcount = lists[index][1]->count;  /* Count of last chain of list. */
+TD_INLINE static void tdBoundaryPMFinal( tdNodePair* lists, tdNode* leaves, int numsymbols, tdNode** pool, int index )
+{
+	int lastcount = lists[ index ].B->count;
+	int sum = lists[ index - 1 ].A->weight + lists[ index - 1 ].B->weight;
 
-  int sum = lists[index - 1][0]->weight + lists[index - 1][1]->weight;
+	if ( lastcount < numsymbols && sum > leaves[ lastcount ].weight )
+	{
+		tdNode* newchain = (*pool);
+		tdNode* oldchain = lists[ index ].B->tail;
 
-  if (lastcount < numsymbols && sum > leaves[lastcount].weight) {
-    Node* newchain = pool->next;
-    Node* oldchain = lists[index][1]->tail;
-
-    lists[index][1] = newchain;
-    newchain->count = lastcount + 1;
-    newchain->tail = oldchain;
-  } else {
-    lists[index][1]->tail = lists[index - 1][1];
-  }
+		lists[ index ].B = newchain;
+		newchain->count = lastcount + 1;
+		newchain->tail = oldchain;
+	}
+	else lists[ index ].B->tail = lists[ index - 1 ].B;
 }
 
-/*
-Initializes each list with as lookahead chains the two leaves with lowest
-weights.
-*/
-static void InitLists(
-    NodePool* pool, const Node* leaves, int maxbits, Node* (*lists)[2]) {
-  int i;
-  Node* node0 = pool->next++;
-  Node* node1 = pool->next++;
-  InitNode(leaves[0].weight, 1, 0, node0);
-  InitNode(leaves[1].weight, 2, 0, node1);
-  for (i = 0; i < maxbits; i++) {
-    lists[i][0] = node0;
-    lists[i][1] = node1;
-  }
+// Initializes each list with as lookahead chains the two leaves with lowest weights
+TD_INLINE static void tdInitLists( tdNode** pool, const tdNode* leaves, int maxbits, tdNodePair* lists )
+{
+	tdNode* node0 = (*pool)++;
+	tdNode* node1 = (*pool)++;
+	tdInitNode( node0, leaves[ 0 ].weight, 1, 0 );
+	tdInitNode( node1, leaves[ 1 ].weight, 2, 0 );
+	for ( int i = 0; i < maxbits; i++ )
+	{
+		lists[ i ].A = node0;
+		lists[ i ].B = node1;
+	}
 }
 
-/*
-Converts result of boundary package-merge to the bitlengths. The result in the
-last chain of the last list contains the amount of active leaves in each list.
-chain: Chain to extract the bit length from (last chain from last list).
-*/
-static void ExtractBitLengths(Node* chain, Node* leaves, unsigned* bitlengths) {
-  int counts[16] = {0};
-  unsigned end = 16;
-  unsigned ptr = 15;
-  unsigned value = 1;
-  Node* node;
-  int val;
+TD_INLINE static void tdExtractBitLengths( tdNode* chain, tdNode* leaves, unsigned* bitlengths ) 
+{
+	int counts[ 16 ] = { 0 };
+	unsigned end = 16;
+	unsigned ptr = 15;
+	unsigned value = 1;
 
-  for (node = chain; node; node = node->tail) {
-    counts[--end] = node->count;
-  }
+	for ( tdNode* node = chain; node; node = node->tail )
+		counts[ --end ] = node->count;
 
-  val = counts[15];
-  while (ptr >= end) {
-    for (; val > counts[ptr - 1]; val--) {
-      bitlengths[leaves[val - 1].count] = value;
-    }
-    ptr--;
-    value++;
-  }
+	int val = counts[ 15 ];
+	while ( ptr >= end )
+	{
+		for ( ; val > counts[ ptr - 1 ]; --val )
+			bitlengths[ leaves[ val - 1 ].count ] = value;
+		ptr--;
+		value++;
+	}
 }
 
-/*
-Comparator for sorting the leaves. Has the function signature for qsort.
-*/
-static int LeafComparator(const void* a, const void* b) {
-  return ((const Node*)a)->weight - ((const Node*)b)->weight;
+TD_INLINE static int tdLeafPred( tdNode* a, tdNode* b )
+{
+  return a->weight - b->weight;
 }
 
-int ZopfliLengthLimitedCodeLengths(
-    const int* frequencies, int n, int maxbits, unsigned* bitlengths) {
-  NodePool pool;
-  int i;
-  int numsymbols = 0;  /* Amount of symbols with frequency > 0. */
-  int numBoundaryPMRuns;
-  Node* nodes;
+TD_INLINE static void tdQSortNodes( tdNode* items, int count )
+{
+	if ( count <= 1 ) return;
 
-  /* Array of lists of chains. Each list requires only two lookahead chains at
-  a time, so each list is a array of two Node*'s. */
-  Node* (*lists)[2];
+	tdNode pivot = items[ count - 1 ];
+	int low = 0;
+	for ( int i = 0; i < count - 1; ++i )
+	{
+		if ( tdLeafPred( items + i, &pivot ) )
+		{
+			tdNode tmp = items[ i ];
+			items[ i ] = items[ low ];
+			items[ low ] = tmp;
+			low++;
+		}
+	}
 
-  /* One leaf per symbol. Only numsymbols leaves will be used. */
-  Node* leaves = (Node*)malloc(n * sizeof(*leaves));
-
-  /* Initialize all bitlengths at 0. */
-  for (i = 0; i < n; i++) {
-    bitlengths[i] = 0;
-  }
-
-  /* Count used symbols and place them in the leaves. */
-  for (i = 0; i < n; i++) {
-    if (frequencies[i]) {
-      leaves[numsymbols].weight = frequencies[i];
-      leaves[numsymbols].count = i;  /* Index of symbol this leaf represents. */
-      numsymbols++;
-    }
-  }
-
-  /* Check special cases and error conditions. */
-  if ((1 << maxbits) < numsymbols) {
-    free(leaves);
-    return 1;  /* Error, too few maxbits to represent symbols. */
-  }
-  if (numsymbols == 0) {
-    free(leaves);
-    return 0;  /* No symbols at all. OK. */
-  }
-  if (numsymbols == 1) {
-    bitlengths[leaves[0].count] = 1;
-    free(leaves);
-    return 0;  /* Only one symbol, give it bitlength 1, not 0. OK. */
-  }
-  if (numsymbols == 2) {
-    bitlengths[leaves[0].count]++;
-    bitlengths[leaves[1].count]++;
-    free(leaves);
-    return 0;
-  }
-
-  /* Sort the leaves from lightest to heaviest. Add count into the same
-  variable for stable sorting. */
-  for (i = 0; i < numsymbols; i++) {
-    if (leaves[i].weight >=
-        ((int)1 << (sizeof(leaves[0].weight) * CHAR_BIT - 9))) {
-      free(leaves);
-      return 1;  /* Error, we need 9 bits for the count. */
-    }
-    leaves[i].weight = (leaves[i].weight << 9) | leaves[i].count;
-  }
-  qsort(leaves, numsymbols, sizeof(Node), LeafComparator);
-  for (i = 0; i < numsymbols; i++) {
-    leaves[i].weight >>= 9;
-  }
-
-  if (numsymbols - 1 < maxbits) {
-    maxbits = numsymbols - 1;
-  }
-
-  /* Initialize node memory pool. */
-  nodes = (Node*)malloc(maxbits * 2 * numsymbols * sizeof(Node));
-  pool.next = nodes;
-
-  lists = (Node* (*)[2])malloc(maxbits * sizeof(*lists));
-  InitLists(&pool, leaves, maxbits, lists);
-
-  /* In the last list, 2 * numsymbols - 2 active chains need to be created. Two
-  are already created in the initialization. Each BoundaryPM run creates one. */
-  numBoundaryPMRuns = 2 * numsymbols - 4;
-  for (i = 0; i < numBoundaryPMRuns - 1; i++) {
-    BoundaryPM(lists, leaves, numsymbols, &pool, maxbits - 1);
-  }
-  BoundaryPMFinal(lists, leaves, numsymbols, &pool, maxbits - 1);
-
-  ExtractBitLengths(lists[maxbits - 1][1], leaves, bitlengths);
-
-  free(lists);
-  free(leaves);
-  free(nodes);
-  return 0;  /* OK. */
+	items[ count - 1 ] = items[ low ];
+	items[ low ] = pivot;
+	tdQSortNodes( items, low );
+	tdQSortNodes( items + low + 1, count - 1 - low );
 }
 
-void ZopfliLengthsToSymbols(const unsigned* lengths, int n, unsigned maxbits,
-                            unsigned* symbols) {
-  int* bl_count = (int*)malloc(sizeof(int) * (maxbits + 1));
-  int* next_code = (int*)malloc(sizeof(int) * (maxbits + 1));
-  unsigned bits, i;
-  unsigned code;
+int tdCodeLengths( int* freq, int count, int maxbits, int* bitlengths )
+{
+	int numsymbols = 0;
+	int numBoundaryPMRuns;
+	tdNode* nodes = 0;
+	tdNodePair* lists = 0;
 
-  for (i = 0; i < (unsigned)n; i++) {
-    symbols[i] = 0;
-  }
+	// One leaf per symbol. Only numsymbols leaves will be used
+	tdNode* leaves = (tdNode*)malloc( sizeof( tdNode ) * count );
+	memset( bitlengths, 0, sizeof( int ) * count );
 
-  /* 1) Count the number of codes for each code length. Let bl_count[N] be the
-  number of codes of length N, N >= 1. */
-  for (bits = 0; bits <= maxbits; bits++) {
-    bl_count[bits] = 0;
-  }
-  for (i = 0; i < (unsigned)n; i++) {
-    assert(lengths[i] <= maxbits);
-    bl_count[lengths[i]]++;
-  }
-  /* 2) Find the numerical value of the smallest code for each code length. */
-  code = 0;
-  bl_count[0] = 0;
-  for (bits = 1; bits <= maxbits; bits++) {
-    code = (code + bl_count[bits-1]) << 1;
-    next_code[bits] = code;
-  }
-  /* 3) Assign numerical values to all codes, using consecutive values for all
-  codes of the same length with the base values determined at step 2. */
-  for (i = 0;  i < (unsigned)n; i++) {
-    unsigned len = lengths[i];
-    if (len != 0) {
-      symbols[i] = next_code[len];
-      next_code[len]++;
-    }
-  }
+	for ( int i = 0; i < count; i++ )
+	{
+		if ( freq[ i ] )
+		{
+			leaves[ numsymbols ].weight = freq[ i ];
+			leaves[ numsymbols ].count = i;
+			numsymbols++;
+		}
+	}
 
-  free(bl_count);
-  free(next_code);
+	TD_CHECK( (1 << maxbits) >= numsymbols, "Not enough maxbits for this symbol count." );
+
+	if ( !numsymbols ) goto td_ok;
+	// Only one symbol, give it bitlength 1, not 0. OK.
+	if ( numsymbols == 1 )
+	{
+		bitlengths[ leaves[ 0 ].count ] = 1;
+		goto td_ok;
+	}
+	if ( numsymbols == 2 )
+	{
+		bitlengths[ leaves[ 0 ].count ]++;
+		bitlengths[ leaves[ 1 ].count ]++;
+		goto td_ok;
+	}
+
+	// Sort the leaves from lightest to heaviest. Add count into the same variable for stable sorting.
+	for ( int i = 0; i < numsymbols; i++ )
+	{
+		TD_CHECK( leaves[ i ].weight < ((int)1 << (sizeof( leaves[ 0 ].weight ) * CHAR_BIT - 9)), "9 bits needed for the count." );
+		leaves[ i ].weight = (leaves[ i ].weight << 9) | leaves[ i ].count;
+	}
+
+	tdQSortNodes( leaves, numsymbols );
+
+	for ( int i = 0; i < numsymbols; i++ )
+		leaves[ i ].weight >>= 9;
+
+	if ( numsymbols - 1 < maxbits )
+		maxbits = numsymbols - 1;
+
+	nodes = (tdNode*)malloc( maxbits * 2 * numsymbols * sizeof( tdNode ) );
+	tdNode* pool = nodes;
+
+	// Array of lists of chains. Each list requires only two lookahead chains at a time,
+	// so each list is a array of two Node*'s.
+	lists = (tdNodePair*)malloc( sizeof( tdNodePair ) * maxbits );
+	tdInitLists( &pool, leaves, maxbits, lists );
+
+	// In the last list, 2 * numsymbols - 2 active chains need to be created. Two are
+	// already created in the initialization. Each BoundaryPM run creates one.
+	numBoundaryPMRuns = 2 * numsymbols - 4;
+	for ( int i = 0; i < numBoundaryPMRuns - 1; ++i )
+		tdBoundaryPM( lists, leaves, numsymbols, &pool, maxbits - 1 );
+	tdBoundaryPMFinal( lists, leaves, numsymbols, &pool, maxbits - 1 );
+
+	tdExtractBitLengths( lists[ maxbits - 1 ].B, leaves, bitlengths );
+
+td_ok:
+	free( lists );
+	free( leaves );
+	free( nodes );
+	return 1;
+
+td_err:
+	free( lists );
+	free( leaves );
+	free( nodes );
+	return 0;
 }
 
-void tdMakeTree( tdLeaf* tree, int count )
+// RFC-1951 section 3.2.2
+static void tdLengthsToSymbols( unsigned* lengths, int count, int maxbits, unsigned* symbols )
+{
+	int bl_count[ 16 ] = { 0 };
+	int next_code[ 16 ];
+	memset( symbols, 0, sizeof( unsigned ) * count );
+
+	// 1)
+	//Count the number of codes for each code length. Let bl_count[ N ] be the
+	// number of codes of length N, N >= 1
+	for ( int i = 0; i < count; i++ )
+	{
+		TD_ASSERT( lengths[ i ] <= (unsigned)maxbits );
+		bl_count[ lengths[ i ] ]++;
+	}
+
+	// 2)
+	// Find the numerical value of the smallest code for each code length
+	int code = 0;
+	bl_count[ 0 ] = 0;
+	for ( int bits = 1; bits <= maxbits; bits++ )
+	{
+		code = (code + bl_count[ bits - 1 ]) << 1;
+		next_code[ bits ] = code;
+	}
+
+	// 3)
+	// Assign numerical values to all codes, using consecutive values for all
+	// codes of the same length with the base values determined at step 2
+	for ( int i = 0;  i < count; i++ )
+	{
+		unsigned len = lengths[ i ];
+		if ( len )
+		{
+			symbols[ i ] = next_code[ len ];
+			next_code[ len ]++;
+		}
+	}
+}
+
+int tdMakeTree( tdLeaf* tree, int count, int max_bits )
 {
 	int freq[ 288 ] = { 0 };
 	int lens[ 288 ] = { 0 };
 	int code[ 288 ] = { 0 };
 	for ( int i = 0; i < count; ++i ) freq[ i ] = tree[ i ].freq;
-	ZopfliLengthLimitedCodeLengths( freq, count, 15, lens );
-	ZopfliLengthsToSymbols(lens, count, 15, code);
+	TD_CALL( tdCodeLengths( freq, count, max_bits, lens ) );
+	tdLengthsToSymbols( lens, count, max_bits, code );
 	for ( int i = 0; i < count; ++i )
 	{
 		tree[ i ].code = code[ i ];
 		tree[ i ].freq = freq[ i ];
 		tree[ i ].len = lens[ i ];
 	}
+
+	return 1;
+
+td_err:
+	return 0;
 }
 
-TD_INLINE static int tdRun( tdLeaf* tree, int i, int N, int match )
+static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengths )
 {
-	int start = i - 1;
-	while ( i < N )
-	{
-		tdLeaf* symbol = tree + i;
-		if ( symbol->len != match ) return i - start;
-		++i;
-	}
-	return i - start;
-}
-
-static int tdRLE( tdLeaf* tree, int size, int* rle, int* rle_bits, int* rle_counts )
-{
-	int rle_count = 0;
-	for ( int i = 0; i < size; )
-	{
-		int symbol = tree[ i ].len;
-		TD_ASSERT( !(symbol & ~0xF) );
-		int run = tdRun( tree, i + 1, size, symbol );
-		i += run;
-
-		if ( i == size && !symbol ) break;
-
-		if ( !symbol && run >= 3 )
-		{
-			while ( run >= 11 )
-			{
-				int count = run;
-				if ( count > 138 ) count = 138;
-				rle_bits[ rle_count ] = count - 11;
-				rle[ rle_count++ ] = 18;
-				rle_counts[ 18 ]++;
-				run -= count;
-			}
-
-			while ( run >= 3 )
-			{
-				int count = run;
-				if ( count > 10 ) count = 10;
-				rle_bits[ rle_count ] = count - 3;
-				rle[ rle_count++ ] = 17;
-				rle_counts[ 17 ]++;
-				run -= count;
-			}
-		}
-
-		if ( run >= 4 )
-		{
-			--run;
-			rle_counts[ symbol ]++;
-			rle_bits[ rle_count ] = 0;
-			rle[ rle_count++ ] = symbol;
-
-			while ( run >= 3 )
-			{
-				int count = run;
-				if ( count > 6 ) count = 6;
-				rle_bits[ rle_count ] = count - 3;
-				rle[ rle_count++ ] = 16;
-				rle_counts[ 16 ]++;
-				run -= count;
-			}
-		}
-
-		rle_counts[ symbol ] += run;
-		while ( run > 0 )
-		{
-			rle_bits[ rle_count ] = 0;
-			rle[ rle_count++ ] = symbol;
-			--run;
-		}
-	}
-	return rle_count;
-}
-
-static int tdWriteTree( tdDState* s, tdLeaf* len, tdLeaf* dst, int size_only )
-{
-	int nlit = 286 - 257;
-	int ndst = 32 - 1;
-	int nlen = 15;
-
 	int rle[ 286 + 32 ];
 	int rle_bits[ 286 + 32 ];
-	int rle_counts[ 19 ] = { 0 };
+	int rle_index = 0;
+	int hlit = 29; // 286 - 257
+	int hdist = 29; // 32 - 1, but gzip does not like hdist > 29
+	int clcounts[ 19 ] = { 0 };
+	unsigned clcl[ 19 ];
+	unsigned clsymbols[ 19 ];
 
-	int rle_count = tdRLE( len, 286, rle, rle_bits, rle_counts );
-	rle_count += tdRLE( dst, 32, rle + rle_count, rle_bits + rle_count, rle_counts );
+	// trim zeros trailing
+	while ( hlit > 0 && !ll_lengths[ 257 + hlit - 1 ] ) hlit--;
+	while ( hdist > 0 && !d_lengths[ 1 + hdist - 1 ] ) hdist--;
+	int hlit2 = hlit + 257;
+	int lld_total = hlit2 + hdist + 1;
 
-	tdLeaf lenlen_tree[ 19 ] = { 0 };
-	int lenlens[ 19 ] = { 0 };
-	for ( int i = 0; i < 19; ++i ) lenlen_tree[ i ].freq = rle_counts[ i ];
-	tdMakeTree( lenlen_tree, 19 );
-	for ( int i = 0; i < 19; ++i ) lenlens[ i ] = lenlen_tree[ i ].len;
-	for ( int i = 0; i < 19; ++i ) TD_ASSERT( lenlens[ i ] >= 0 && lenlens[ i ] <= 7 );
-
-	while ( nlit > 0 && !len[ 257 + nlit - 1 ].len ) nlit--;
-	while ( ndst > 0 && !dst[ 1 + ndst - 1 ].len ) ndst--;
-	while ( nlen > 0 && !lenlens[ g_tdPermutationOrder[ nlen + 4 - 1 ] ] ) nlen--;
-	TD_ASSERT( nlit >= 0 && nlit <= (286 - 257) );
-	TD_ASSERT( ndst >= 0 && ndst <= (32 - 1) );
-	TD_ASSERT( nlen >= 0 && nlen <= (19 - 4) );
-
-	int bits_used = s->bits_left;
-	if ( !size_only )
+	// run RLE from RFC-1951 section 3.2.7
+	for ( int i = 0; i < lld_total; i++ )
 	{
-		tdWriteBits( s, nlit, 5 );
-		tdWriteBits( s, ndst, 5 );
-		tdWriteBits( s, nlen, 4 );
-		int done = nlen + 4;
-		for ( int i = 0; i < done; ++i )
-			tdWriteBits( s, lenlens[ g_tdPermutationOrder[ i ] ], 3 );
-		for ( int i = 0; i < rle_count; ++i )
+		unsigned char symbol = i < hlit2 ? ll_lengths[ i ] : d_lengths[ i - hlit2 ];
+		unsigned count = 1;
+
+		for ( int j = i + 1;
+			j < lld_total && symbol == (j < hlit2 ? ll_lengths[ j ] : d_lengths[ j - hlit2 ]);
+			j++ )
 		{
-			int symbol = rle[ i ];
-			int code = lenlen_tree[ symbol ].code;
-			int len = lenlen_tree[ symbol ].len;
-			TD_ASSERT( !(code & ~((1 << len) - 1)) );
-			tdWriteBitsRev( s, code, len );
-			switch ( symbol )
+			count++;
+		}
+		i += count - 1;
+
+		if ( !symbol && count >= 3 )
+		{
+			while ( count >= 11 )
 			{
-			case 16: tdWriteBits( s, rle_bits[ i ], 2 ); break;
-			case 17: tdWriteBits( s, rle_bits[ i ], 3 ); break;
-			case 18: tdWriteBits( s, rle_bits[ i ], 7 ); break;
+				unsigned count2 = count > 138 ? 138 : count;
+				rle[ rle_index ] = 18;
+				rle_bits[ rle_index++ ] = count2 - 11;
+				clcounts[ 18 ]++;
+				count -= count2;
 			}
+
+			while ( count >= 3 ) {
+				unsigned count2 = count > 10 ? 10 : count;
+				rle[ rle_index ] = 17;
+				rle_bits[ rle_index++ ] = count2 - 3;
+				clcounts[ 17 ]++;
+				count -= count2;
+			}
+		}
+
+		if ( count >= 4 )
+		{
+			--count;
+			clcounts[ symbol ]++;
+			rle[ rle_index ] = symbol;
+			rle_bits[ rle_index++ ] = 0;
+
+			while ( count >= 3 )
+			{
+				unsigned count2 = count > 6 ? 6 : count;
+				rle[ rle_index ] = 16;
+				rle_bits[ rle_index++ ] = count2 - 3;
+				clcounts[ 16 ]++;
+				count -= count2;
+			}
+		}
+
+		clcounts[ symbol ] += count;
+		while ( count > 0 )
+		{
+			rle[ rle_index ] = symbol;
+			rle_bits[ rle_index++ ] = 0;
+			count--;
+		}
+	}
+
+	TD_ASSERT( rle_index <= 288 + 32 ) ;
+	tdCodeLengths( clcounts, 19, 7, clcl );
+	tdLengthsToSymbols( clcl, 19, 7, clsymbols );
+
+	// trim trailing zeroes
+	int hclen = 15;
+	while ( hclen > 0 && !clcounts[ g_tdPermutationOrder[ hclen + 4 - 1 ] ] ) hclen--;
+
+	// RFC-1951 section 3.2.7
+	int64_t bits_used = s->bits_left;
+	tdWriteBits( s, hlit, 5 );
+	tdWriteBits( s, hdist, 5 );
+	tdWriteBits( s, hclen, 4 );
+	int done = hclen + 4;
+	for ( int i = 0; i < done; ++i )
+		tdWriteBits( s, clcl[ g_tdPermutationOrder[ i ] ], 3 );
+	for ( int i = 0; i < rle_index; ++i )
+	{
+		int symbol = rle[ i ];
+		int code = clsymbols[symbol];
+		int len = clcl[ symbol ];
+		TD_ASSERT( !(code & ~((1 << len) - 1)) );
+		tdWriteBitsRev( s, code, len );
+		switch ( symbol )
+		{
+		case 16: tdWriteBits( s, rle_bits[ i ], 2 ); break;
+		case 17: tdWriteBits( s, rle_bits[ i ], 3 ); break;
+		case 18: tdWriteBits( s, rle_bits[ i ], 7 ); break;
 		}
 	}
 	bits_used = bits_used - s->bits_left;
 
 	int tree_size = 14;
-	tree_size += (nlen + 4) * 3;
-	for ( int i = 0; i < 19; i++ ) tree_size += lenlen_tree[ i ].len * lenlen_tree[ i ].freq;
-	tree_size += lenlen_tree[ 16 ].freq * 2;
-	tree_size += lenlen_tree[ 17 ].freq * 3;
-	tree_size += lenlen_tree[ 18 ].freq * 7;
+	tree_size += (hclen + 4) * 3;
+	for ( int i = 0; i < 19; ++i ) tree_size += clcl[ i ] * clcounts[ i ];
+	tree_size += clcounts[ 16 ] * 2;
+	tree_size += clcounts[ 17 ] * 3;
+	tree_size += clcounts[ 18 ] * 7;
 	TD_ASSERT( bits_used == tree_size );
 	return tree_size;
 }
 
+void tdFlushEntries( tdDState* s, int final )
+{
+	TD_LOG( "--> lz77 data\n" );
+	// manually insert end-of-block entry
+	{
+		tdEntry entry = { 0 };
+		entry.symbol_index = 256;
+		TD_ASSERT( s->entry_count < TD_ENTRY_BUFFER_SIZE );
+		s->entries[ s->entry_count++ ] = entry;
+		s->len[ 256 ].freq++;
+	}
+
+	if ( final ) tdWriteBits( s, 1, 1 );
+	else tdWriteBits( s, 0, 1 );
+	tdWriteBits( s, 2, 2 ); // dynamic
+
+	tdMakeTree( s->len, 286, 15 );
+	tdMakeTree( s->dst, 30, 15 );
+
+	uint32_t llens[ 286 ];
+	uint32_t dlens[ 30 ];
+
+	for ( int i = 0; i < 286; ++i ) llens[ i ] = s->len[ i ].len;
+	for ( int i = 0; i < 30; ++i ) dlens[ i ] = s->dst[ i ].len;
+	tdEncodeDynamic( s, llens, dlens );
+
+	int length = 0;
+	for ( int i = 0; i < s->entry_count; ++i )
+	{
+		tdEntry* entry = s->entries + i;
+		if ( entry->dst )
+		{
+			int base_len = entry->base_len;
+			tdLeaf* len = s->len + entry->symbol_index;
+			TD_ASSERT( entry->len >= 3 && entry->len <= 288 );
+			TD_ASSERT( len->len > 0 );
+
+			tdWriteBitsRev( s, len->code, len->len );
+			tdWriteBits( s, entry->len - g_tdLenBase[ base_len ], g_tdLenExtraBits[ base_len ] );
+			int base_dst = entry->base_dst;
+			tdLeaf* dst = s->dst + base_dst;
+
+			TD_ASSERT( dst->len > 0 );
+			tdWriteBitsRev( s, dst->code, dst->len );
+			tdWriteBits( s, entry->dst - g_tdDistBase[ base_dst ], g_tdDistExtraBits[ base_dst ] );
+
+			length += entry->len;
+		}
+
+		else
+		{
+			tdLeaf* symbol = s->len + entry->symbol_index;
+			int code = symbol->code;
+			int len = symbol->len;
+			TD_ASSERT( entry->symbol_index <= 256 && entry->symbol_index >= 0 );
+			TD_ASSERT( len > 0 );
+			TD_ASSERT( !(code & ~((1 << len) - 1)) );
+			tdWriteBitsRev( s, code, len );
+			++length;
+		}
+	}
+
+	s->entry_count = 0;
+	memset( s->len, 0, sizeof( s->len ) );
+	memset( s->dst, 0, sizeof( s->dst ) );
+	TD_ASSERT( length - 1 == s->processed_length ); // -1 for 256 end of block literal
+	s->processed_length = 0;
+}
+
+// RFC-1951 - section 3.2.4
+void tdEncodeStored( tdDState* s )
+{
+	tdWriteBits( s, 1, 1 ); // final
+	tdWriteBits( s, 0, 2 ); // stored (uncompressed)
+	int ignored = (32 - s->count) & 7;
+	tdWriteBits( s, 0, ignored );
+	uint16_t LEN = (uint16_t)(s->in_end - s->window);
+	uint16_t NLEN = ~LEN;
+	tdWriteBits( s, LEN, 16 );
+	tdWriteBits( s, NLEN, 16 );
+
+	while ( s->window < s->in_end )
+	{
+		tdWriteBits( s, *s->window++, 8 );
+		s->processed_length += 1;
+	}
+}
+
+// make 3 byte hash
+// insert into chain (circular linked list)
+// uses rolling buffer to technique which is guaranteed to recycle the oldest (and
+// thus most useless) match strings as needed
+static void tdRecycleChain( tdDState* s, unsigned char* window )
+{
+	uint32_t h = djb2( window, window + 3 ) % TD_HASH_COUNT;
+	tdHash* chain = s->buckets[ h ];
+
+	uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
+	tdHash* hash = s->hashes + hash_index;
+
+	// Unlink the oldest node from its chain (if not in a chain the node
+	// only points to itself, so no harm done).
+	hash->prev->next = hash->next;
+	hash->next->prev = hash->prev;
+
+	hash->h = h;
+	hash->start = window;
+	s->buckets[ h ] = hash;
+
+	// Insert new node *before* the chain. This keeps the chain a circular
+	// doubly linked list, and the inserted node can be used as the sentinel
+	if ( chain )
+	{
+		hash->next = chain;
+		hash->prev = chain->prev;
+		chain->prev = hash;
+		hash->prev->next = hash;
+	}
+
+	// When no chains exist for a given bucket, setup the circular linked list
+	// by pointing node to itself (it becomes its own sentinel).
+	else
+	{
+		hash->next = hash;
+		hash->prev = hash;
+	}
+}
+
+int tdFindMatch( tdDState* s, unsigned char* window, tdEntry* out )
+{
+	TD_ASSERT( window < s->out_end - 3 );
+	// only search chains with more than one link
+	uint32_t h = djb2( window, window + 3 ) % TD_HASH_COUNT;
+	tdHash* chain = s->buckets[ h ];
+	if ( !chain ) return 0;
+
+	// loop over chain
+	// keep track of best bit reduction match
+	tdHash* list = chain;
+	tdHash* sentinel = chain->prev;
+	tdHash* best_match = 0;
+	int best_base_len = ~0;
+	int best_base_dst = ~0;
+	int best_len_bits = ~0;
+	int best_dst_bits = ~0;
+	int best_dst = ~0;
+	int best_len = ~0;
+	int lowest_cost = INT_MAX;
+	int chain_count = 0;
+	while ( list != sentinel )
+	{
+		char* a = window;
+		char* b = list->start;
+		int dst = (int)(a - b);
+		if ( dst > 32768 ) break;
+		int len = 0;
+		while ( len < 258 && *a == *b && a < s->in_end - 3 )
+		{
+			++a; ++b;
+			++len;
+		}
+		if ( len >= 3 )
+		{
+			TD_ASSERT( len <= 258 );
+			int base_len, base_dst;
+			tdMatchIndices( len, dst, &base_len, &base_dst );
+			TD_ASSERT( base_len < 29 );
+			TD_ASSERT( base_dst < 30 );
+			int len_bits = g_tdLenExtraBits[ base_len ];
+			int dst_bits = g_tdDistExtraBits[ base_dst ];
+			int cost = tdMatchCost( len, len_bits, dst_bits );
+			if ( cost < lowest_cost )
+			{
+				lowest_cost = cost;
+				best_match = list;
+				best_base_len = base_len;
+				best_base_dst = base_dst;
+				best_len_bits = len_bits;
+				best_dst_bits = dst_bits;
+				best_dst = dst;
+				best_len = len;
+			}
+		}
+
+		list = list->next;
+		chain_count++;
+		if ( chain_count == s->max_chain_len )
+			break;
+	}
+
+	if ( !best_match ) return 0;
+
+	TD_ASSERT( best_base_len != ~0 );
+	TD_ASSERT( best_base_dst != ~0 );
+	TD_ASSERT( best_len_bits != ~0 );
+	TD_ASSERT( best_dst_bits != ~0 );
+	TD_ASSERT( best_dst != ~0 );
+	TD_ASSERT( best_len != ~0 );
+
+	s->len[ 257 + best_base_len ].freq++;
+	s->dst[ best_base_dst ].freq++;
+	TD_ASSERT( !strncmp( window, window - best_dst, best_len ) );
+	TD_LOG( "%.*s", best_len, window );
+
+	tdEntry entry;
+	TD_ASSERT( best_len >= 3 );
+	entry.len = best_len;
+	entry.dst = best_dst;
+	entry.base_len = best_base_len;
+	entry.base_dst = best_base_dst;
+	entry.symbol_index = 257 + best_base_len;
+	entry.cost = lowest_cost;
+	TD_ASSERT( entry.symbol_index > 256 < 288 );
+	*out = entry;
+	return 1;
+}
+
+// TODO (randy)
+// * gracefully handle case of file getting larger
+// * find any other possible errors, gracefully handle and report them
+// * make sure the words do not corrupt memory at last word written
+// * hook this up to savepng
+// * look for some optimizations
+// * still need static tree implementation too!
+// * fix the table lookup for decoder
+//#define TD_EXTRA_DBG_MEMORY (1024 * 1024)
+#define TD_EXTRA_DBG_MEMORY 0
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
 	TD_ASSERT( !((int)in & 3) );
 	char* in_buffer = (char*)in;
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
-	s->in = (char*)in;
+	s->in = (unsigned char*)in;
 	s->in_end = s->in + bytes;
-	s->out = (char*)malloc( bytes );
-	s->out_end = s->out + bytes;
+	s->out = (unsigned char*)malloc( bytes + TD_EXTRA_DBG_MEMORY );
+	s->out_end = s->out + bytes + TD_EXTRA_DBG_MEMORY;
 	s->window = s->in;
 
 	s->words = (uint32_t*)s->out;
-	s->word_count = (bytes + 3) / sizeof( uint32_t );
-	s->bits_left = bytes * 8;
-	int bits_left = s->bits_left;
+	s->word_count = (bytes + 3 + TD_EXTRA_DBG_MEMORY) / sizeof( uint32_t );
+	s->bits_left = bytes * 8 + TD_EXTRA_DBG_MEMORY * 8;
+	int64_t bits_left = s->bits_left;
 
 	if ( options )
 	{
@@ -1189,175 +1404,96 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 
 	else
 	{
-		// TODO think about these defaults
-		// and actually use them
-		s->max_chain_len = 1024;
-		s->do_lazy_search = 1;
+		s->max_chain_len = 0;
+		s->do_lazy_search = 100;
+	}
+
+	for ( int i = 0; i < TD_HASH_COUNT; ++i )
+	{
+		tdHash* h = s->hashes + i;
+		h->next = h;
+		h->prev = h;
 	}
 
 	while ( s->window < s->in_end - 3 )
 	{
-		// move sliding window over one byte
-		// make 3 byte hash
-		char* start = s->window;
-		char* end = s->window + 3;
-		uint32_t h = djb2( start, end ) % TD_HASH_COUNT;
-		tdHash* chain = s->buckets[ h ];
+		if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
+			tdFlushEntries( s, 0 );
 
-		int hash_index = s->hash_rolling++ % TD_HASH_COUNT;
-		tdHash* hash = s->hashes + hash_index;
-		hash->h = h;
-		hash->start = start;
-		hash->next = chain;
-		s->buckets[ h ] = hash;
+		tdEntry entry;
+		entry.cost = INT_MAX;
+		int match = tdFindMatch( s, s->window, &entry );
 
-		if ( chain )
+		int lazy_count = 0;
+		int enough_entries = s->entry_count + 1 + s->do_lazy_search < TD_ENTRY_BUFFER_SIZE;
+		if ( enough_entries )
 		{
-			// loop over chain
-			// keep track of best bit reduction
-			tdHash* list = chain;
-			tdHash* best_match = 0;
-			int best_base_len;
-			int best_base_dst;
-			int best_len_bits;
-			int best_dst_bits;
-			int best_dst;
-			int best_len;
-			int lowest_cost = INT_MAX;
-			int chain_count = 0;
-			while ( list )
+			for ( int i = 1; i < s->do_lazy_search; ++i )
 			{
-				char* a = hash->start;
-				char* b = list->start;
-				int dst = (int)(a - b);
-				int len = 0;
-				//if ( strncmp( a, "``alphabet", 10 ) == 0 ) __debugbreak( );
-				while ( len < 258 && *a == *b && a < s->in_end )
+				tdEntry lazy;
+				int lazy_match = tdFindMatch( s, s->window + i, &lazy );
+				if ( lazy_match )
 				{
-					++a; ++ b;
-					++len;
-				}
-				if ( len )
-				{
-					TD_ASSERT( len <= 258 );
-					TD_ASSERT( dst == (int)(s->window - list->start) );
-					int base_len, base_dst;
-					tdMatchIndices( len, dst, &base_len, &base_dst );
-					int len_bits = g_tdLenExtraBits[ base_len ];
-					int dst_bits = g_tdDistExtraBits[ base_dst ];
-					int cost = tdMatchCost( len, len_bits, dst_bits );
-					if ( cost < lowest_cost )
+					int cost_of_skipped_literals = (i * 32);
+					lazy.cost += cost_of_skipped_literals;
+					if ( lazy.cost < entry.cost )
 					{
-						lowest_cost = cost;
-						best_match = list;
-						best_base_len = base_len;
-						best_base_dst = base_dst;
-						best_len_bits = len_bits;
-						best_dst_bits = dst_bits;
-						best_dst = dst;
-						best_len = len;
+						match = 1;
+						entry = lazy;
+						lazy_count = i;
 					}
 				}
-				list = list->next;
-				chain_count++;
-				if ( chain_count == 5 )
-					;//break;
 			}
-
-			if ( !best_match )
-				goto literal;
-
-			if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
-			{
-				// if pair does not fit in block_buffer
-				// dump tree
-				__debugbreak( );
-			}
-
-			s->len[ 257 + best_base_len ].freq++;
-			s->dst[ best_base_dst ].freq++;
-			printf( "match: %.*s\n", best_len, s->window );
-			printf( "to:    %.*s\n", best_len, s->window - best_dst );
-			s->window += best_len;
-
-			tdEntry entry;
-			entry.len = best_len;
-			entry.dst = best_dst;
-			entry.base_len = best_base_len;
-			entry.base_dst = best_base_dst;
-			entry.symbol_index = 257 + best_base_len;
-			s->entries[ s->entry_count++ ] = entry;
-
-			// num children in full binary tree, since we ideally pack in tons of
-			// leaves with bit length less than 9, for fast decoder lookups.
-			//int two_to_ninth = 512;
-			//if ( run_count > two_to_ninth )
-			//{
-			//	float entropy = tdEntropy( s->len );
-			//	float golden = 1.61803398875f;
-			//	float factor = golden * golden;
-			//	if ( (int)(entropy * factor + 0.5f) > 15 )
-			//	{
-			//		tdMakeTree( s->len, 286 );
-			//		tdMakeTree( s->dst, 30 );
-			//		tdWriteTree( s, s->len, s->dst, 0 );
-			//	}
-			//}
-
-			continue;
 		}
 
-	literal:
-		tdLiteral( s, *s->window );
-	}
-
-	while ( s->window < s->in_end )
-	{
-		tdLiteral( s, *s->window );
-		s->window += 1;
-	}
-	tdLiteral( s, 256 );
-
-	tdWriteBits( s, 1, 1 ); // final
-	tdWriteBits( s, 2, 2 ); // dynamic
-
-	tdMakeTree( s->len, 286 );
-	tdMakeTree( s->dst, 30 );
-	tdWriteTree( s, s->len, s->dst, 0 );
-
-	for ( int i = 0; i < s->entry_count; ++i )
-	{
-		tdEntry* entry = s->entries + i;
-		if ( i == 849 ) __debugbreak( );
-		if ( entry->dst )
+		if ( match )
 		{
-			int base_len = entry->base_len;
-			tdLeaf* len = s->len + entry->symbol_index;
-			tdWriteBitsRev( s, len->code, len->len );
-			tdWriteBits( s, entry->len - g_tdLenBase[ base_len ], g_tdLenExtraBits[ base_len ] );
-			int base_dst = entry->base_dst;
-			tdLeaf* dst = s->dst + base_dst;
-			tdWriteBitsRev( s, dst->code, dst->len );
-			tdWriteBits( s, entry->dst - g_tdDistBase[ base_dst ], g_tdDistExtraBits[ base_dst ] );
+			// pump out literals for all skipped bytes
+			while ( lazy_count-- )
+			{
+				TD_LOG( "%c", *s->window );
+				tdRecycleChain( s, s->window );
+				tdLiteral( s, *s->window );
+			}
+
+			TD_ASSERT( s->entry_count < TD_ENTRY_BUFFER_SIZE );
+			s->entries[ s->entry_count++ ] = entry;
+
+			// record hashes of all sub-strings in the found match
+			for ( int i = 1; i < entry.len; ++i )
+				tdRecycleChain( s, s->window + i );
+			s->window += entry.len;
+			s->processed_length += entry.len;
 		}
 
 		else
 		{
-			tdLeaf* symbol = s->len + entry->symbol_index;
-			int code = symbol->code;
-			int len = symbol->len;
-			TD_ASSERT( !(code & ~((1 << len) - 1)) );
-			tdWriteBitsRev( s, code, len );
+			TD_LOG( "%c", *s->window );
+			tdRecycleChain( s, s->window );
+			tdLiteral( s, *s->window );
 		}
 	}
-	tdFlush( s );
 
-	int bits_written = bits_left - s->bits_left;
-	int bytes_written = (bits_written + 7) / 8;
-	int out_size = bytes_written;
-	if ( out_bytes ) *out_bytes = out_size;
+	while ( s->window < s->in_end )
+		if ( !tdLiteral( s, *s->window ) ) break;
+
+	if ( s->window == s->in_end ) tdFlushEntries( s, 1 );
+	else
+	{
+		tdFlushEntries( s, 0 );
+		tdEncodeStored( s );
+	}
+
+	tdFlush( s );
+	TD_CHECK_MEM( );
+
+	int64_t bits_written = bits_left - s->bits_left;
+	int64_t bytes_written = (bits_written + 7) / 8;
+	int64_t out_size = bytes_written;
+	if ( out_bytes ) *out_bytes = (int)out_size;
 	void* out = s->out;
 	free( s );
+	TD_LOG( "---\n" );
 	return out;
 }
 
@@ -1371,18 +1507,20 @@ void* tdDeflate( const char* in_path, const char* out_path, tdDeflateOptions* op
 	int out_bytes;
 	out = (char*)tdDeflateMem( in, size, &out_bytes, options );
 	if ( !out ) TD_FAIL( );
-	TD_CHECK( out, "Unable to allocate out buffer." );
+
+	FILE* fp = fopen( out_path, "wb" );
+	fwrite( out, out_bytes, 1, fp );
+	fclose( fp );
 
 	free( in );
 	return out;
 
-td_error:
+td_err:
 	free( in );
 	return 0;
 }
 
 #if TD_PNG
-
 
 static uint8_t tdPaeth( uint8_t a, uint8_t b, uint8_t c )
 {
@@ -1799,7 +1937,7 @@ tdImage tdLoadPNGMem( const void *png_data, int png_length )
 	free( data );
 	return img;
 
-td_error:
+td_err:
 	free( data );
 	free( img.pix );
 	img.pix = 0;
@@ -2118,7 +2256,7 @@ int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 	free( nodes );
 	return 1;
 
-td_error:
+td_err:
 	fclose( fp );
 	free( atlasPixels );
 	free( nodes );
