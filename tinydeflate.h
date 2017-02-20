@@ -1,10 +1,14 @@
 ﻿/*
-	tinydeflate - v1.0
+	tinydeflate - v1.1
 
 	SUMMARY:
 
 		This header is a conglomeration of a DEFLATE compliant decompressor, and some
 		functions for dealing with PNGs (load, save and atlas creation).
+
+	Revision history:
+		1.0  (12/23/2016) initial release
+		1.01 (02/19/2017) tdDeflate -- custom compressor for dynamic trees
 
 
 	EXAMPLES:
@@ -38,6 +42,10 @@
 			// does *not* do any internal realloc! Will return errors if an
 			// attempt to overwrite the out buffer is made
 
+		DEFLATE memory into a stream of DEFLATE blocks (compresses file)
+			tdDeflate( "in.txt", "out.txt", 0 );
+
+
 	LONG WINDED INFO:
 
 		Most of this code is either a direct port of Richard Mitton's tigr library. A
@@ -48,7 +56,9 @@
 		reporting, etc. Also, a couple tricks were referenced from stb_image by Sean
 		Barrett. One was the lookup table for decoding, and I don't recall the other
 		tricks, though I am sure a few are laying around in the source. Cheers to Sean
-		for his great public domain library!
+		for his great public domain library! Also thanks to guys at Google for their
+		Zopfli library, some pieces of which made their way into this file after some
+		modifications (namely the Package-Merge algorithm).
 
 
 	ENCODING IMAGES:
@@ -136,6 +146,26 @@ int tdMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 // these two functions return tdImage::pix as 0 in event of errors
 tdImage tdLoadPNG( const char *fileName );
 tdImage tdLoadPNGMem( const void *png_data, int png_length );
+
+// Used for tdDeflate and tdDeflateMem (can be NULL in both functions)
+typedef struct
+{
+	// 0 means infinite, caps internal chain searches to a finite number of searches.
+	// lower means more speed, but less compression
+	int max_chain_len;
+
+	// Performs lazy evaluation iterations. Generally only one or two will give any
+	// good results. Higher will heavily decrease performance and may worsen the
+	// overall compression ratio.
+	int do_lazy_search;
+} tdDeflateOptions;
+
+// DEFLATEs input file into a stream of DEFLATE blocks (compresses the file)
+// good for general purpose compression
+void* tdDeflate( const char* in_path, const char* out_path, tdDeflateOptions* options );
+
+// Same as above but operates in-memory only. Returns DEFLATE blocks as a stream of bytes.
+void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options );
 
 // read this whenever one of the above functions returns an error
 extern const char* g_tdDeflateErrorReason;
@@ -322,7 +352,6 @@ TD_INLINE static uint32_t tdRev( uint32_t a, uint32_t len )
 }
 
 // RFC 1951 section 3.2.2
-// Slots arrays starts as "bl_count"
 static int tdBuild( tdIState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 {
 	int n, codes[ 16 ], first[ 16 ], counts[ 16 ] = { 0 };
@@ -472,7 +501,7 @@ static int tdDynamic( tdIState* s )
 // 3.2.3
 static int tdBlock( tdIState* s )
 {
-	for (;;)
+	while ( 1 )
 	{
 		int symbol = tdTryLookup( s, s->lit, s->nlit );
 
@@ -601,6 +630,7 @@ typedef struct
 	uint16_t symbol_index;
 	uint16_t len;
 	int dst;
+	int cost;
 } tdEntry;
 
 typedef struct
@@ -639,12 +669,6 @@ typedef struct
 	tdEntry entries[ TD_ENTRY_BUFFER_SIZE ];
 } tdDState;
 
-typedef struct
-{
-	int max_chain_len;
-	int do_lazy_search;
-} tdDeflateOptions;
-
 static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write )
 {
 	TD_ASSERT( num_bits_to_write <= 32 );
@@ -652,11 +676,6 @@ static void tdWriteBits( tdDState* s, uint32_t value, uint32_t num_bits_to_write
 	TD_ASSERT( s->count <= 32 );
 	TD_ASSERT( !tdWouldOverflow( s->bits_left, num_bits_to_write ) );
 	TD_LOG( "write %d %d\n", value, num_bits_to_write );
-	if ( value == 255 )
-	{
-		int x;
-		x = 10;
-	}
 
 	s->bits |= (uint64_t)(value & (((uint64_t)1 << num_bits_to_write) - 1)) << s->count;
 	s->count += num_bits_to_write;
@@ -954,6 +973,7 @@ td_err:
 	return 0;
 }
 
+// RFC-1951 section 3.2.2
 static void tdLengthsToSymbols( unsigned* lengths, int count, int maxbits, unsigned* symbols )
 {
 	int bl_count[ 16 ] = { 0 };
@@ -1012,208 +1032,6 @@ int tdMakeTree( tdLeaf* tree, int count, int max_bits )
 
 td_err:
 	return 0;
-}
-
-/* Gets the amount of extra bits for the given dist, cfr. the DEFLATE spec. */
-static int ZopfliGetDistExtraBits(int dist) {
-#ifdef ZOPFLI_HAS_BUILTIN_CLZ
-  if (dist < 5) return 0;
-  return (31 ^ __builtin_clz(dist - 1)) - 1; /* log2(dist - 1) - 1 */
-#else
-  if (dist < 5) return 0;
-  else if (dist < 9) return 1;
-  else if (dist < 17) return 2;
-  else if (dist < 33) return 3;
-  else if (dist < 65) return 4;
-  else if (dist < 129) return 5;
-  else if (dist < 257) return 6;
-  else if (dist < 513) return 7;
-  else if (dist < 1025) return 8;
-  else if (dist < 2049) return 9;
-  else if (dist < 4097) return 10;
-  else if (dist < 8193) return 11;
-  else if (dist < 16385) return 12;
-  else return 13;
-#endif
-}
-
-/* Gets value of the extra bits for the given dist, cfr. the DEFLATE spec. */
-static int ZopfliGetDistExtraBitsValue(int dist) {
-#ifdef ZOPFLI_HAS_BUILTIN_CLZ
-  if (dist < 5) {
-    return 0;
-  } else {
-    int l = 31 ^ __builtin_clz(dist - 1); /* log2(dist - 1) */
-    return (dist - (1 + (1 << l))) & ((1 << (l - 1)) - 1);
-  }
-#else
-  if (dist < 5) return 0;
-  else if (dist < 9) return (dist - 5) & 1;
-  else if (dist < 17) return (dist - 9) & 3;
-  else if (dist < 33) return (dist - 17) & 7;
-  else if (dist < 65) return (dist - 33) & 15;
-  else if (dist < 129) return (dist - 65) & 31;
-  else if (dist < 257) return (dist - 129) & 63;
-  else if (dist < 513) return (dist - 257) & 127;
-  else if (dist < 1025) return (dist - 513) & 255;
-  else if (dist < 2049) return (dist - 1025) & 511;
-  else if (dist < 4097) return (dist - 2049) & 1023;
-  else if (dist < 8193) return (dist - 4097) & 2047;
-  else if (dist < 16385) return (dist - 8193) & 4095;
-  else return (dist - 16385) & 8191;
-#endif
-}
-
-/* Gets the symbol for the given dist, cfr. the DEFLATE spec. */
-static int ZopfliGetDistSymbol(int dist) {
-#ifdef ZOPFLI_HAS_BUILTIN_CLZ
-  if (dist < 5) {
-    return dist - 1;
-  } else {
-    int l = (31 ^ __builtin_clz(dist - 1)); /* log2(dist - 1) */
-    int r = ((dist - 1) >> (l - 1)) & 1;
-    return l * 2 + r;
-  }
-#else
-  if (dist < 193) {
-    if (dist < 13) {  /* dist 0..13. */
-      if (dist < 5) return dist - 1;
-      else if (dist < 7) return 4;
-      else if (dist < 9) return 5;
-      else return 6;
-    } else {  /* dist 13..193. */
-      if (dist < 17) return 7;
-      else if (dist < 25) return 8;
-      else if (dist < 33) return 9;
-      else if (dist < 49) return 10;
-      else if (dist < 65) return 11;
-      else if (dist < 97) return 12;
-      else if (dist < 129) return 13;
-      else return 14;
-    }
-  } else {
-    if (dist < 2049) {  /* dist 193..2049. */
-      if (dist < 257) return 15;
-      else if (dist < 385) return 16;
-      else if (dist < 513) return 17;
-      else if (dist < 769) return 18;
-      else if (dist < 1025) return 19;
-      else if (dist < 1537) return 20;
-      else return 21;
-    } else {  /* dist 2049..32768. */
-      if (dist < 3073) return 22;
-      else if (dist < 4097) return 23;
-      else if (dist < 6145) return 24;
-      else if (dist < 8193) return 25;
-      else if (dist < 12289) return 26;
-      else if (dist < 16385) return 27;
-      else if (dist < 24577) return 28;
-      else return 29;
-    }
-  }
-#endif
-}
-
-/* Gets the amount of extra bits for the given length, cfr. the DEFLATE spec. */
-static int ZopfliGetLengthExtraBits(int l) {
-  static const int table[259] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0
-  };
-  return table[l];
-}
-
-/* Gets value of the extra bits for the given length, cfr. the DEFLATE spec. */
-static int ZopfliGetLengthExtraBitsValue(int l) {
-  static const int table[259] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 0,
-    1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5,
-    6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6,
-    7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-    13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2,
-    3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-    10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-    29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-    18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6,
-    7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, 30, 31, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 0
-  };
-  return table[l];
-}
-
-/*
-Gets the symbol for the given length, cfr. the DEFLATE spec.
-Returns the symbol in the range [257-285] (inclusive)
-*/
-static int ZopfliGetLengthSymbol(int l) {
-  static const int table[259] = {
-    0, 0, 0, 257, 258, 259, 260, 261, 262, 263, 264,
-    265, 265, 266, 266, 267, 267, 268, 268,
-    269, 269, 269, 269, 270, 270, 270, 270,
-    271, 271, 271, 271, 272, 272, 272, 272,
-    273, 273, 273, 273, 273, 273, 273, 273,
-    274, 274, 274, 274, 274, 274, 274, 274,
-    275, 275, 275, 275, 275, 275, 275, 275,
-    276, 276, 276, 276, 276, 276, 276, 276,
-    277, 277, 277, 277, 277, 277, 277, 277,
-    277, 277, 277, 277, 277, 277, 277, 277,
-    278, 278, 278, 278, 278, 278, 278, 278,
-    278, 278, 278, 278, 278, 278, 278, 278,
-    279, 279, 279, 279, 279, 279, 279, 279,
-    279, 279, 279, 279, 279, 279, 279, 279,
-    280, 280, 280, 280, 280, 280, 280, 280,
-    280, 280, 280, 280, 280, 280, 280, 280,
-    281, 281, 281, 281, 281, 281, 281, 281,
-    281, 281, 281, 281, 281, 281, 281, 281,
-    281, 281, 281, 281, 281, 281, 281, 281,
-    281, 281, 281, 281, 281, 281, 281, 281,
-    282, 282, 282, 282, 282, 282, 282, 282,
-    282, 282, 282, 282, 282, 282, 282, 282,
-    282, 282, 282, 282, 282, 282, 282, 282,
-    282, 282, 282, 282, 282, 282, 282, 282,
-    283, 283, 283, 283, 283, 283, 283, 283,
-    283, 283, 283, 283, 283, 283, 283, 283,
-    283, 283, 283, 283, 283, 283, 283, 283,
-    283, 283, 283, 283, 283, 283, 283, 283,
-    284, 284, 284, 284, 284, 284, 284, 284,
-    284, 284, 284, 284, 284, 284, 284, 284,
-    284, 284, 284, 284, 284, 284, 284, 284,
-    284, 284, 284, 284, 284, 284, 284, 285
-  };
-  return table[l];
-}
-
-/* Gets the amount of extra bits for the given length symbol. */
-static int ZopfliGetLengthSymbolExtraBits(int s) {
-  static const int table[29] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
-    3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0
-  };
-  return table[s - 257];
-}
-
-/* Gets the amount of extra bits for the given distance symbol. */
-static int ZopfliGetDistSymbolExtraBits(int s) {
-  static const int table[30] = {
-    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8,
-    9, 9, 10, 10, 11, 11, 12, 12, 13, 13
-  };
-  return table[s];
 }
 
 static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengths )
@@ -1369,36 +1187,13 @@ void tdFlushEntries( tdDState* s, int final )
 		{
 			int base_len = entry->base_len;
 			tdLeaf* len = s->len + entry->symbol_index;
-
 			TD_ASSERT( entry->len >= 3 && entry->len <= 288 );
-			int zopfli_len_index = ZopfliGetLengthSymbol( entry->len );
-			int zopfli_dst_index = ZopfliGetDistSymbol( entry->dst );
-
-			TD_ASSERT( zopfli_len_index == entry->symbol_index );
-			TD_ASSERT( zopfli_dst_index == entry->base_dst );
-
-			TD_ASSERT( len->code == s->len[ zopfli_len_index ].code );
-			TD_ASSERT( len->len == s->len[ zopfli_len_index ].len );
-
-			int ll_base_len = ZopfliGetLengthExtraBitsValue( entry->len );
-			int ll_extra_len = ZopfliGetLengthExtraBits( entry->len );
-			int ll_base_dst = ZopfliGetDistExtraBitsValue( entry->dst );
-			int ll_extra_dst = ZopfliGetDistExtraBits( entry->dst );
-
-			TD_ASSERT( entry->len - g_tdLenBase[ base_len ] == ll_base_len );
-			TD_ASSERT( g_tdLenExtraBits[ base_len ] == ll_extra_len );
-
 			TD_ASSERT( len->len > 0 );
+
 			tdWriteBitsRev( s, len->code, len->len );
 			tdWriteBits( s, entry->len - g_tdLenBase[ base_len ], g_tdLenExtraBits[ base_len ] );
 			int base_dst = entry->base_dst;
 			tdLeaf* dst = s->dst + base_dst;
-
-			TD_ASSERT( dst->code == s->dst[ zopfli_dst_index ].code );
-			TD_ASSERT( dst->len == s->dst[ zopfli_dst_index ].len );
-
-			TD_ASSERT( entry->dst - g_tdDistBase[ base_dst ] == ll_base_dst );
-			TD_ASSERT( g_tdDistExtraBits[ base_dst ] == ll_extra_dst );
 
 			TD_ASSERT( dst->len > 0 );
 			tdWriteBitsRev( s, dst->code, dst->len );
@@ -1423,19 +1218,8 @@ void tdFlushEntries( tdDState* s, int final )
 	s->entry_count = 0;
 	memset( s->len, 0, sizeof( s->len ) );
 	memset( s->dst, 0, sizeof( s->dst ) );
-	//memset( s->entries, 0, sizeof( s->entries ) );
 	TD_ASSERT( length - 1 == s->processed_length ); // -1 for 256 end of block literal
 	s->processed_length = 0;
-
-	// ODDLY SUSPICIOUS
-//	memset( s->hashes, 0, sizeof( s->hashes ) );
-//	memset( s->buckets, 0, sizeof( s->buckets ) );
-//	for ( int i = 0; i < TD_HASH_COUNT; ++i )
-//	{
-//		tdHash* h = s->hashes + i;
-//		h->next = h;
-//		h->prev = h;
-//	}
 }
 
 // RFC-1951 - section 3.2.4
@@ -1457,10 +1241,145 @@ void tdEncodeStored( tdDState* s )
 	}
 }
 
+// make 3 byte hash
+// insert into chain (circular linked list)
+// uses rolling buffer to technique which is guaranteed to recycle the oldest (and
+// thus most useless) match strings as needed
+static void tdRecycleChain( tdDState* s, unsigned char* window )
+{
+	uint32_t h = djb2( window, window + 3 ) % TD_HASH_COUNT;
+	tdHash* chain = s->buckets[ h ];
+
+	uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
+	tdHash* hash = s->hashes + hash_index;
+
+	// Unlink the oldest node from its chain (if not in a chain the node
+	// only points to itself, so no harm done).
+	hash->prev->next = hash->next;
+	hash->next->prev = hash->prev;
+
+	hash->h = h;
+	hash->start = window;
+	s->buckets[ h ] = hash;
+
+	// Insert new node *before* the chain. This keeps the chain a circular
+	// doubly linked list, and the inserted node can be used as the sentinel
+	if ( chain )
+	{
+		hash->next = chain;
+		hash->prev = chain->prev;
+		chain->prev = hash;
+		hash->prev->next = hash;
+	}
+
+	// When no chains exist for a given bucket, setup the circular linked list
+	// by pointing node to itself (it becomes its own sentinel).
+	else
+	{
+		hash->next = hash;
+		hash->prev = hash;
+	}
+}
+
+int tdFindMatch( tdDState* s, unsigned char* window, tdEntry* out )
+{
+	TD_ASSERT( window < s->out_end - 3 );
+	// only search chains with more than one link
+	uint32_t h = djb2( window, window + 3 ) % TD_HASH_COUNT;
+	tdHash* chain = s->buckets[ h ];
+	if ( !chain ) return 0;
+
+	// loop over chain
+	// keep track of best bit reduction match
+	tdHash* list = chain;
+	tdHash* sentinel = chain->prev;
+	tdHash* best_match = 0;
+	int best_base_len = ~0;
+	int best_base_dst = ~0;
+	int best_len_bits = ~0;
+	int best_dst_bits = ~0;
+	int best_dst = ~0;
+	int best_len = ~0;
+	int lowest_cost = INT_MAX;
+	int chain_count = 0;
+	while ( list != sentinel )
+	{
+		char* a = window;
+		char* b = list->start;
+		int dst = (int)(a - b);
+		if ( dst > 32768 ) break;
+		int len = 0;
+		while ( len < 258 && *a == *b && a < s->in_end - 3 )
+		{
+			++a; ++b;
+			++len;
+		}
+		if ( len >= 3 )
+		{
+			TD_ASSERT( len <= 258 );
+			int base_len, base_dst;
+			tdMatchIndices( len, dst, &base_len, &base_dst );
+			TD_ASSERT( base_len < 29 );
+			TD_ASSERT( base_dst < 30 );
+			int len_bits = g_tdLenExtraBits[ base_len ];
+			int dst_bits = g_tdDistExtraBits[ base_dst ];
+			int cost = tdMatchCost( len, len_bits, dst_bits );
+			if ( cost < lowest_cost )
+			{
+				lowest_cost = cost;
+				best_match = list;
+				best_base_len = base_len;
+				best_base_dst = base_dst;
+				best_len_bits = len_bits;
+				best_dst_bits = dst_bits;
+				best_dst = dst;
+				best_len = len;
+			}
+		}
+
+		list = list->next;
+		chain_count++;
+		if ( chain_count == s->max_chain_len )
+			break;
+	}
+
+	if ( !best_match ) return 0;
+
+	TD_ASSERT( best_base_len != ~0 );
+	TD_ASSERT( best_base_dst != ~0 );
+	TD_ASSERT( best_len_bits != ~0 );
+	TD_ASSERT( best_dst_bits != ~0 );
+	TD_ASSERT( best_dst != ~0 );
+	TD_ASSERT( best_len != ~0 );
+
+	s->len[ 257 + best_base_len ].freq++;
+	s->dst[ best_base_dst ].freq++;
+	TD_ASSERT( !strncmp( window, window - best_dst, best_len ) );
+	TD_LOG( "%.*s", best_len, window );
+
+	tdEntry entry;
+	TD_ASSERT( best_len >= 3 );
+	entry.len = best_len;
+	entry.dst = best_dst;
+	entry.base_len = best_base_len;
+	entry.base_dst = best_base_dst;
+	entry.symbol_index = 257 + best_base_len;
+	entry.cost = lowest_cost;
+	TD_ASSERT( entry.symbol_index > 256 < 288 );
+	*out = entry;
+	return 1;
+}
+
 // TODO (randy)
-// gracefully handle case of file getting larger
-// find any other possible errors, gracefully handle and report them
-#define TD_EXTRA_DBG_MEMORY (1024 * 1024)
+// * gracefully handle case of file getting larger
+// * find any other possible errors, gracefully handle and report them
+// * make sure the words do not corrupt memory at last word written
+// * hook this up to savepng
+// * look for some optimizations
+// * still need static tree implementation too!
+// * fix the table lookup for decoder
+//#define TD_EXTRA_DBG_MEMORY (1024 * 1024)
+#define TD_EXTRA_DBG_MEMORY 0
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
 	TD_ASSERT( !((int)in & 3) );
@@ -1473,7 +1392,7 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	s->window = s->in;
 
 	s->words = (uint32_t*)s->out;
-	s->word_count = (bytes + TD_EXTRA_DBG_MEMORY + 3) / sizeof( uint32_t );
+	s->word_count = (bytes + 3 + TD_EXTRA_DBG_MEMORY) / sizeof( uint32_t );
 	s->bits_left = bytes * 8 + TD_EXTRA_DBG_MEMORY * 8;
 	int64_t bits_left = s->bits_left;
 
@@ -1486,11 +1405,8 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 	else
 	{
 		s->max_chain_len = 0;
-		s->do_lazy_search = 1;
+		s->do_lazy_search = 100;
 	}
-
-	int max_chain_len = s->max_chain_len;
-	int do_lazy_search = s->do_lazy_search;
 
 	for ( int i = 0; i < TD_HASH_COUNT; ++i )
 	{
@@ -1499,175 +1415,63 @@ void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions*
 		h->prev = h;
 	}
 
-	int count = 0;
 	while ( s->window < s->in_end - 3 )
 	{
-		//TD_CHECK_MEM( );
 		if ( s->entry_count + 1 == TD_ENTRY_BUFFER_SIZE )
-		{
 			tdFlushEntries( s, 0 );
-			++count;
-			if ( count == 10 )
+
+		tdEntry entry;
+		entry.cost = INT_MAX;
+		int match = tdFindMatch( s, s->window, &entry );
+
+		int lazy_count = 0;
+		int enough_entries = s->entry_count + 1 + s->do_lazy_search < TD_ENTRY_BUFFER_SIZE;
+		if ( enough_entries )
+		{
+			for ( int i = 1; i < s->do_lazy_search; ++i )
 			{
-				int x;
-				x = 10;
-			}
-		}
-
-		// move sliding window over one byte
-		// make 3 byte hash
-		char* start = s->window;
-		uint32_t h = djb2( start, s->window + 3 ) % TD_HASH_COUNT;
-		tdHash* chain = s->buckets[ h ];
-
-		// patchup dangling chains
-		//for ( int i = 0; i < TD_HASH_COUNT; ++i )
-		//{
-		//	if ( i == h ) continue;
-		//	tdHash* old_chain = s->buckets[ i ];
-		//	if ( !old_chain ) continue;
-		//	if ( old_chain == chain )
-		//		s->buckets[ i ] = 0;
-		//}
-
-#define TD_DBG_BRK( str ) if ( strncmp( start, str, strlen( str ) ) == 0 ) __debugbreak( )
-		//TD_DBG_BRK( "ADVENTURES OF" );
-
-		uint32_t hash_index = s->hash_rolling++ % TD_HASH_COUNT;
-		tdHash* hash = s->hashes + hash_index;
-		//hash = (tdHash*)malloc( sizeof( tdHash ) );
-
-		// Unlink the oldest node from its chain (if not in a chain the node
-		// only points to itself, so no harm done).
-		hash->prev->next = hash->next;
-		hash->next->prev = hash->prev;
-
-		//tdPatchHash( s, hash );
-
-		hash->h = h;
-		hash->start = start;
-		s->buckets[ h ] = hash;
-
-		// Insert new node *before* the chain. This keeps the chain a circular
-		// doubly linked list, and the inserted node can be used as the sentinel
-		if ( chain )
-		{
-			hash->next = chain;
-			hash->prev = chain->prev;
-			chain->prev = hash;
-			hash->prev->next = hash;
-		}
-
-		// When no chains exist for a given bucket, setup the circular linked list
-		// by pointing node to itself (it becomes its own sentinel).
-		else
-		{
-			hash->next = hash;
-			hash->prev = hash;
-		}
-
-		if ( chain )
-		{
-			// loop over chain
-			// keep track of best bit reduction
-			tdHash* list = chain;
-			tdHash* best_match = 0;
-			int best_base_len = ~0;
-			int best_base_dst = ~0;
-			int best_len_bits = ~0;
-			int best_dst_bits = ~0;
-			int best_dst = ~0;
-			int best_len = ~0;
-			int lowest_cost = INT_MAX;
-			int chain_count = 0;
-			while ( list != hash )
-			{
-				char* a = hash->start;
-				char* b = list->start;
-				int dst = (int)(a - b);
-				if ( dst > 32768 ) break;
-				//{
-				//	tdHash* next = list->next;
-				//	list->next->prev = list->prev;
-				//	list->prev->next = list->next;
-				//	tdPatchHash( s, list );
-				//	memset( list, 0, sizeof( list ) );
-				//	list->next = list;
-				//	list->prev = list;
-				//	list->bucket = ~0;
-				//	list = next;
-				//	continue;
-				//}
-				int len = 0;
-				while ( len < 258 && *a == *b && a < s->in_end - 3 )
+				tdEntry lazy;
+				int lazy_match = tdFindMatch( s, s->window + i, &lazy );
+				if ( lazy_match )
 				{
-					++a; ++b;
-					++len;
-				}
-				if ( len >= 3 )
-				{
-					TD_ASSERT( len <= 258 );
-					TD_ASSERT( dst == (int)(s->window - list->start) );
-					int base_len, base_dst;
-					tdMatchIndices( len, dst, &base_len, &base_dst );
-					TD_ASSERT( base_len < 29 );
-					TD_ASSERT( base_dst < 30 );
-					int len_bits = g_tdLenExtraBits[ base_len ];
-					int dst_bits = g_tdDistExtraBits[ base_dst ];
-					int cost = tdMatchCost( len, len_bits, dst_bits );
-					if ( cost < lowest_cost )
+					int cost_of_skipped_literals = (i * 32);
+					lazy.cost += cost_of_skipped_literals;
+					if ( lazy.cost < entry.cost )
 					{
-						lowest_cost = cost;
-						best_match = list;
-						best_base_len = base_len;
-						best_base_dst = base_dst;
-						best_len_bits = len_bits;
-						best_dst_bits = dst_bits;
-						best_dst = dst;
-						best_len = len;
+						match = 1;
+						entry = lazy;
+						lazy_count = i;
 					}
 				}
+			}
+		}
 
-				list = list->next;
-				chain_count++;
-				if ( max_chain_len && chain_count == max_chain_len )
-					break;
+		if ( match )
+		{
+			// pump out literals for all skipped bytes
+			while ( lazy_count-- )
+			{
+				TD_LOG( "%c", *s->window );
+				tdRecycleChain( s, s->window );
+				tdLiteral( s, *s->window );
 			}
 
-			if ( !best_match )
-				goto literal;
-
-			TD_ASSERT( best_base_len != ~0 );
-			TD_ASSERT( best_base_dst != ~0 );
-			TD_ASSERT( best_len_bits != ~0 );
-			TD_ASSERT( best_dst_bits != ~0 );
-			TD_ASSERT( best_dst != ~0 );
-			TD_ASSERT( best_len != ~0 );
-
-			s->len[ 257 + best_base_len ].freq++;
-			s->dst[ best_base_dst ].freq++;
-			TD_ASSERT( !strncmp( s->window, s->window - best_dst, best_len ) );
-			TD_LOG( "%.*s", best_len, s->window );
-			s->window += best_len;
-			s->processed_length += best_len;
-
-			tdEntry entry;
-			TD_ASSERT( best_len >= 3 );
-			entry.len = best_len;
-			entry.dst = best_dst;
-			entry.base_len = best_base_len;
-			entry.base_dst = best_base_dst;
-			entry.symbol_index = 257 + best_base_len;
-			TD_ASSERT( entry.symbol_index > 256 < 288 );
 			TD_ASSERT( s->entry_count < TD_ENTRY_BUFFER_SIZE );
 			s->entries[ s->entry_count++ ] = entry;
 
-			continue;
+			// record hashes of all sub-strings in the found match
+			for ( int i = 1; i < entry.len; ++i )
+				tdRecycleChain( s, s->window + i );
+			s->window += entry.len;
+			s->processed_length += entry.len;
 		}
 
-	literal:
-		TD_LOG( "%c", *s->window );
-		tdLiteral( s, *s->window );
+		else
+		{
+			TD_LOG( "%c", *s->window );
+			tdRecycleChain( s, s->window );
+			tdLiteral( s, *s->window );
+		}
 	}
 
 	while ( s->window < s->in_end )
