@@ -1,2 +1,2 @@
 demo : demo.c
-	gcc -I../../ demo.c -o $@ -ldsound
+	gcc -pedantic -Wall -I../../ demo.c -o $@ -ldsound

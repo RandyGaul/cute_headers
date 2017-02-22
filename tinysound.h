@@ -358,7 +358,10 @@ void tsStopAllSounds( tsContext* ctx );
 
 	#include <dsound.h>
 	#undef PlaySound
-	#pragma comment( lib, "dsound.lib" )
+	
+	#if defined( _MSC_VER )
+		#pragma comment( lib, "dsound.lib" )
+	#endif
 
 #elif TS_PLATFORM == TS_MAC
 
@@ -370,7 +373,7 @@ void tsStopAllSounds( tsContext* ctx );
 #else
 #endif
 
-#define TS_CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto err; } } while ( 0 )
+#define TS_CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto ts_err; } } while ( 0 )
 #if TS_PLATFORM == TS_MAC && defined( __clang__ )
     #define TS_ASSERT_INTERNAL __builtin_trap( )
 #else
@@ -553,7 +556,7 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 
 	return;
 
-err:
+ts_err:
 	memset( &sound, 0, sizeof( sound ) );
 }
 
@@ -637,7 +640,7 @@ void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSou
 	free( samples );
 	return;
 
-	err:
+ts_err:
 	free( samples );
 	memset( sound, 0, sizeof( tsLoadedSound ) );
 }
@@ -807,9 +810,11 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 	{
 		int bps = sizeof( INT16 ) * 2;
 		int buffer_size = play_frequency_in_Hz * bps * num_buffered_seconds;
+		tsContext* ctx = 0;
 
 		LPDIRECTSOUND dsound;
 		HRESULT res = DirectSoundCreate( 0, &dsound, 0 );
+		TS_CHECK( res == DS_OK, "DirectSoundCreate failed" );
 		dsound->lpVtbl->SetCooperativeLevel( dsound, (HWND)hwnd, DSSCL_PRIORITY );
 		DSBUFFERDESC bufdesc = { 0 };
 		bufdesc.dwSize = sizeof( bufdesc );
@@ -817,6 +822,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 
 		LPDIRECTSOUNDBUFFER primary_buffer;
 		res = dsound->lpVtbl->CreateSoundBuffer( dsound, &bufdesc, &primary_buffer, 0 );
+		TS_CHECK( res == DS_OK, "Failed to create primary sound buffer" );
 
 		WAVEFORMATEX format = { 0 };
 		format.wFormatTag = WAVE_FORMAT_PCM;
@@ -827,6 +833,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
 		format.cbSize = 0;
 		res = primary_buffer->lpVtbl->SetFormat( primary_buffer, &format );
+		TS_CHECK( res == DS_OK, "Failed to set format on primary buffer" );
 
 		LPDIRECTSOUNDBUFFER secondary_buffer;
 		bufdesc.dwSize = sizeof( bufdesc );
@@ -834,13 +841,14 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		bufdesc.dwBufferBytes = buffer_size;
 		bufdesc.lpwfxFormat = &format;
 		res = dsound->lpVtbl->CreateSoundBuffer( dsound, &bufdesc, &secondary_buffer, 0 );
+		TS_CHECK( res == DS_OK, "Failed to set format on secondary buffer" );
 
 		int sample_count = play_frequency_in_Hz * num_buffered_seconds;
 		int wide_count = (int)TS_ALIGN( sample_count, 4 );
 		int pool_size = playing_pool_count * sizeof( tsPlayingSound );
 		int mix_buffers_size = sizeof( __m128 ) * wide_count * 2;
 		int sample_buffer_size = sizeof( __m128i ) * wide_count;
-		tsContext* ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
+		ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
 		ctx->latency_samples = (unsigned)TS_ALIGN( play_frequency_in_Hz / latency_factor_in_Hz, 4 );
 		ctx->running_index = 0;
 		ctx->Hz = play_frequency_in_Hz;
@@ -876,6 +884,10 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		}
 
 		return ctx;
+		
+	ts_err:
+		free( ctx );
+		return 0;
 	}
 
 	void tsSpawnMixThread( tsContext* ctx )
@@ -1150,7 +1162,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 
 		return ctx;
 
-	err:
+	ts_err:
 		free( ctx );
 		return 0;
 	}
