@@ -358,7 +358,9 @@ void tsStopAllSounds( tsContext* ctx );
 
 	#include <dsound.h>
 	#undef PlaySound
-	#pragma comment( lib, "dsound.lib" )
+	#if defined(_MSC_VER)
+		#pragma comment( lib, "dsound.lib" )
+	#endif
 
 #elif TS_PLATFORM == TS_MAC
 
@@ -810,6 +812,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 
 		LPDIRECTSOUND dsound;
 		HRESULT res = DirectSoundCreate( 0, &dsound, 0 );
+		if ( res != DS_OK ) return NULL;
 		dsound->lpVtbl->SetCooperativeLevel( dsound, (HWND)hwnd, DSSCL_PRIORITY );
 		DSBUFFERDESC bufdesc = { 0 };
 		bufdesc.dwSize = sizeof( bufdesc );
@@ -1618,8 +1621,6 @@ unlock:
 	tsUnlock( ctx );
 }
 
-#endif
-
 /*
 	zlib license:
 
@@ -1918,3 +1919,4 @@ static void smbPitchShift(float pitchShift, long numSampsToProcess, float sample
 		}
 	}
 }
+#endif
