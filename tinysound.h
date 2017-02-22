@@ -1630,8 +1630,6 @@ unlock:
 	tsUnlock( ctx );
 }
 
-#endif
-
 /*
 	zlib license:
 
@@ -1930,3 +1928,5 @@ static void smbPitchShift(float pitchShift, long numSampsToProcess, float sample
 		}
 	}
 }
+
+#endif
