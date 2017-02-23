@@ -72,7 +72,7 @@ const wchar_t* tuDecode16( const wchar_t* text, int* cp );
 // reads text and will return text + 1..2 depending on code point
 wchar_t* tuEncode16( wchar_t* text, int cp );
 
-#endif TINY_UTF_H
+#endif
 
 #if defined( TINY_UTF_IMPLEMENTATION )
 
@@ -147,7 +147,7 @@ void tuWiden( const char* tu_utf8_text, int in_size, wchar_t* tu_out_wchar_t )
 void tuShorten( const wchar_t* tu_utf16_text, int out_size, char* tu_out_char )
 {
 	const char* original = tu_out_char;
-	while ( tu_out_char < original + out_size )
+	while ( tu_out_char < original + out_size / 2 )
 	{
 		int tu_cp;
 		tu_utf16_text = tuDecode16( tu_utf16_text, &tu_cp );

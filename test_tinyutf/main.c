@@ -61,7 +61,7 @@ int main( )
 	CHECK( processed_size == size );
 	utf8_processed = (char*)original;
 
-	wchar_t* utf16_text = (wchar_t*)malloc( size * 2 );
+	wchar_t* utf16_text = (wchar_t*)malloc( size * 16 );
 	wchar_t* original_wide = utf16_text;
 	for ( int j = 0; j < i; ++j )
 		utf16_text = tuEncode16( utf16_text, utf32_text[ j ] );
@@ -76,6 +76,7 @@ int main( )
 	}
 	processed_size = (int)(utf8_processed - original);
 	CHECK( processed_size == size );
+	utf8_processed = (char*)original;
 	utf16_text = original_wide;
 
 	tuWiden( utf8_text, size, utf16_text );
