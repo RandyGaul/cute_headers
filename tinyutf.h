@@ -36,7 +36,7 @@
 	As additional API there are tuWiden and tuNarrow funcs to operate on arrays.
 	tuWiden converts utf8 to wchar_t (utf16) and tuNarrow converts utf16 back to
 	utf8. Typically these helpers are to facilitate Windows APIs (pretty much
-	what MultiByteToWideChar was for. Each function takes as input the size of
+	what MultiByteToWideChar was for). Each function takes as input the size of
 	the utf8 array, since this size should always be known. Just size the wide
 	array to worst case size (2x number of bytes).
 
