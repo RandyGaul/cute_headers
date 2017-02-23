@@ -133,25 +133,25 @@ wchar_t* tuEncode16( wchar_t* text, int cp )
 	return text;
 }
 
-void tuWiden( const char* tu_utf8_text, int in_size, wchar_t* tu_out_wchar_t )
+void tuWiden( const char* utf8_text, int in_size, wchar_t* out_utf16_text )
 {
-	const char* original = tu_utf8_text;
-	while ( tu_utf8_text < original + in_size )
+	const char* original = utf8_text;
+	while ( utf8_text < original + in_size )
 	{
-		int tu_cp;
-		tu_utf8_text = tuDecode8( tu_utf8_text, &tu_cp );
-		tu_out_wchar_t = tuEncode16( tu_out_wchar_t, tu_cp );
+		int cp;
+		utf8_text = tuDecode8( utf8_text, &cp );
+		out_utf16_text = tuEncode16( out_utf16_text, cp );
 	}
 }
 
-void tuShorten( const wchar_t* tu_utf16_text, int out_size, char* tu_out_char )
+void tuShorten( const wchar_t* utf16_text, int out_size, char* out_utf8_text )
 {
-	const char* original = tu_out_char;
-	while ( tu_out_char < original + out_size )
+	const char* original = out_utf8_text;
+	while ( out_utf8_text < original + out_size )
 	{
-		int tu_cp;
-		tu_utf16_text = tuDecode16( tu_utf16_text, &tu_cp );
-		tu_out_char = tuEncode8( tu_out_char, tu_cp );
+		int cp;
+		utf16_text = tuDecode16( utf16_text, &cp );
+		out_utf8_text = tuEncode8( out_utf8_text, cp );
 	}
 }
 
