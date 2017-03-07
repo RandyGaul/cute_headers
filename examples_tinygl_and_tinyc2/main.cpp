@@ -121,7 +121,7 @@ void ResizeFramebuffer( int w, int h )
 
 void Reshape( GLFWwindow* window, int width, int height )
 {
-	tgOrtho2D( (float)width, (float)height, 0, 0, projection );
+	tgOrtho2D( (float)width / 1.0f, (float)height / 1.0f, 0, 0, projection );
 	glViewport( 0, 0, width, height );
 	ResizeFramebuffer( width, height );
 }
@@ -162,6 +162,20 @@ void DrawPoly( c2v* verts, int count )
 		c2v a = verts[ iA ];
 		c2v b = verts[ iB ];
 		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
+	}
+}
+
+void DrawNormals( c2v* verts, c2v* norms, int count )
+{
+	for ( int i = 0; i < count; ++i )
+	{
+		int iA = i;
+		int iB = (i + 1) % count;
+		c2v a = verts[ iA ];
+		c2v b = verts[ iB ];
+		c2v p = c2Mulvs( c2Add( a, b ), 0.5f );
+		c2v n = norms[ iA ];
+		tgLine( ctx, p.x, p.y, 0, p.x + n.x, p.y + n.y, 0 );
 	}
 }
 
@@ -833,6 +847,55 @@ void TestManifold2( )
 	DrawManifold( m );
 }
 
+void PlastburkRayBug( )
+{
+	c2Poly p;
+	p.verts[ 0 ] = c2V( 0.875f, -11.5f );
+	p.verts[ 1 ] = c2V( 0.875f, 11.5f );
+	p.verts[ 2 ] = c2V( -0.875f, 11.5f );
+	p.verts[ 3 ] = c2V( -0.875f, -11.5f );
+	p.norms[ 0 ] = c2V( 1, 0 );
+	p.norms[ 1 ] = c2V( 0, 1 );
+	p.norms[ 2 ] = c2V( -1, 0 );
+	p.norms[ 3 ] = c2V( 0, -1 );
+	p.count = 4;
+
+	c2Ray ray0 = { {-3.869416f, 13.0693407f}, {1, 0}, 4 };
+	c2Ray ray1 = { {-3.869416f, 13.0693407f}, {0, -1}, 4 };
+
+	c2Raycast out0;
+	c2Raycast out1;
+	int hit0 = c2RaytoPoly( ray0, &p, 0, &out0 );
+	int hit1 = c2RaytoPoly( ray0, &p, 0, &out1 );
+
+#define DBG_DRAW_RAY( ray ) \
+	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 )
+
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	DBG_DRAW_RAY( ray0 );
+	DBG_DRAW_RAY( ray1 );
+	DrawPoly( p.verts, p.count );
+	DrawNormals( p.verts, p.norms, p.count );
+
+	if ( hit0 )
+	{
+		ray0.t = out0.t;
+		c2v impact = c2Impact( ray0, ray0.t );
+		c2v end = c2Add( impact, c2Mulvs( out0.n, 1.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+	}
+
+	if ( hit1 )
+	{
+		ray1.t = out1.t;
+		c2v impact = c2Impact( ray1, ray1.t );
+		c2v end = c2Add( impact, c2Mulvs( out1.n, 1.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+	}
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -922,8 +985,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 9;
-		if ( arrow_pressed ) code = (code + 1) % 10;
+		static int code = 10;
+		if ( arrow_pressed ) code = (code + 1) % 11;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -936,6 +999,7 @@ int main( )
 		case 7: TestManifold0( ); break;
 		case 8: TestManifold1( ); break;
 		case 9: TestManifold2( ); break;
+		case 10: PlastburkRayBug( ); break;
 		}
 
 		// push a draw call to tinygl

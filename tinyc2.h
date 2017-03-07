@@ -1125,7 +1125,7 @@ int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out )
 	{
 		float num = c2Dot( B->norms[ i ], c2Sub( B->verts[ i ], p ) );
 		float den = c2Dot( B->norms[ i ], d );
-		if ( num == 0 && den < 0 ) return 0;
+		if ( den == 0 && num < 0 ) return 0;
 		else
 		{
 			if ( den < 0 && num < lo * den )
