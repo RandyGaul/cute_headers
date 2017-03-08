@@ -1,5 +1,5 @@
 ﻿/*
-	tinydeflate - v1.01
+	tinydeflate - v1.02
 
 	SUMMARY:
 
@@ -9,7 +9,7 @@
 	Revision history:
 		1.0  (12/23/2016) initial release
 		1.01 (02/19/2017) tdDeflate -- custom compressor for dynamic trees
-		1.03 (03/08/2017) tRNS chunk support for paletted images
+		1.02 (03/08/2017) tRNS chunk support for paletted images
 
 
 	EXAMPLES:
