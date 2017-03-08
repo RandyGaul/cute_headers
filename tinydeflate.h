@@ -9,6 +9,7 @@
 	Revision history:
 		1.0  (12/23/2016) initial release
 		1.01 (02/19/2017) tdDeflate -- custom compressor for dynamic trees
+		1.03 (03/08/2017) tRNS chunk support for paletted images
 
 
 	EXAMPLES:
@@ -68,6 +69,11 @@
 		with a GZIP-style compressor. The new compressor should be able to compress
 		any piece of memory, unlike the current specialized code coupled to the PNG
 		stuff.
+*/
+
+/*
+	Contributors:
+		Zachary Carter    1.02 - bug catch for tRNS chunk in paletted images
 */
 
 #if !defined( TINYDEFLATE_H )
@@ -552,7 +558,7 @@ int tdInflate( void* in, int in_bytes, void* out, int out_bytes )
 	s->word_index = 0;
 	s->bits_left = in_bytes * 8;
 
-	int first_bytes = (int)((int)in & 3);
+	int first_bytes = (int)((size_t)in & 3);
 	s->words = (uint32_t*)((char*)in + first_bytes);
 	s->last_bits = ((in_bytes - first_bytes) & 3) * 8;
 	s->final_bytes = (char*)in + in_bytes - s->last_bits;
@@ -868,7 +874,7 @@ TD_INLINE static int tdLeafPred( tdNode* a, tdNode* b )
   return a->weight - b->weight;
 }
 
-TD_INLINE static void tdQSortNodes( tdNode* items, int count )
+static void tdQSortNodes( tdNode* items, int count )
 {
 	if ( count <= 1 ) return;
 
@@ -1013,7 +1019,7 @@ static void tdLengthsToSymbols( unsigned* lengths, int count, int maxbits, unsig
 	}
 }
 
-int tdMakeTree( tdLeaf* tree, int count, int max_bits )
+int tdMakeDynamicTree( tdLeaf* tree, int count, int max_bits )
 {
 	int freq[ 288 ] = { 0 };
 	int lens[ 288 ] = { 0 };
@@ -1032,6 +1038,18 @@ int tdMakeTree( tdLeaf* tree, int count, int max_bits )
 
 td_err:
 	return 0;
+}
+
+void tdMakeStaticTree( tdLeaf* len_tree, tdLeaf* dst_tree )
+{
+	int len_code[ 288 ] = { 0 };
+	int dst_code[ 288 ] = { 0 };
+	for ( int i = 0; i < 288; i++ ) len_tree[ i ].len = g_tdFixed[ i ];
+	for ( int i = 0; i < 32; i++ ) dst_tree[ i + 288 ].len = g_tdFixed[ i ];
+	//tdLengthsToSymbols( g_tdFixed, 288, 9, len_code );
+	//tdLengthsToSymbols( g_tdFixed + 288, 32, 9, dst_code );
+	for ( int i = 0; i < 288; ++i ) len_tree[ i ].code = len_code[ i ];
+	for ( int i = 0; i < 32; ++i ) dst_tree[ i ].code = dst_code[ i ];
 }
 
 static int tdEncodeDynamic( tdDState* s, unsigned* ll_lengths, unsigned* d_lengths )
@@ -1169,8 +1187,8 @@ void tdFlushEntries( tdDState* s, int final )
 	else tdWriteBits( s, 0, 1 );
 	tdWriteBits( s, 2, 2 ); // dynamic
 
-	tdMakeTree( s->len, 286, 15 );
-	tdMakeTree( s->dst, 30, 15 );
+	tdMakeDynamicTree( s->len, 286, 15 );
+	tdMakeDynamicTree( s->dst, 30, 15 );
 
 	uint32_t llens[ 286 ];
 	uint32_t dlens[ 30 ];
@@ -1304,8 +1322,8 @@ int tdFindMatch( tdDState* s, unsigned char* window, tdEntry* out )
 	int chain_count = 0;
 	while ( list != sentinel )
 	{
-		char* a = window;
-		char* b = list->start;
+		unsigned char* a = window;
+		unsigned char* b = list->start;
 		int dst = (int)(a - b);
 		if ( dst > 32768 ) break;
 		int len = 0;
@@ -1382,7 +1400,7 @@ int tdFindMatch( tdDState* s, unsigned char* window, tdEntry* out )
 #define TD_EXTRA_DBG_MEMORY 0
 void* tdDeflateMem( const void* in, int bytes, int* out_bytes, tdDeflateOptions* options )
 {
-	TD_ASSERT( !((int)in & 3) );
+	TD_ASSERT( !((size_t)in & 3) );
 	char* in_buffer = (char*)in;
 	tdDState* s = (tdDState*)calloc( 1, sizeof( tdDState ) );
 	s->in = (unsigned char*)in;
@@ -1738,7 +1756,7 @@ TD_INLINE static uint32_t tdMake32( const uint8_t* s )
 	return (s[ 0 ] << 24) | (s[ 1 ] << 16) | (s[ 2 ] << 8) | s[ 3 ];
 }
 
-static const uint8_t *tdChunk( tdRawPNG* png, const char *chunk, uint32_t minlen )
+static const uint8_t* tdChunk( tdRawPNG* png, const char* chunk, uint32_t minlen )
 {
 	uint32_t len = tdMake32( png->p );
 	const uint8_t* start = png->p;
@@ -1773,7 +1791,7 @@ static const uint8_t* tdFind( tdRawPNG* png, const char* chunk, uint32_t minlen 
 	return 0;
 }
 
-static int tdUnfilter( int w, int h, int bpp, uint8_t *raw )
+static int tdUnfilter( int w, int h, int bpp, uint8_t* raw )
 {
 	int len = w * bpp;
 	uint8_t *prev = raw;
@@ -1797,7 +1815,7 @@ static int tdUnfilter( int w, int h, int bpp, uint8_t *raw )
 	return 1;
 }
 
-static void tdConvert( int bpp, int w, int h, uint8_t *src, tdPixel *dest )
+static void tdConvert( int bpp, int w, int h, uint8_t* src, tdPixel* dest )
 {
 	for ( int y = 0; y < h; y++ )
 	{
@@ -1817,7 +1835,7 @@ static void tdConvert( int bpp, int w, int h, uint8_t *src, tdPixel *dest )
 	}
 }
 
-static void tdDepalette( int w, int h, uint8_t *src, tdPixel *dest, const uint8_t *plte )
+static void tdDepalette( int w, int h, uint8_t* src, tdPixel* dest, const uint8_t* plte, const uint8_t* trns )
 {
 	for ( int y = 0; y < h; y++ )
 	{
@@ -1826,12 +1844,12 @@ static void tdDepalette( int w, int h, uint8_t *src, tdPixel *dest, const uint8_
 
 		for ( int x = 0; x < w; x++, src++ )
 		{
-			int c = src[ 0 ];
+			int c = *src;
 			*dest++ = tdMakePixelA(
 				plte[ c * 3 ],
 				plte[ c * 3 + 1 ],
 				plte[ c * 3 + 2 ],
-				c ? 255 : 0
+				trns ? trns[ c ] : c ? 255 : 0
 				);
 		}
 	}
@@ -1842,10 +1860,10 @@ TD_INLINE static int tdOutSize( tdImage* img, int bpp )
 	return (img->w + 1) * img->h * bpp;
 }
 
-tdImage tdLoadPNGMem( const void *png_data, int png_length )
+tdImage tdLoadPNGMem( const void* png_data, int png_length )
 {
 	const char* sig = "\211PNG\r\n\032\n";
-	const uint8_t* ihdr, *first, *plte;
+	const uint8_t* ihdr, *first, *plte, *trns;
 	int bit_depth, color_type, bpp, w, h, pix_bytes;
 	int compression, filter, interlace;
 	int datalen, offset;
@@ -1898,6 +1916,11 @@ tdImage tdLoadPNGMem( const void *png_data, int png_length )
 	if ( !plte ) png.p = first;
 	else first = png.p;
 
+	// tRNS can come after PLTE
+	trns = tdFind( &png, "tRNS", 0 );
+	if ( !trns ) png.p = first;
+	else first = png.p;
+
 	// Compute length of the DEFLATE stream through IDAT chunk data sizes
 	datalen = 0;
 	for ( const uint8_t* idat = tdFind( &png, "IDAT", 0 ); idat; idat = tdChunk( &png, "IDAT", 0 ) )
@@ -1930,7 +1953,7 @@ tdImage tdLoadPNGMem( const void *png_data, int png_length )
 	if ( color_type == 3 )
 	{
 		TD_CHECK( plte, "color type of indexed requires a PLTE chunk" );
-		tdDepalette( img.w, img.h, out, img.pix, plte );
+		tdDepalette( img.w, img.h, out, img.pix, plte, trns );
 	}
 	else tdConvert( bpp, img.w, img.h, out, img.pix );
 
