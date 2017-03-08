@@ -1,5 +1,5 @@
 ﻿/*
-	tinydeflate - v1.1
+	tinydeflate - v1.01
 
 	SUMMARY:
 
