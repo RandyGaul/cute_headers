@@ -3,8 +3,8 @@
 
 	SUMMARY:
 
-		This header is a conglomeration of a DEFLATE compliant decompressor, and some
-		functions for dealing with PNGs (load, save and atlas creation).
+		This header is a conglomeration of a DEFLATE compliant decompressor/compressor
+		pair, and some functions for dealing with PNGs (load, save and atlas creation).
 
 	Revision history:
 		1.0  (12/23/2016) initial release
