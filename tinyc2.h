@@ -1419,7 +1419,10 @@ static int c2SidePlanes( c2v* seg, c2x x, const c2Poly* p, int e, c2h* h )
 	c2h right = { in, c2Dot( in, rb ) };
 	if ( c2Clip( seg, left ) < 2 ) return 0;
 	if ( c2Clip( seg, right ) < 2 ) return 0;
-	if ( h ) *h = { c2CCW90( in ), c2Dot( c2CCW90( in ), ra ) };
+	if ( h ) {
+		h->n = c2CCW90( in );
+		h->d = c2Dot( c2CCW90( in ), ra );
+	}
 	return 1;
 }
 
