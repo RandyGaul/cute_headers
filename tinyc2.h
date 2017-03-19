@@ -1354,7 +1354,7 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 
 	// Circle center is inside the polygon
 	// find the face closest to circle center to form manifold
-#define C2_PLANE_AT( p, i ) { (p)->norms[ i ], c2Dot( (p)->norms[ i ], (p)->verts[ i ] ) }
+#define C2_PLANE_AT( p, i ) (c2h){ (p)->norms[ i ], c2Dot( (p)->norms[ i ], (p)->verts[ i ] ) }
 	else
 	{
 		c2x bx = bx_tr ? *bx_tr : c2xIdentity( );
