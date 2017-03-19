@@ -1330,6 +1330,12 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 	}
 }
 
+static c2h C2_PLANE_AT( const c2Poly* p, const int i )
+{
+	c2h h = { p->norms[ i ], c2Dot( p->norms[ i ], p->verts[ i ] ) };
+	return h;
+}
+
 void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Manifold* m )
 {
 	m->count = 0;
@@ -1354,7 +1360,6 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 
 	// Circle center is inside the polygon
 	// find the face closest to circle center to form manifold
-#define C2_PLANE_AT( p, i ) { (p)->norms[ i ], c2Dot( (p)->norms[ i ], (p)->verts[ i ] ) }
 	else
 	{
 		c2x bx = bx_tr ? *bx_tr : c2xIdentity( );
