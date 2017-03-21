@@ -45,6 +45,9 @@
 	functions) GetShortPathName should be used. On other platforms symlinks can
 	be utilized.
 
+	Here is a post about this header:
+	http://www.randygaul.net/2017/02/23/game-localization-and-utf-8/
+
 	CREDIT:
 	The utf8 encoder/decoder was written by Richard Mitton for his lovely tigr
 	library. His functions have been tenderly extracted and have found a new
