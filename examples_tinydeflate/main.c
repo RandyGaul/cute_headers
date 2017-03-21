@@ -21,7 +21,7 @@ void TestAtlas( )
 
 int main( )
 {
-	//TestAtlas( );
+	TestAtlas( );
 	////tdImage img = tdLoadPNG( "atlas.png" );
 
 	int feldpar_size;

@@ -14,11 +14,14 @@
 	Revision history:
 		1.0  (02/13/2017) initial release
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
+		1.02 (03/21/2017) compile fixes for c on more compilers
 */
 
 /*
 	Contributors:
 		Plastburk         1.01 - const pointers pull request
+		mmozeiko          1.02 - 3 compile bugfixes
+		felipefs          1.02 - 3 compile bugfixes
 */
 
 /*
@@ -288,7 +291,7 @@ void c2MakePoly( c2Poly* p );
 int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB );
 void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m );
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 	#define C2_INLINE __forceinline
 #else
 	#define C2_INLINE inline __attribute__((always_inline))
@@ -803,7 +806,7 @@ float c2GJK( const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_
 		{
 			if ( iA == saveA[ i ] && iB == saveB[ i ] )
 			{
-				dup = true;
+				dup = 1;
 				break;
 			}
 		}
@@ -1330,7 +1333,7 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 	}
 }
 
-static c2h C2_PLANE_AT( const c2Poly* p, const int i )
+static C2_INLINE c2h C2_PLANE_AT( const c2Poly* p, const int i )
 {
 	c2h h = { p->norms[ i ], c2Dot( p->norms[ i ], p->verts[ i ] ) };
 	return h;
@@ -1407,7 +1410,7 @@ static int c2Clip( c2v* seg, c2h h )
 	float d0, d1;
 	if ( (d0 = c2Dist( h, seg[ 0 ] )) < 0 ) out[ sp++ ] = seg[ 0 ];
 	if ( (d1 = c2Dist( h, seg[ 1 ] )) < 0 ) out[ sp++ ] = seg[ 1 ];
-	if ( d0 * d1 < 0 ) out[ sp++ ] = c2Lerp( seg[ 0 ], seg[ 1 ], d0 / (d0 - d1) );
+	if ( d0 * d1 < 0 ) out[ sp++ ] = c2Intersect( seg[ 0 ], seg[ 1 ], d0, d1 );
 	seg[ 0 ] = out[ 0 ]; seg[ 1 ] = out[ 1 ];
 	return sp;
 }
