@@ -4,7 +4,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 
 | library | description | latest version| language(s) | license
 |---------|-------------|---------------|-------------|--------
-**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.02 |C/C++ | zlib
+**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.03 |C/C++ | zlib
 **[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG in mono/stereo, high performance custom mixer | 1.06 | C/C++ | zlib
 **[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++ | zlib
 **[tinytime](tinytime.h)** | Single function to return elapsed time delta in seconds since last call | 1.0 | C/C++ | zlib
