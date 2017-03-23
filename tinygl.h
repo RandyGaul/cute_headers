@@ -310,6 +310,9 @@ void tgFreeCtx( void* ctx )
 {
 	tgContext* context = (tgContext*)ctx;
 	free( context->calls );
+#if TG_LINE_RENDERER
+	free( context->line_verts );
+#endif
 	free( context );
 }
 
@@ -331,12 +334,8 @@ void tgLine( void* context, float ax, float ay, float az, float bx, float by, fl
 	tgContext* ctx = (tgContext*)context;
 	if ( ctx->line_vert_count + 2 > ctx->line_vert_capacity )
 	{
-		uint32_t new_cap = ctx->line_vert_capacity * 2;
-		float* new_mem = (float*)malloc( new_cap );
-		memcpy( new_mem, ctx->line_verts, TG_LINE_STRIDE * ctx->line_vert_count );
-		free( ctx->line_verts );
-		ctx->line_verts = new_mem;
-		ctx->line_vert_capacity = new_cap;
+		ctx->line_vert_capacity *= 2;
+		ctx->line_verts = (float*)realloc(ctx->line_verts, TG_LINE_STRIDE * ctx->line_vert_capacity);
 	}
 	float verts[] = { ax, ay, az, ctx->r, ctx->g, ctx->b, bx, by, bz, ctx->r, ctx->g, ctx->b };
 	memcpy( ctx->line_verts + ctx->line_vert_count * (TG_LINE_STRIDE / sizeof( float )), verts, sizeof( verts ) );
@@ -404,7 +403,7 @@ void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
 		-1.0f,  1.0f,  0.0f, 1.0f,
 		-1.0f, -1.0f,  0.0f, 0.0f,
 		 1.0f, -1.0f,  1.0f, 0.0f,
-	
+
 		-1.0f,  1.0f,  0.0f, 1.0f,
 		 1.0f, -1.0f,  1.0f, 0.0f,
 		 1.0f,  1.0f,  1.0f, 1.0f
@@ -982,7 +981,7 @@ void tgPresent( void* context, tgFramebuffer* fb )
 {
 	tgContext* ctx = (tgContext*)context;
 	tgQSort( ctx->calls, ctx->count );
-	
+
 	if ( fb ) glBindFramebuffer( GL_FRAMEBUFFER, fb->fb_id );
 	if ( ctx->clear_bits ) glClear( ctx->clear_bits );
 	if ( ctx->settings_bits ) glEnable( ctx->settings_bits );
