@@ -1,7 +1,7 @@
 #if !defined( TINYGL_H )
 
 /*
-	tinygl - v1.0
+	tinygl - v1.01
 
 	Summary:
 	Wrapper for OpenGL for vertex attributes, shader creation, draw calls, and
