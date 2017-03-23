@@ -54,8 +54,15 @@
 */
 
 /*
+	Revision history:
+		1.0  (02/09/2017) initial release
+		1.01 (03/23/2017) memory leak fix and swap to realloc for tgLine stuff
+*/
+
+/*
 	Contributors:
-		Andrew Hung       1.0 - initial frame buffer implementation, various bug fixes
+		Andrew Hung       1.0  - initial frame buffer implementation, various bug fixes
+		to-miz            1.01 - memory leak fix and swap to realloc for tgLine stuff
 */
 
 /*
