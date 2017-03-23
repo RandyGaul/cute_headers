@@ -78,7 +78,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\pook\deps\glad\glad.c" />
+    <ClCompile Include="glad\glad.c" />
     <ClCompile Include="glfw\context.c" />
     <ClCompile Include="glfw\egl_context.c" />
     <ClCompile Include="glfw\init.c" />
