@@ -952,8 +952,8 @@ int c2AABBtoAABB( c2AABB A, c2AABB B )
 {
 	int d0 = B.max.x < A.min.x;
 	int d1 = A.max.x < B.min.x;
-	int d2 = B.max.y < A.max.y;
-	int d3 = A.max.y < B.max.y;
+	int d2 = B.max.y < A.min.y;
+	int d3 = A.max.y < B.min.y;
 	return !(d0 | d1 | d2 | d3);
 }
 
