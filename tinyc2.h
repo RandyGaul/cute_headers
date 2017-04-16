@@ -454,40 +454,40 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_CIRCLE:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoCircleManifold( *(c2Circle*)A, *(c2Circle*)B, m );
-		case C2_AABB:    c2CircletoAABBManifold( *(c2Circle*)A, *(c2AABB*)B, m );
-		case C2_CAPSULE: c2CircletoCapsuleManifold( *(c2Circle*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    c2CircletoPolyManifold( *(c2Circle*)A, (const c2Poly*)B, bx, m );
+		case C2_CIRCLE:  return c2CircletoCircleManifold( *(c2Circle*)A, *(c2Circle*)B, m );
+		case C2_AABB:    return c2CircletoAABBManifold( *(c2Circle*)A, *(c2AABB*)B, m );
+		case C2_CAPSULE: return c2CircletoCapsuleManifold( *(c2Circle*)A, *(c2Capsule*)B, m );
+		case C2_POLY:    return c2CircletoPolyManifold( *(c2Circle*)A, (const c2Poly*)B, bx, m );
 		}
 		break;
 
 	case C2_AABB:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoAABBManifold( *(c2Circle*)B, *(c2AABB*)A, m );
-		case C2_AABB:    c2AABBtoAABBManifold( *(c2AABB*)A, *(c2AABB*)B, m );
-		case C2_CAPSULE: c2AABBtoCapsuleManifold( *(c2AABB*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    c2AABBtoPolyManifold( *(c2AABB*)A, (const c2Poly*)B, bx, m );
+		case C2_CIRCLE:  return c2CircletoAABBManifold( *(c2Circle*)B, *(c2AABB*)A, m );
+		case C2_AABB:    return c2AABBtoAABBManifold( *(c2AABB*)A, *(c2AABB*)B, m );
+		case C2_CAPSULE: return c2AABBtoCapsuleManifold( *(c2AABB*)A, *(c2Capsule*)B, m );
+		case C2_POLY:    return c2AABBtoPolyManifold( *(c2AABB*)A, (const c2Poly*)B, bx, m );
 		}
 		break;
 
 	case C2_CAPSULE:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoCapsuleManifold( *(c2Circle*)B, *(c2Capsule*)A, m );
-		case C2_AABB:    c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m );
-		case C2_CAPSULE: c2CapsuletoCapsuleManifold( *(c2Capsule*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)B, bx, m );
+		case C2_CIRCLE:  return c2CircletoCapsuleManifold( *(c2Circle*)B, *(c2Capsule*)A, m );
+		case C2_AABB:    return c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m );
+		case C2_CAPSULE: return c2CapsuletoCapsuleManifold( *(c2Capsule*)A, *(c2Capsule*)B, m );
+		case C2_POLY:    return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)B, bx, m );
 		}
 		break;
 
 	case C2_POLY:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m );
-		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m );
-		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)A, ax, m );
-		case C2_POLY:    c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
+		case C2_CIRCLE:  return c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m );
+		case C2_AABB:    return c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m );
+		case C2_CAPSULE: return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)A, ax, m );
+		case C2_POLY:    return c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
 	}
