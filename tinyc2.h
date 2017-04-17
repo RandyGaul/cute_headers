@@ -22,6 +22,7 @@
 		Plastburk         1.01 - const pointers pull request
 		mmozeiko          1.02 - 3 compile bugfixes
 		felipefs          1.02 - 3 compile bugfixes
+		seemk             1.02 - fix branching bug in c2Collide
 */
 
 /*
