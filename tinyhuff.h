@@ -440,7 +440,8 @@ int thPutBits( thBuffer* b, unsigned value, unsigned bit_count )
 
 TH_INLINE static int thPutBitsRev( thBuffer* b, unsigned value, unsigned bit_count )
 {
-	return thPutBits( b, thRev( value, bit_count ), bit_count );
+	unsigned bits = thRev( value, bit_count );
+	return thPutBits( b, bits, bit_count );
 }
 
 void thFlush( thBuffer* b )
@@ -489,7 +490,7 @@ int thCompress( thTree* tree, const void* in_buf, int in_bytes, void* out_buf, i
 		unsigned code = symbol->code;
 		int length = symbol->length;
 		if ( symbol->value != val ) return 0;
-		if ( !thPutBits( &b, code, length ) ) return 0;
+		if ( !thPutBitsRev( &b, code, length ) ) return 0;
 	}
 	return 1;
 }
@@ -506,9 +507,9 @@ int thDecompress( thTree* tree, const void* in_buf, int in_bits, void* out_buf, 
 	{
 		thSym sym = tree->symbols[ i ];
 		unsigned mask = ((1 << (TH_BITS_IN_INT - sym.length)) - 1) - 0xFF;
-		unsigned rev = thRev( sym.code, sym.length );
+		unsigned rev = sym.code;//thRev( sym.code, sym.length );
 		unsigned shifted = rev << (TH_BITS_IN_INT - sym.length);
-		unsigned code_flipped = shifted | (i << 4) | sym.length;
+		unsigned code_flipped = shifted;
 		sym.code = code_flipped;
 		tree->symbols[ i ] = sym;
 	}
@@ -516,10 +517,10 @@ int thDecompress( thTree* tree, const void* in_buf, int in_bits, void* out_buf, 
 	thCodeSort( tree->symbols, tree->symbol_count );
 	while ( in_bits )
 	{
-		unsigned bits = thRev16( thPeakBits( &b, 16 ) ) << 16 | 0xFFFF;
+		unsigned bits = thRev16( thPeakBits( &b, 16 ) ) << 16;
 		thSym* symbol = thDecode( tree->symbols, tree->symbol_count, bits );
 		int length = symbol->length;
-		int code = thRev( bits >> (TH_BITS_IN_INT - length), length );
+		int code = bits >> (TH_BITS_IN_INT - length);
 		int x;
 		x = 10;
 	}
