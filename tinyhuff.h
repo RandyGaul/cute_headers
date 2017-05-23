@@ -92,7 +92,7 @@
 			thKey decompress;
 
 			// the data to compress
-			const char* string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras nec faucibus leo. Praesent risus tellus, dictum ut ipsum vitae, fringilla elementum justo. Sed placerat, mauris ac elementum rhoncus, dui ipsum tincidunt dolor, eu vehicula ipsum arcu vitae turpis. Vivamus pulvinar odio non orci sodales, at dictum ex faucibus. Donec ornare a dolor vel malesuada. Donec dapibus, mauris malesuada imperdiet hendrerit, nisl dui rhoncus nisi, ac gravida quam nulla at tellus. Praesent auctor odio vel maximus tempus. Sed luctus cursus varius. Morbi placerat ipsum quis velit gravida rhoncus. Nunc malesuada urna nisl, nec facilisis diam tincidunt at. Aliquam condimentum nulla ac urna feugiat tincidunt. Nullam semper ullamcorper scelerisque. Nunc condimentum consectetur magna, sed aliquam risus tempus vitae. Praesent ornare id massa a facilisis. Quisque mollis tristique dolor. Morbi ut velit quis augue placerat sollicitudin a eu massa.";
+			const char* string = INPUT_STRING;
 			int bytes = strlen( string ) + 1;
 
 			// construct compression and decompression shared keyset
