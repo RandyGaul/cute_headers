@@ -25,20 +25,23 @@ int main( )
 		return -1;
 	}
 
+	// compute size of data after it would be compressed
+	int compressed_bits = thCompressedSize( &compress, string, bytes );
+	int compressed_bytes = (compressed_bits + 7) / 8;
+	void* compressed_buffer = malloc( compressed_bytes );
+
 	// do compression
-	ret = thCompress( &compress, string, bytes, scratch_memory, scratch_bytes );
+	ret = thCompress( &compress, string, bytes, compressed_buffer, compressed_bytes );
 	if ( !ret )
 	{
 		printf( "thCompress failed: %s", th_error_reason );
 		return -1;
 	}
 
-	// compute size of data after it would be compressed
-	int compressed_bits = thCompressedSize( &compress, string, bytes );
 
 	// do decompression
 	char* buf = (char*)malloc( bytes );
-	thDecompress( &decompress, scratch_memory, compressed_bits, buf, bytes );
+	thDecompress( &decompress, compressed_buffer, compressed_bits, buf, bytes );
 
 	if ( strcmp( buf, string ) )
 	{
