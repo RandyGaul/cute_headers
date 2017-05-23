@@ -5,7 +5,7 @@
 
 		This header contains functions to compress and decompress data streams via
 		Huffman encoding. Huffman encoding is generally good for smallish pieces of
-		data (like 1KB), or at least data with very high repition.
+		data (like 1KB), or at least data with very high repitition.
 
 		It works by looking at input data as bytes. It counts which byte-values are
 		the most common, and which are the most infrequent. Instead of using 8 bits
