@@ -70,10 +70,11 @@
 		placerat sollicitudin a eu massa."
 
 	Gets compressed from 933 bytes, down to 3979 bits (or 497 bytes). Code to generate keys and do
-	compression is below ( a complete C program). Please note that generally the compression keys
+	compression is below (a complete C program). Please note that generally the compression keys
 	are computed *offline* and loaded upon startup, but the example shows how to generate them.
 	There are no specific functions in this header to serialize compression keys; store them however
-	you see fit.
+	you see fit. Compression keys can be used to store the compression keys themselves! This would
+	be effective since the keys usually contain many zero bytes and some repitition.
 
 		#define TINYHUFF_IMPL
 		#include "../tinyhuff.h"
