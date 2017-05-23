@@ -74,7 +74,7 @@
 	are computed *offline* and loaded upon startup, but the example shows how to generate them.
 	There are no specific functions in this header to serialize compression keys; store them however
 	you see fit.
-	
+
 		#define TINYHUFF_IMPL
 		#include "../tinyhuff.h"
 
@@ -91,7 +91,7 @@
 			thKey decompress;
 
 			// the data to compress
-			const char* string = INPUT_STRING;
+			const char* string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras nec faucibus leo. Praesent risus tellus, dictum ut ipsum vitae, fringilla elementum justo. Sed placerat, mauris ac elementum rhoncus, dui ipsum tincidunt dolor, eu vehicula ipsum arcu vitae turpis. Vivamus pulvinar odio non orci sodales, at dictum ex faucibus. Donec ornare a dolor vel malesuada. Donec dapibus, mauris malesuada imperdiet hendrerit, nisl dui rhoncus nisi, ac gravida quam nulla at tellus. Praesent auctor odio vel maximus tempus. Sed luctus cursus varius. Morbi placerat ipsum quis velit gravida rhoncus. Nunc malesuada urna nisl, nec facilisis diam tincidunt at. Aliquam condimentum nulla ac urna feugiat tincidunt. Nullam semper ullamcorper scelerisque. Nunc condimentum consectetur magna, sed aliquam risus tempus vitae. Praesent ornare id massa a facilisis. Quisque mollis tristique dolor. Morbi ut velit quis augue placerat sollicitudin a eu massa.";
 			int bytes = strlen( string ) + 1;
 
 			// construct compression and decompression shared keyset
@@ -102,20 +102,23 @@
 				return -1;
 			}
 
+			// compute size of data after it would be compressed
+			int compressed_bits = thCompressedSize( &compress, string, bytes );
+			int compressed_bytes = (compressed_bits + 7) / 8;
+			void* compressed_buffer = malloc( compressed_bytes );
+
 			// do compression
-			ret = thCompress( &compress, string, bytes, scratch_memory, scratch_bytes );
+			ret = thCompress( &compress, string, bytes, compressed_buffer, compressed_bytes );
 			if ( !ret )
 			{
 				printf( "thCompress failed: %s", th_error_reason );
 				return -1;
 			}
 
-			// compute size of data after it would be compressed
-			int compressed_bits = thCompressedSize( &compress, string, bytes );
 
 			// do decompression
 			char* buf = (char*)malloc( bytes );
-			thDecompress( &decompress, scratch_memory, compressed_bits, buf, bytes );
+			thDecompress( &decompress, compressed_buffer, compressed_bits, buf, bytes );
 
 			if ( strcmp( buf, string ) )
 			{
