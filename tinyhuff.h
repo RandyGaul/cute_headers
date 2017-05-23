@@ -1,10 +1,55 @@
 /*
-	tinyhuff.h - v0.00
+	tinyhuff.h - v1.00
 
 	SUMMARY:
 
+		This header contains functions to compress and decompress data streams via
+		Huffman encoding. Huffman encoding is generally good for smallish pieces of
+		data (like 1KB), or at least data with very high repition.
+
+		It works by looking at input data as bytes. It counts which byte-values are
+		the most common, and which are the most infrequent. Instead of using 8 bits
+		per byte, frequent byte-values are remapped to short bit sequences (like 1,
+		2 or 3 bits), while infrequent byte-values are given longer bit sequences.
+		In this way Huffman encoding will usually have a good *average compression
+		ratio*, but in rare cases can increase the size of input.
+
+		Great use cases are:
+		* Network packets
+		* Messages, text or otherwise
+		* More elaborate compression schemes
+		* Serialized data
+
+		Usage steps:
+
+			1. Compute a shared key set
+			2. Compress with compression_key
+			3. Decompress with decompression_key
+
+			1. thBuildKeys
+			2. thCompress
+			3. thDecompress
+
+		More info:
+
+			Generally the keyset is computed offline one time and serialized for later use.
+			For example in a multiplayer game one client can use a compression_key on out-
+			going packets, will the recipient can use the associated decompression_key to
+			decompress incoming packets. The keys themselves are pre-computed, and never
+			sent across the network.
+
+			The keysets themselves can actually be stored in a fairly efficient manner by
+			transmitting the code-lengths of the Huffman codes just before the encoded
+			input stream. However, serializing Huffman trees in this way is: A) non-trivial
+			to implement, and B) not that useful for practical purposes, since the tree
+			itself takes up some space, eating away at compression gains. More sophisticated
+			compression schemes can be used (like DEFLATE or even something fancier) if keys
+			need to be serialized along with the data. Huffman encoding is very simple and
+			quite efficient, making it a more practical choice for smaller but frequent
+			pieces of redundant data.
+
 	Revision history:
-		1.0  (05/19/2017) initial release
+		1.0  (05/22/2017) initial release
 */
 
 /*
@@ -18,15 +63,31 @@
 // Read in the event of any errors
 extern const char* th_error_reason;
 
-typedef struct thTree thTree;
-int thBuildTree( thTree* tree, const void* in, int in_bytes, void* scratch_memory );
+typedef struct
+{
+	unsigned count;
+	unsigned char values[ 255 ];
+	unsigned char lengths[ 255 ];
+	unsigned codes[ 255 ];
+} thKey;
+
+// pre-computes a shared key set given arbitrary input data
+// scratch_memory must be at least TH_SCRATCH_MEMORY_BYTES, sized for worst-case memory usage scenario
+// returns 1 on success, 0 on failure
+int thBuildKeys( thKey* compression_key, thKey* decompression_key, const void* in, int in_bytes, void* scratch_memory );
 #define TH_SCRATCH_MEMORY_BYTES ((255 * 2 - 1) * (sizeof( int ) * 4 + sizeof( void* ) * 3))
 
-int thCompressedSize( const thTree* tree );
-int thCompress( thTree* tree, const void* in, int in_bytes, void* out, int out_bytes );
-int thDecompress( thTree* tree, const void* in, int in_bits, void* out, int out_bytes );
+int thCompressedSize( const thKey* compression_key, const void* in, int in_bytes );
+int thCompress( const thKey* compression_key, const void* in, int in_bytes, void* out, int out_bytes );
+void thDecompress( const thKey* decompression_key, const void* in, int in_bits, void* out, int out_bytes );
 
-int thTestBuffer( );
+// feel free to turn this on and try out the tests
+#define TH_INTERNAL_TESTS 0
+
+#if TH_INTERNAL_TESTS
+	// runs internal tests for validate implementation correctness
+	int thTestBuffer( );
+#endif
 
 #define TINYHUFF_H
 #endif
@@ -36,7 +97,10 @@ int thTestBuffer( );
 const char* th_error_reason;
 
 // Feel free to turn this on to try it out
-#define TH_DEBUG_OUT 1
+#define TH_DEBUG_OUT 0
+
+#define TH_CHECK( X, Y ) do { if ( !(X) ) { th_error_reason = Y; return 0; } } while ( 0 )
+#define TH_BITS_IN_INT (sizeof( int ) * 8)
 
 #ifdef _MSC_VER
 	#define TH_INLINE __forceinline
@@ -48,17 +112,9 @@ typedef struct
 {
 	unsigned code;
 	unsigned length;
-
 	unsigned freq;
 	unsigned value;
 } thSym;
-
-struct thTree
-{
-	int max_bits;
-	int symbol_count;
-	thSym symbols[ 255 ];
-};
 
 typedef struct thNode
 {
@@ -203,7 +259,7 @@ TH_DEFINE_INLINED_SORT( thCodeSort, thCodePred );
 
 #endif
 
-int thCodeLengths( thSym* symbols, int* max_index, thNode* tree, int length )
+TH_INLINE static int thCodeLengths( thSym* symbols, int* max_index, thNode* tree, int length )
 {
 	if ( tree->a )
 	{
@@ -223,7 +279,7 @@ int thCodeLengths( thSym* symbols, int* max_index, thNode* tree, int length )
 	}
 }
 
-void thLengthsToCodes( thSym* symbols, int count )
+TH_INLINE static void thLengthsToCodes( thSym* symbols, int count )
 {
 	int code = 0;
 	for ( int i = 0; i < count - 1; ++i )
@@ -248,7 +304,51 @@ TH_INLINE static unsigned thRev( unsigned a, unsigned len )
 	return thRev16( a ) >> (16 - len);
 }
 
-int thBuildTree( thTree* tree, const void* in_buf, int in_bytes, void* scratch_memory )
+int thCompressedSize( const thKey* compression_key, const void* in_buf, int in_bytes )
+{
+	unsigned char* in = (unsigned char*)in_buf;
+	int counts[ 255 ] = { 0 };
+	int sum = 0;
+	for ( int i = 0; i < in_bytes; ++i ) counts[ in[ i ] ]++;
+	for ( int i = 0, j = 0; i < 255; ++i )
+		if ( counts[ i ] )
+			sum += compression_key->lengths[ j++ ] * counts[ i ];
+	return sum;
+}
+
+TH_INLINE static void thMakeKey( thKey* decompression_key, thSym* symbols, int symbol_count )
+{
+	for ( int i = 0; i < symbol_count; ++i )
+	{
+		decompression_key->codes[ i ] = symbols[ i ].code;
+		decompression_key->lengths[ i ] = symbols[ i ].length;
+		decompression_key->values[ i ] = symbols[ i ].value;
+	}
+	decompression_key->count = symbol_count;
+}
+
+TH_INLINE static void thMakeCompressionKey( thKey* compression_key, thSym* symbols, int symbol_count )
+{
+	thLexicalSort( symbols, symbol_count );
+	thMakeKey( compression_key, symbols, symbol_count );
+}
+
+TH_INLINE static void thMakeDecompressionKey( thKey* decompression_key, thSym* symbols, int symbol_count )
+{
+	// flip bits for easy decoding
+	for ( int i = 0; i < symbol_count; ++i )
+	{
+		thSym sym = symbols[ i ];
+		sym.code = (sym.code << (TH_BITS_IN_INT - sym.length)) | i;
+		symbols[ i ] = sym;
+	}
+
+	// sort first by code, then by index
+	thCodeSort( symbols, symbol_count );
+	thMakeKey( decompression_key, symbols, symbol_count );
+}
+
+int thBuildKeys( thKey* compression_key, thKey* decompression_key, const void* in_buf, int in_bytes, void* scratch_memory )
 {
 	unsigned char* in = (unsigned char*)in_buf;
 	int counts[ 255 ] = { 0 };
@@ -331,18 +431,27 @@ int thBuildTree( thTree* tree, const void* in_buf, int in_bytes, void* scratch_m
 	thPrintTree( root );
 	thDumpTree( root );
 
-	tree->symbol_count = 0;
-	int depth = thCodeLengths( symbols, &tree->symbol_count, root, 0 );
-	tree->max_bits = depth;
+	int tree_symbol_count = 0;
+	int depth = thCodeLengths( symbols, &tree_symbol_count, root, 0 );
+
+	// handle special case
+	if ( symbol_count == 1 )
+	{
+		symbols->value = root->sym.value;
+		symbols->freq = root->sym.freq;
+		symbols->length = 1;
+	}
 
 	if ( depth >= 16 )
 	{
-		// todo
+		th_error_reason = "Bit-depth too large; input is too large to compress.";
+		return 0;
 	}
 
-	if ( tree->symbol_count != symbol_count )
+	if ( tree_symbol_count != symbol_count )
 	{
-		// todo
+		th_error_reason = "Symbol count mismatch; internal implementation error.";
+		return 0;
 	}
 
 	// convert to canonical huffman tree format
@@ -350,21 +459,10 @@ int thBuildTree( thTree* tree, const void* in_buf, int in_bytes, void* scratch_m
 	thCanonicalSort( symbols, symbol_count );
 	thLengthsToCodes( symbols, symbol_count );
 
-	// convert to lexical ordering to easy encoding
-	thLexicalSort( symbols, symbol_count );
-
-	for ( int i = 0; i < symbol_count; ++i )
-		tree->symbols[ i ] = symbols[ i ];
-
-	return 0;
-}
-
-int thCompressedSize( const thTree* tree )
-{
-	int sum = 0;
-	for ( int i = 0; i < tree->symbol_count; ++i )
-		sum += tree->symbols[ i ].length * tree->symbols[ i ].freq;
-	return sum;
+	// finally out the keys
+	thMakeCompressionKey( compression_key, symbols, symbol_count );
+	thMakeDecompressionKey( decompression_key, symbols, symbol_count );
+	return 1;
 }
 
 typedef struct
@@ -375,7 +473,7 @@ typedef struct
 	unsigned bits;
 } thBuffer;
 
-void thSetBuffer( thBuffer* b, const unsigned char* mem, unsigned bits )
+TH_INLINE static void thSetBuffer( thBuffer* b, const unsigned char* mem, unsigned bits )
 {
 	b->memory = (unsigned char*)mem;
 	b->bits = 0;
@@ -383,7 +481,7 @@ void thSetBuffer( thBuffer* b, const unsigned char* mem, unsigned bits )
 	b->count = 0;
 }
 
-int thPeakBits( thBuffer* b, unsigned bit_count )
+static int thPeakBits( thBuffer* b, unsigned bit_count )
 {
 	if ( bit_count > sizeof( int ) * 8 ) return 0;
 	if ( b->bits_left - bit_count < 0 ) return 0;
@@ -398,7 +496,7 @@ int thPeakBits( thBuffer* b, unsigned bit_count )
 	return bits;
 }
 
-int thGetBits( thBuffer* b, int bit_count )
+static int thGetBits( thBuffer* b, int bit_count )
 {
 	int bits = thPeakBits( b, bit_count );
 	b->bits >>= bit_count;
@@ -407,14 +505,14 @@ int thGetBits( thBuffer* b, int bit_count )
 	return bits;
 }
 
-void thPut8( thBuffer* b )
+static void thPut8( thBuffer* b )
 {
 	*b->memory++ = (unsigned char)(b->bits & 0xFF);
 	b->bits >>= 8;
 	b->bits_left -= 8;
 }
 
-int thPutBits( thBuffer* b, unsigned value, unsigned bit_count )
+static int thPutBits( thBuffer* b, unsigned value, unsigned bit_count )
 {
 	if ( bit_count > sizeof( int ) * 8 ) return 0;
 	if ( b->bits_left - bit_count < 0 ) return 0;
@@ -444,41 +542,38 @@ TH_INLINE static int thPutBitsRev( thBuffer* b, unsigned value, unsigned bit_cou
 	return thPutBits( b, bits, bit_count );
 }
 
-void thFlush( thBuffer* b )
+TH_INLINE static void thFlush( thBuffer* b )
 {
 	*b->memory = (unsigned char)b->bits;
 }
 
-thSym* thEncode( thSym* symbols, int symbol_count, unsigned search )
+TH_INLINE static int thEncode( const unsigned char* values, int symbol_count, unsigned search )
 {
 	unsigned lo = 0;
 	unsigned hi = symbol_count;
 	while ( lo < hi )
 	{
 		unsigned guess = (lo + hi) / 2;
-		if ( search < symbols[ guess ].value ) hi = guess;
+		if ( search < values[ guess ] ) hi = guess;
 		else lo = guess + 1;
 	}
-	return symbols + lo - 1;
+	return lo - 1;
 }
 
-thSym* thDecode( thSym* symbols, int symbol_count, unsigned search )
+TH_INLINE static int thDecode( const unsigned* codes, int symbol_count, unsigned search )
 {
 	unsigned lo = 0;
 	unsigned hi = symbol_count;
 	while ( lo < hi )
 	{
 		int guess = (lo + hi) / 2;
-		if ( search < symbols[ guess ].code ) hi = guess;
+		if ( search < codes[ guess ] ) hi = guess;
 		else lo = guess + 1;
 	}
-	return symbols + lo - 1;
+	return lo - 1;
 }
 
-#define TH_BITS_IN_INT (sizeof( int ) * 8)
-
-// code, length, value
-int thCompress( thTree* tree, const void* in_buf, int in_bytes, void* out_buf, int out_bytes )
+int thCompress( const thKey* compression_key, const void* in_buf, int in_bytes, void* out_buf, int out_bytes )
 {
 	unsigned char* in = (unsigned char*)in_buf;
 	thBuffer b;
@@ -486,114 +581,104 @@ int thCompress( thTree* tree, const void* in_buf, int in_bytes, void* out_buf, i
 	for ( int i = 0; i < in_bytes; ++i )
 	{
 		unsigned val = *in++;
-		thSym* symbol = thEncode( tree->symbols, tree->symbol_count, val );
-		unsigned code = symbol->code;
-		int length = symbol->length;
-		if ( symbol->value != val ) return 0;
-		if ( !thPutBitsRev( &b, code, length ) ) return 0;
+		int index = thEncode( compression_key->values, compression_key->count, val );
+		unsigned code = compression_key->codes[ index ];
+		unsigned length = compression_key->lengths[ index ];
+		TH_CHECK( compression_key->values[ index ] == val, "Value mismatch; internal implementation error." );
+		int bits_rev_ret = thPutBitsRev( &b, code, length );
+		TH_CHECK( bits_rev_ret, "thPutBitsRev failed; internal implementation error." );
 	}
+	thFlush( &b );
 	return 1;
 }
 
-// code with flipped bits, length, value
-int thDecompress( thTree* tree, const void* in_buf, int in_bits, void* out_buf, int out_bytes )
+void thDecompress( const thKey* decompression_key, const void* in_buf, int in_bits, void* out_buf, int out_bytes )
 {
 	unsigned char* out = (unsigned char*)out_buf;
 	thBuffer b;
 	thSetBuffer( &b, in_buf, in_bits );
-
-	// flip bits for easy decoding
-	for ( int i = 0; i < tree->symbol_count; ++i )
+	int bytes_written = 0;
+	while ( in_bits && bytes_written < out_bytes )
 	{
-		thSym sym = tree->symbols[ i ];
-		unsigned mask = ((1 << (TH_BITS_IN_INT - sym.length)) - 1) - 0xFF;
-		unsigned rev = sym.code;//thRev( sym.code, sym.length );
-		unsigned shifted = rev << (TH_BITS_IN_INT - sym.length);
-		unsigned code_flipped = shifted;
-		sym.code = code_flipped;
-		tree->symbols[ i ] = sym;
+		unsigned bits = (thRev16( thPeakBits( &b, 16 ) ) << 16) | 0xFFFF;
+		int index = thDecode( decompression_key->codes, decompression_key->count, bits );
+		*out++ = decompression_key->values[ index ];
+		unsigned length = decompression_key->lengths[ index ];
+		thGetBits( &b, length );
+		in_bits -= length;
+		++bytes_written;
 	}
-
-	thCodeSort( tree->symbols, tree->symbol_count );
-	while ( in_bits )
-	{
-		unsigned bits = thRev16( thPeakBits( &b, 16 ) ) << 16;
-		thSym* symbol = thDecode( tree->symbols, tree->symbol_count, bits );
-		int length = symbol->length;
-		int code = bits >> (TH_BITS_IN_INT - length);
-		int x;
-		x = 10;
-	}
-	return 0;
 }
 
-#include <stdlib.h>
+#if TH_INTERNAL_TESTS
 
-#define TH_CHECK( X, Y ) do { if ( !(X) ) { th_error_reason = Y; return 0; } } while ( 0 )
+	#include <stdlib.h>
 
-int thTestBuffer( )
-{
-	thBuffer buf;
-	int bits = 100 * 8;
-	unsigned char* mem = (unsigned char*)malloc( 100 );
-	thBuffer* b = &buf;
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 100; ++i )
-		thPutBits( b, i & 1, 1 );
-	thFlush( b );
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 100; ++i )
-		TH_CHECK( thGetBits( b, 1 ) == (i & 1), "Failed single-bit test." );
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 20; ++i )
-		thPutBits( b, (i & 1) ? 0xFF : 0, 2 );
-	thFlush( b );
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 20; ++i )
+	int thTestBuffer( )
 	{
-		int a = thGetBits( b, 2 );
-		int b = (i & 1) ? 3 : 0;
-		TH_CHECK( a == b, "Failed two bits test." );
+		thBuffer buf;
+		int bits = 100 * 8;
+		unsigned char* mem = (unsigned char*)malloc( 100 );
+		thBuffer* b = &buf;
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 100; ++i )
+			thPutBits( b, i & 1, 1 );
+		thFlush( b );
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 100; ++i )
+			TH_CHECK( thGetBits( b, 1 ) == (i & 1), "Failed single-bit test." );
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 20; ++i )
+			thPutBits( b, (i & 1) ? 0xFF : 0, 2 );
+		thFlush( b );
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 20; ++i )
+		{
+			int a = thGetBits( b, 2 );
+			int b = (i & 1) ? 3 : 0;
+			TH_CHECK( a == b, "Failed two bits test." );
+		}
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 10; ++i )
+			thPutBits( b, 17, 5 );
+		thFlush( b );
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 10; ++i )
+		{
+			int a = thGetBits( b, 5 );
+			int b = 17;
+			TH_CHECK( a == b, "Failed five bits test." );
+		}
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 10; ++i )
+			thPutBits( b, (i & 1) ? 117 : 83, 7 );
+		thFlush( b );
+
+		thSetBuffer( b, mem, bits );
+
+		for ( int i = 0; i < 10; ++i )
+		{
+			int a = thGetBits( b, 7 );
+			int b = (i & 1) ? 117 : 83;
+			TH_CHECK( a == b, "Failed seven bits test." );
+		}
+
+		return 1;
 	}
 
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 10; ++i )
-		thPutBits( b, 17, 5 );
-	thFlush( b );
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 10; ++i )
-	{
-		int a = thGetBits( b, 5 );
-		int b = 17;
-		TH_CHECK( a == b, "Failed five bits test." );
-	}
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 10; ++i )
-		thPutBits( b, (i & 1) ? 117 : 83, 7 );
-	thFlush( b );
-
-	thSetBuffer( b, mem, bits );
-
-	for ( int i = 0; i < 10; ++i )
-	{
-		int a = thGetBits( b, 7 );
-		int b = (i & 1) ? 117 : 83;
-		TH_CHECK( a == b, "Failed seven bits test." );
-	}
-
-	return 1;
-}
+#endif // TH_INTERNAL_TESTS
 
 #endif // TINYHUFF_IMPL
