@@ -627,6 +627,7 @@ TH_INLINE static int thPutBitsRev( thBuffer* b, unsigned value, unsigned bit_cou
 
 TH_INLINE static void thFlush( thBuffer* b )
 {
+	if ( !b->count ) return;
 	*b->memory = (unsigned char)b->bits;
 }
 
