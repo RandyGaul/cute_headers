@@ -77,8 +77,11 @@ typedef struct
 int thBuildKeys( thKey* compression_key, thKey* decompression_key, const void* in, int in_bytes, void* scratch_memory );
 #define TH_SCRATCH_MEMORY_BYTES ((255 * 2 - 1) * (sizeof( int ) * 4 + sizeof( void* ) * 3))
 
+// returns size in *bits*, NOT bytes
 int thCompressedSize( const thKey* compression_key, const void* in, int in_bytes );
 int thCompress( const thKey* compression_key, const void* in, int in_bytes, void* out, int out_bytes );
+
+// please note in_bits is *bits*, NOT bytes
 void thDecompress( const thKey* decompression_key, const void* in, int in_bits, void* out, int out_bytes );
 
 // feel free to turn this on and try out the tests
