@@ -52,3 +52,7 @@ A well constructed single-file header will not use any templates and make use of
 I personally don't really know if it's a fad or not, but these files aren't really just headers. They are headers with the .C file part (the implementation) attached to the end. It's two different files stuck together with the C preprocessor, but the implementation part never shows up unless the user does #define LIB_IMPLEMENTATION. This define step is the only integration step required to use these headers.
 
 Unfortunately writing a good header library is pretty hard, so just any random header lib out there in the wild is probably not a good one. The [STB](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&cad=rja&uact=8&ved=0ahUKEwihsabx0qHSAhVX0WMKHVnyAZ0QFggaMAA&url=https%3A%2F%2Fgithub.com%2Fnothings%2Fstb&usg=AFQjCNHkcM-rQ-cn3VbNhQZ3lnwpnSrCWQ&sig2=bg0yIt7IhNkQy6_nMcuYZw&bvm=bv.147448319,d.cGc) and [RJM](https://github.com/rmitton/rjm) are my favorite header libs, and are a good reference to get an idea at what a good header lib looks like.
+
+> - *Why do many libraries use zlib license, instead of public domain?*
+
+I am a younger engineer early in my career. The zlib license is a nice way to get my name out there a little more. It is very permissive. Basically nobody can claim they wrote the original code, or say I wrote modified versions. The difference between zlib and public domain is very minimal. If anyone needs a public domain version I would be happy to create a copy with a public domain license -- just contact me and ask.
