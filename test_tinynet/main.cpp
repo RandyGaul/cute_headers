@@ -1,8 +1,8 @@
 #define TN_IMPLEMENTATION
-#include "tinynet.h"
+#include "../tinynet.h"
 
 #define TT_IMPLEMENTATION
-#include "tinytime.h"
+#include "../tinytime.h"
 
 #if TN_PLATFORM != TN_WINDOWS
 
@@ -55,15 +55,20 @@ void PeakCheck( tnTransport* transport )
 	PacketA p;
 	tnAddress from;
 	int packet_type;
-	int packet_size_bytes;
+	uint32_t words[ TN_MTU_WORDCOUNT ];
 
-	tnPeak_internal( transport, &from, &packet_type, &packet_size_bytes );
-
-	if ( transport->has_packet )
+	int bytes = tnPeak_internal( transport, &from, words );
+	if ( bytes )
 	{
-		int serialize_was_ok = tnGetPacketData_internal( transport, &p, packet_type );
-		CHECK( serialize_was_ok );
-		CHECK( Check( packet, p ) );
+		int header_was_ok = tnReadPacketHeader( transport, words, bytes, &packet_type, 0 );
+		CHECK( header_was_ok );
+
+		if ( header_was_ok )
+		{
+			int serialize_was_ok = tnGetPacketData_internal( transport, words, &p, packet_type );
+			CHECK( serialize_was_ok );
+			CHECK( Check( packet, p ) );
+		}
 	}
 }
 
@@ -73,16 +78,19 @@ int main( void )
 
 	server_address = tnMakeAddress( "[::1]:1500" );
 	client_address = tnMakeAddress( "[::1]:1501" );
-	server_socket = tnMakeSocket( server_address, 1024 * 1024 );
-	client_socket = tnMakeSocket( client_address, 1024 * 1024 );
+	server_socket = tnMakeSocket( server_address, 1024 * 1024, 1 );
+	client_socket = tnMakeSocket( client_address, 1024 * 1024, 1 );
 
 	tnRegister( ctx, PT_PACKETA, WritePacketA, ReadPacketA, MeasureWritePacketA, sizeof( PacketA ) );
 	tnMakeTransport( &server, ctx, server_socket, client_address, "server" );
 	tnMakeTransport( &client, ctx, client_socket, server_address, "client" );
 
+	tnSpawnWorkerThread( &server );
+	//tnSpawnWorkerThread( &client );
+
 	//DoTests( );
 
-#if 1
+#if 0
 	tnNetSimDef sim;
 	sim.latency = 400;
 	sim.jitter = 0;
@@ -105,7 +113,7 @@ int main( void )
 		if ( GetAsyncKeyState( VK_ESCAPE ) )
 			break;
 		
-		for ( int i = 0; i < TN_SEQUENCE_BUFFER_SIZE * 1000; ++i )
+		for ( int i = 0; i < 1; ++i )
 		{
 			tnReliable( &server, PT_PACKETA, &packet );
 			tnReliable( &client, PT_PACKETA, &packet );
@@ -114,10 +122,12 @@ int main( void )
 		tnSend( &client, 0, 0 );
 
 		char buffer[ TN_PACKET_DATA_MAX_SIZE ];
-		int type;
+		int type = ~0;
 		tnAddress from;
-		tnGetPacket( &server, &from, &type, buffer );
-		tnGetPacket( &client, &from, &type, buffer );
+		while ( tnGetPacket( &server, &from, &type, buffer ) )
+			;
+		while ( tnGetPacket( &client, &from, &type, buffer ) )
+			;
 
 		PacketA p;
 		while ( tnGetReliable( &server, &type, &p ) )
@@ -129,8 +139,10 @@ int main( void )
 		// golly gee wtf
 
 		float dt = ttTime( );
-		tnTick( ctx, dt );
-		printf( "dt: %f, rtt: %d, ping: %d\n", dt, ctx->rtt, tnPing( ctx ) );
+		tnFlushNetSim( ctx );
+		printf( "dt: %f (milliseconds), rtt: %d, ping: %d\n", dt * 1000.0f, server.round_trip_time_millis, 0 );
+
+		tnSleep( 16 );
 	}
 
 	tnFreeTransport( &server );

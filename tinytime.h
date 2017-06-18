@@ -1,11 +1,32 @@
 #if !defined( TINYTIME_H )
 
+#include <stdint.h>
+
+typedef struct ttTimer ttTimer;
+
+// quick and dirty elapsed time since last call
 float ttTime( );
 
-#define TINYTIME_H
-#endif
+// high precision timer functions found below
 
-#ifdef TT_IMPLEMENTATION
+// Call once to setup this timer on this thread
+// does a ttRecord call
+void ttInitTimer( ttTimer* timer );
+
+// returns raw ticks in platform-specific units between now-time and last ttRecord call
+int64_t ttElapsed( ttTimer* timer );
+
+// ticks to seconds conversion
+int64_t ttSeconds( ttTimer* timer, int64_t ticks );
+
+// ticks to milliseconds conversion
+int64_t ttMilliSeconds( ttTimer* timer, int64_t ticks );
+
+// ticks to microseconds conversion
+int64_t ttMicroSeconds( ttTimer* timer, int64_t ticks );
+
+// records the now-time in raw platform-specific units
+void ttRecord( ttTimer* timer );
 
 #define TT_WINDOWS	1
 #define TT_MAC		2
@@ -18,6 +39,24 @@ float ttTime( );
 #else
 	#define TT_PLATFORM TT_UNIX
 #endif
+
+#if TT_PLATFORM == TT_WINDOWS
+
+	struct ttTimer
+	{
+		LARGE_INTEGER freq;
+		LARGE_INTEGER prev;
+	};
+
+#elif TT_PLATFORM == TT_MAC
+#else
+#endif
+
+#define TINYTIME_H
+#endif
+
+#ifdef TT_IMPLEMENTATION
+
 
 // These functions are intended be called from a single thread only. In a
 // multi-threaded environment make sure to call Time from the main thread only.
@@ -54,6 +93,39 @@ float ttTime( );
 		float elapsed = (float)((double)(now.QuadPart - prev.QuadPart) * factor);
 		prev = now;
 		return elapsed;
+	}
+
+	void ttInitTimer( ttTimer* timer )
+	{
+		QueryPerformanceCounter( &timer->prev );
+		QueryPerformanceFrequency( &timer->freq );
+	}
+
+	int64_t ttElapsed( ttTimer* timer )
+	{
+		LARGE_INTEGER now;
+		QueryPerformanceCounter( &now );
+		return (int64_t)(timer->prev.QuadPart - now.QuadPart);
+	}
+
+	int64_t ttSeconds( ttTimer* timer, int64_t ticks )
+	{
+		return ticks / timer->freq.QuadPart;
+	}
+
+	int64_t ttMilliSeconds( ttTimer* timer, int64_t ticks )
+	{
+		return ticks / (timer->freq.QuadPart / 1000);
+	}
+
+	int64_t ttMicroSeconds( ttTimer* timer, int64_t ticks )
+	{
+		return ticks / (timer->freq.QuadPart / 1000000);
+	}
+
+	void ttRecord( ttTimer* timer )
+	{
+		QueryPerformanceCounter( &timer->prev );
 	}
 
 #elif TT_PLATFORM == TT_MAC

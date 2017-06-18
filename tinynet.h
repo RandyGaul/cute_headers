@@ -65,17 +65,17 @@ const char* g_tnErrorReason;
 	#define NOMINMAX
 	#define _WINSOCK_DEPRECATED_NO_WARNINGS
 	#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
-	#define snprintf _snprintf
-	#include <winsock2.h>    // socket
-	#include <ws2tcpip.h>    // WSA stuff
+	#define tn_snprintf _snprintf
+	#include <winsock2.h>   // socket
+	#include <ws2tcpip.h>   // WSA stuff
 	#pragma comment( lib, "ws2_32.lib" )
 
 #elif TN_PLATFORM == TN_MAC || TN_PLATFORM == TN_UNIX
 
-	#include <sys/socket.h>  // socket
-	#include <fcntl.h>       // fcntl
-	#include <arpa/inet.h>   // inet_pton
-	#include <unistd.h>      // close
+	#include <sys/socket.h> // socket
+	#include <fcntl.h>      // fcntl
+	#include <arpa/inet.h>  // inet_pton
+	#include <unistd.h>     // close
 	#include <errno.h>
 
 #endif
@@ -449,8 +449,8 @@ void tnAddressString( tnAddress address, char* buffer, int max_buffer_bytes )
 		uint8_t b = (address.ipv4 >> 8) & 0xFF;
 		uint8_t c = (address.ipv4 >> 16) & 0xFF;
 		uint8_t d = (address.ipv4 >> 24) & 0xFF;
-		if ( address.port ) snprintf( buffer, max_buffer_bytes, "%d.%d.%d.%d:%d", a, b, c, d, address.port );
-		else snprintf( buffer, max_buffer_bytes, "%d.%d.%d.%d", a, b, c, d );
+		if ( address.port ) tn_snprintf( buffer, max_buffer_bytes, "%d.%d.%d.%d:%d", a, b, c, d, address.port );
+		else tn_snprintf( buffer, max_buffer_bytes, "%d.%d.%d.%d", a, b, c, d );
 	}	break;
 
 	case TN_ADDRESS_IPV6:
@@ -459,7 +459,7 @@ void tnAddressString( tnAddress address, char* buffer, int max_buffer_bytes )
 		{
 			char inet6_addrstr[ INET6_ADDRSTRLEN ];
 			inet_ntop( AF_INET6, (void*)address.ipv6, inet6_addrstr, INET6_ADDRSTRLEN );
-			snprintf( buffer, max_buffer_bytes, "[%s]:%d", inet6_addrstr, address.port );
+			tn_snprintf( buffer, max_buffer_bytes, "[%s]:%d", inet6_addrstr, address.port );
 		}
 		else inet_ntop( AF_INET6, (void*)address.ipv6, buffer, max_buffer_bytes );
 	}	break;
@@ -508,7 +508,7 @@ struct tnSocket
 	tnSocketError error_code;
 };
 
-tnSocket tnMakeSocket( tnAddress address, int buffer_size )
+tnSocket tnMakeSocket( tnAddress address, int buffer_size, int true_for_nonblocking )
 {
 	tnSocket socket;
 	socket.error_code = TN_SOCKET_ERROR_NONE;
@@ -614,10 +614,10 @@ tnSocket tnMakeSocket( tnAddress address, int buffer_size )
 
 	socket.address = address;
 
-	// set non-blocking io
+	// set blocking/non-blocking io
 	#if TN_PLATFORM == TN_MAC || TN_PLATFORM == TN_UNIX
 
-		int nonBlocking = 1;
+		int nonBlocking = true_for_nonblocking;
 		if ( fcntl( socket.handle, F_SETFL, O_NONBLOCK, nonBlocking ) == -1 )
 		{
 			socket.error_code = TN_SOCKET_ERROR_SET_NON_BLOCKING_FAILED;
@@ -626,7 +626,7 @@ tnSocket tnMakeSocket( tnAddress address, int buffer_size )
 
 	#elif TN_PLATFORM == TN_WINDOWS
 
-		DWORD nonBlocking = 1;
+		DWORD nonBlocking = true_for_nonblocking;
 		if ( ioctlsocket( socket.handle, FIONBIO, &nonBlocking ) != 0 )
 		{
 			socket.error_code = TN_SOCKET_ERROR_SET_NON_BLOCKING_FAILED;
@@ -667,7 +667,7 @@ struct tnVTABLE
 struct tnSimPacket
 {
 	int size;
-	float delay;
+	int64_t delay;
 	struct tnTransport* transport;
 	tnSimPacket* next;
 	uint32_t words[ TN_MTU_WORDCOUNT ];
@@ -712,7 +712,7 @@ struct tnIncomingPacketData
 struct tnOutgoingPacketData
 {
 	int acked;
-	int send_time_milliseconds;
+	int64_t send_time;
 	int count;
 	uint16_t ids[ TN_MAX_RELIABLES ];
 };
@@ -723,7 +723,7 @@ struct tnReliableData
 	uint32_t data[ TN_RELIABLE_WORD_COUNT ];
 };
 
-#define TN_SEQUENCE_BUFFER_SIZE 1024
+#define TN_SEQUENCE_BUFFER_SIZE 256
 struct tnSequenceBuffer
 {
 	uint16_t sequence;
@@ -735,7 +735,6 @@ struct tnSequenceBuffer
 void tnMakeSequenceBuffer( tnSequenceBuffer* buffer, int stride )
 {
 	TN_ASSERT( stride >= 0 );
-	TN_ASSERT( stride < TN_SEQUENCE_BUFFER_SIZE );
 	buffer->sequence = 0;
 	buffer->data = (char*)malloc( stride * TN_SEQUENCE_BUFFER_SIZE );
 	buffer->stride = stride;
@@ -817,30 +816,119 @@ void tnMakeAck( tnSequenceBuffer* seq, uint16_t* ack, uint32_t* ack_bits )
 
 struct tnContext
 {
-	float dt;
-	int time_monotonic_milliseconds;
-	int rtt;
 	int vtable_count;
 	tnVTABLE* vtables;
 	int use_sim;
+	int running;
 	tnNetSim sim;
 };
-
-int tnPing( tnContext* ctx )
-{
-	int rtt = ctx->rtt;
-	/*int fuzz = (int)(ctx->dt * 1500.0f + 0.5f);
-	if ( ctx->use_sim ) fuzz += (int)(ctx->dt * 1000.0f + 0.5f);
-	if ( rtt - fuzz > 0 ) rtt = rtt - fuzz;
-	if ( rtt < 4 ) rtt = 4;*/
-	return rtt;
-}
 
 tnVTABLE* tnGetTable( tnContext* ctx, int user_type )
 {
 	TN_ASSERT( user_type >= 0 );
 	TN_ASSERT( user_type < ctx->vtable_count );
 	return ctx->vtables + user_type;
+}
+
+#if TN_PLATFORM == TN_WINDOWS
+
+	typedef struct
+	{
+		CRITICAL_SECTION critical_section;
+		LARGE_INTEGER prev;
+		LARGE_INTEGER freq;
+	} tnPlatform;
+
+#elif TN_PLATFORM == TN_MAC
+
+	typedef struct
+	{
+		pthread_t thread;
+		pthread_mutex_t mutex;
+	} tnPlatform;
+
+#endif
+
+enum tnQueuePacketStatus
+{
+	TN_QUEUE_EMPTY,
+	TN_QUEUE_NOT_PROCESSED,
+	TN_QUEUE_PROCESSED
+};
+
+typedef struct
+{
+	tnQueuePacketStatus state;
+	int64_t timestamp;
+	int size;
+	int user_type;
+	tnAddress from;
+	uint32_t words[ TN_MTU_WORDCOUNT ];
+} tnQueuePacket;
+
+#define TN_QUEUE_CAPACITY 1024
+typedef struct
+{
+	int insert_count;
+	int insert_index;
+	int process_count;
+	int process_index;
+	int pop_index;
+	tnQueuePacket packets[ TN_QUEUE_CAPACITY ];
+} tnQueue;
+
+static int tnQueuePop( tnQueue* q, void* out, int64_t* ticks )
+{
+	if ( q->insert_count == TN_QUEUE_CAPACITY ) return 0;
+	tnQueuePacket* p = q->packets + q->pop_index;
+	if ( p->state != TN_QUEUE_PROCESSED ) return 0;
+	memcpy( out, p->words, p->size );
+	*ticks = p->timestamp;
+	q->pop_index++;
+	q->pop_index %= TN_QUEUE_CAPACITY;
+	q->insert_count++;
+	return p->size;
+}
+
+static int tnQueuePush( tnQueue* q, void* data, int size, tnAddress from, int64_t ticks )
+{
+	if ( size > TN_MTU ) return 0;
+	if ( !q->insert_count ) return 0;
+	TN_ASSERT( q->insert_count > 0 );
+	TN_ASSERT( q->insert_count <= TN_QUEUE_CAPACITY );
+	int index = q->insert_index++;
+	q->insert_index %= TN_QUEUE_CAPACITY;
+	tnQueuePacket* p = q->packets + index;
+	p->state = TN_QUEUE_NOT_PROCESSED;
+	p->timestamp = ticks;
+	p->size = size;
+	p->from = from;
+	memcpy( p->words, data, size );
+	q->insert_count--;
+	q->process_count++;
+	return 1;
+}
+
+static void tnProcessPacket( tnQueuePacket* p )
+{
+	// decrypt
+	// decompress
+}
+
+static int tnQueueProcess( tnQueue* q )
+{
+	int did_work = 0;
+	while ( q->process_count )
+	{
+		tnQueuePacket* p = q->packets + q->process_index;
+		tnProcessPacket( p );
+		p->state = TN_QUEUE_PROCESSED;
+		q->process_count--;
+		q->process_index++;
+		q->process_index %= TN_QUEUE_CAPACITY;
+		did_work = 1;
+	}
+	return did_work;
 }
 
 struct tnTransport
@@ -855,10 +943,152 @@ struct tnTransport
 	uint16_t reliable_oldest_unacked;
 	tnSequenceBuffer reliable_incoming;
 	tnSequenceBuffer reliable_outgoing;
+	int round_trip_time;
+	int round_trip_time_millis;
 
-	int has_packet;
-	uint32_t words[ TN_MTU_WORDCOUNT ];
+	// worker thread data
+	int using_worker_thread;
+	int sleep_milliseconds;
+	tnQueue* q;
+
+	// platform data
+	tnPlatform pd;
 };
+
+static void tnAddQueue( tnTransport* transport )
+{
+	tnQueue* q = (tnQueue*)malloc( sizeof( tnQueue ) );
+	q->insert_count = TN_QUEUE_CAPACITY;
+	q->insert_index = 0;
+	q->process_count = 0;
+	q->process_index = 0;
+	q->pop_index = 0;
+	for ( int i = 0; i < TN_QUEUE_CAPACITY; ++i )
+	{
+		tnQueuePacket* p = q->packets + i;
+		p->state = TN_QUEUE_EMPTY;
+	}
+	transport->q = q;
+}
+
+int tnDoWork( tnTransport* transport );
+
+#if TN_PLATFORM == TN_WINDOWS
+
+	void tnSleep( int milliseconds )
+	{
+		Sleep( milliseconds );
+	}
+	
+	static void tnLock( tnTransport* transport )
+	{
+		if ( transport->using_worker_thread ) EnterCriticalSection( &transport->pd.critical_section );
+	}
+
+	static void tnUnlock( tnTransport* transport )
+	{
+		if ( transport->using_worker_thread ) LeaveCriticalSection( &transport->pd.critical_section );
+	}
+
+	static DWORD WINAPI tnWorkerThread( LPVOID lpParameter )
+	{
+		tnTransport* transport = (tnTransport*)lpParameter;
+
+		while ( transport->ctx->running )
+		{
+			int should_continue = tnDoWork( transport );
+			if ( should_continue ) continue;
+			if ( transport->sleep_milliseconds ) tnSleep( transport->sleep_milliseconds );
+			else YieldProcessor( );
+		}
+
+		transport->using_worker_thread = 0;
+		return 0;
+	}
+
+	static int64_t tnTicks( tnTransport* transport )
+	{
+		LARGE_INTEGER now;
+		QueryPerformanceCounter( &now );
+		return (int64_t)(now.QuadPart - transport->pd.prev.QuadPart);
+	}
+
+	static int64_t tnMilliseconds( tnTransport* transport, int64_t ticks )
+	{
+		return ticks / (transport->pd.freq.QuadPart / 1000);
+	}
+
+	static void tnPlatformInit( tnTransport* transport )
+	{
+		QueryPerformanceCounter( &transport->pd.prev );
+		QueryPerformanceFrequency( &transport->pd.freq );
+	}
+
+	static void tnPlatformShutdown( tnTransport* transport )
+	{
+		if ( transport->using_worker_thread ) DeleteCriticalSection( &transport->pd.critical_section );
+	}
+
+	void tnSpawnWorkerThread( tnTransport* transport )
+	{
+		if ( transport->using_worker_thread ) return;
+		transport->using_worker_thread = 1;
+		InitializeCriticalSectionAndSpinCount( &transport->pd.critical_section, 0x00000400 );
+		tnAddQueue( transport );
+		CreateThread( 0, 0, tnWorkerThread, transport, 0, 0 );
+	}
+
+#elif TN_PLATFORM = TN_MAC
+
+	void tnSleep( int milliseconds )
+	{
+		usleep( milliseconds * 1000 );
+	}
+
+	static void tsLock( tnTransport* transport )
+	{
+		if ( transport->separate_thread ) pthread_mutex_lock( &transport->mutex );
+	}
+
+	static void tsUnlock( tnTransport* transport )
+	{
+		if ( transport->separate_thread ) pthread_mutex_unlock( &transport->mutex );
+	}
+
+	static void* tnWorkerThread( void* udata )
+	{
+		tnTransport* ctx = (tnTransport*)udata;
+
+		while ( ctx->running )
+		{
+			if ( ctx->sleep_milliseconds ) tnSleep( ctx->sleep_milliseconds );
+			else pthread_yield_np( );
+		}
+
+		ctx->using_worker_thread = 0;
+		pthread_exit( 0 );
+		return 0;
+	}
+
+	static void tnPlatformInit( tnTransport* transport )
+	{
+	}
+
+	static void tnPlatformShutdown( tnTransport* transport )
+	{
+		if ( transport->using_worker_thread ) pthread_mutex_destroy( &transport->pd.mutex );
+	}
+
+	void tnSpawnWorkerThread( tnTransport* transport )
+	{
+		if ( ctx->using_worker_thread ) return;
+		ctx->using_worker_thread = 1;
+		pthread_mutex_init( &transport->mutex, 0 );
+		tnAddQueue( transport );
+		pthread_create( &transport->thread, 0, tnWorkerThread, transport );
+	}
+
+#endif
 
 void tnMakeTransport( tnTransport* transport, tnContext* ctx, tnSocket socket, tnAddress to, const char* debug_name )
 {
@@ -866,13 +1096,16 @@ void tnMakeTransport( tnTransport* transport, tnContext* ctx, tnSocket socket, t
 	transport->ctx = ctx;
 	transport->socket = socket;
 	transport->to = to;
-	transport->has_packet = 0;
 	tnMakeSequenceBuffer( &transport->incoming, sizeof( tnIncomingPacketData ) );
 	tnMakeSequenceBuffer( &transport->outgoing, sizeof( tnOutgoingPacketData ) );
 	transport->reliable_next_incoming = 0;
 	transport->reliable_oldest_unacked = 0;
 	tnMakeSequenceBuffer( &transport->reliable_incoming, sizeof( tnReliableData ) );
 	tnMakeSequenceBuffer( &transport->reliable_outgoing, sizeof( tnReliableData ) );
+	transport->using_worker_thread = 0;
+	transport->sleep_milliseconds = 0;
+	transport->q = 0;
+	tnPlatformInit( transport );
 }
 
 void tnFreeTransport( tnTransport* transport )
@@ -882,6 +1115,17 @@ void tnFreeTransport( tnTransport* transport )
 	tnFreeSequenceBuffer( &transport->reliable_incoming );
 	tnFreeSequenceBuffer( &transport->reliable_outgoing );
 	memset( transport, 0, sizeof( tnTransport ) );
+
+	if ( transport->using_worker_thread )
+	{
+		tnLock( transport );
+		transport->ctx->running = 0;
+		tnUnlock( transport );
+	}
+
+	while ( transport->using_worker_thread ) tnSleep( 1 );
+
+	tnPlatformShutdown( transport );
 }
 
 void tnAssertTransport( tnTransport* transport )
@@ -894,6 +1138,9 @@ void tnWriteStub_internal( tnBuffer* buffer, void* data ) { (void)buffer; (void)
 int tnReadStub_internal( tnBuffer* buffer, void* data ) { (void)buffer; (void)data; return 1; }
 int tnMeasureStub_internal( ) { return 0; }
 
+// TODO
+// refactor this
+// should increment and return type index
 int tnRegister( tnContext* ctx, int type_index, tnWrite write, tnRead read, tnMeasure measure, int runtime_size )
 {
 	TN_CHECK( type_index != 0, "tnRegister abort: zero for type_index is reserved for internal use." );
@@ -907,7 +1154,7 @@ int tnRegister( tnContext* ctx, int type_index, tnWrite write, tnRead read, tnMe
 
 tnContext* tnInit( int num_packet_types )
 {
-	#if TN_PLATFORM == PLATFORM_WINDOWS
+	#if TN_PLATFORM == TN_WINDOWS
 	WSADATA WsaData;
 	WSAStartup( MAKEWORD( 2, 2 ), &WsaData );
 	#endif
@@ -916,21 +1163,19 @@ tnContext* tnInit( int num_packet_types )
 	TN_CHECK( req < TN_PACKET_TYPE_BYTES * 8, "Please make TN_PACKET_TYPE_NUM_BITS larger." );
 
 	tnContext* ctx = (tnContext*)malloc( sizeof( tnContext ) );
-	ctx->dt = 0;
-	ctx->rtt = 0;
-	ctx->time_monotonic_milliseconds = 0;
 	ctx->vtable_count = num_packet_types;
 	ctx->vtables = (tnVTABLE*)calloc( 1, sizeof( tnVTABLE ) * num_packet_types );
 	ctx->use_sim = 0;
 	tnVTABLE stub = { tnWriteStub_internal, tnReadStub_internal, tnMeasureStub_internal, 0 };
 	ctx->vtables[ 0 ] = stub;
+	ctx->running = 1;
 
 	return ctx;
 }
 
 void tnShutdown( tnContext* ctx )
 {
-	#if TN_PLATFORM == PLATFORM_WINDOWS
+	#if TN_PLATFORM == TN_WINDOWS
 	WSACleanup( );
 	#endif
 
@@ -992,17 +1237,16 @@ int tnSendData_internal( tnSocket socket, tnAddress to, void* data, int bytes );
 void tnFlushNetSim( tnContext* ctx )
 {
 	TN_ASSERT( ctx );
-	TN_ASSERT( ctx->use_sim );
+	if( !ctx->use_sim ) return;
 	tnNetSim* sim = &ctx->sim;
-	tnTransport* transport;
 	int dup, corrupt, drop_chance;
 	tnSimPacket** ptr = &sim->live_packets;
 
 	while ( *ptr )
 	{
 		tnSimPacket* packet = *ptr;
-		packet->delay -= ctx->dt;
-		if ( packet->delay > 0 ) goto packet_next;
+		tnTransport* transport = packet->transport;
+		if ( packet->delay > tnTicks( transport ) ) goto packet_next;
 
 		// chance to skip packet
 		drop_chance = tnRandomInt( 0, 100 );
@@ -1025,7 +1269,6 @@ void tnFlushNetSim( tnContext* ctx )
 			*(((char*)(packet->words)) + byte) ^= 1 << bit;
 		}
 
-		transport = packet->transport;
 		for ( int i = 0; i < dup; ++i )
 			tnSendData_internal( transport->socket, transport->to, packet->words, packet->size );
 
@@ -1038,19 +1281,6 @@ void tnFlushNetSim( tnContext* ctx )
 	packet_next:
 		if ( *ptr ) ptr = &(*ptr)->next;
 	}
-}
-
-void tnTick( tnContext* ctx, float dt )
-{
-	// TODO:
-	// track bandwidth used
-	// if bandwidth under max, flush some more reliable data
-	TN_ASSERT( ctx );
-	ctx->dt = dt;
-	int milliseconds = (int)(dt * 1000.0f);
-	ctx->time_monotonic_milliseconds += milliseconds;
-	if ( ctx->time_monotonic_milliseconds < 0 ) ctx->time_monotonic_milliseconds *= -1;
-	if ( ctx->use_sim ) tnFlushNetSim( ctx );
 }
 
 int tnSendData_internal( tnSocket socket, tnAddress to, void* data, int bytes )
@@ -1347,7 +1577,8 @@ int tnSendPacket_internal( tnTransport* transport, tnPacketType_internal interna
 		tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnInsertSequence( outgoing, packet_sequence );
 		TN_ASSERT( data );
 		data->acked = 0;
-		data->send_time_milliseconds = ctx->time_monotonic_milliseconds;
+		data->send_time = tnTicks( transport );
+		printf( "send_time %d\n", (int)data->send_time );
 		data->count = 0;
 	}	break;
 
@@ -1422,7 +1653,7 @@ int tnSendPacket_internal( tnTransport* transport, tnPacketType_internal interna
 	if ( ctx->use_sim )
 	{
 		tnNetSim* sim = &ctx->sim;
-		float delay = (float)sim->latency + tnRandomFloat( -(float)sim->jitter, (float)sim->jitter );
+		int delay = sim->latency + tnRandomInt( -sim->jitter, sim->jitter );
 		tnSimPacket* packet = sim->free_list;
 		if ( !packet )
 		{
@@ -1430,7 +1661,7 @@ int tnSendPacket_internal( tnTransport* transport, tnPacketType_internal interna
 			return 0;
 		}
 		packet->size = tnSize( b );
-		packet->delay = delay / 1000.0f;
+		packet->delay = delay;
 		packet->transport = transport;
 		sim->free_list = packet->next;
 		packet->next = sim->live_packets;
@@ -1441,7 +1672,7 @@ int tnSendPacket_internal( tnTransport* transport, tnPacketType_internal interna
 	else return tnSendData_internal( transport->socket, transport->to, words, tnSize( b ) );
 }
 
-void tnOnAck_internal( tnTransport* transport, uint16_t sequence )
+void tnOnAck_internal( tnTransport* transport, uint16_t sequence, int64_t ticks )
 {
 	//TN_DEBUG_PRINT( "GOT ACK FOR PACKET %d %s\n", sequence, transport->debug_name );
 
@@ -1450,16 +1681,14 @@ void tnOnAck_internal( tnTransport* transport, uint16_t sequence )
 	TN_ASSERT( data ); // TODO: when can this be false?
 
 	// record round-trip time
-	tnContext* ctx = transport->ctx;
-	int prev_time = data->send_time_milliseconds;
-	int now_time = ctx->time_monotonic_milliseconds;
-	int rtt;
-	if ( now_time > prev_time ) rtt = now_time - prev_time;
-	else rtt = (int)TN_INT16_MAX - prev_time + now_time;
-	float a = (float)ctx->rtt;
-	float b = (float)rtt;
-	float c = (b - a) * 0.1f + a;
-	ctx->rtt = (int)(c + 0.5f);
+	int64_t prev_time = data->send_time;
+	int64_t now_time = ticks;
+	int64_t this_rtt = now_time - prev_time;
+	double a = (double)transport->round_trip_time;
+	double b = (double)this_rtt;
+	double c = (b - a) * 0.1 + a;
+	transport->round_trip_time = this_rtt;// (int)(c + 0.5);
+	transport->round_trip_time_millis = (int)tnMilliseconds( transport, transport->round_trip_time );
 
 	// remove acked reliables
 	int count = data->count;
@@ -1493,105 +1722,94 @@ void tnOnAck_internal( tnTransport* transport, uint16_t sequence )
 	transport->reliable_oldest_unacked = oldest;
 }
 
-int tnPeak_internal( tnTransport* transport, tnAddress* from, int* user_type, int* packet_size_bytes )
+// header seems to be 8 bytes
+int tnReadPacketHeader( tnTransport* transport, uint32_t* words, int bytes, int* user_type, int64_t ticks )
 {
-	tnAssertTransport( transport );
 	TN_ASSERT( user_type );
-	TN_ASSERT( packet_size_bytes );
-	uint32_t* words = transport->words;
 	*user_type = ~0;
-	*packet_size_bytes = 0;
-	int bytes = 0;
+	tnBuffer buffer = tnMakeBuffer( words, TN_MTU_WORDCOUNT );
+	tnBuffer* b = &buffer;
+	uint32_t recieved_crc;
+	tnReadU32( b, &recieved_crc );
+	uint32_t crc = tnCRC32( words + 1, bytes - 4, TN_PROTOCOL_ID );
 
-	if ( !transport->has_packet )
+	if ( crc == recieved_crc )
 	{
-		bytes = tnRecievePacket_internal( transport->socket, from, words, TN_MTU );
-		if ( bytes ) transport->has_packet = 1;
-	}
+		tnPacketType_internal internal_type;
+		tnReadI16( b, (uint32_t*)&internal_type );
+		tnReadI16( b, user_type );
 
-	if ( transport->has_packet )
-	{
-		tnBuffer buffer = tnMakeBuffer( words, TN_MTU_WORDCOUNT );
-		tnBuffer* b = &buffer;
-		uint32_t recieved_crc;
-		tnReadU32( b, &recieved_crc );
-		uint32_t crc = tnCRC32( words + 1, bytes - 4, TN_PROTOCOL_ID );
-
-		if ( crc == recieved_crc )
+		switch ( internal_type )
 		{
-			tnPacketType_internal internal_type;
-			tnReadI16( b, (uint32_t*)&internal_type );
-			tnReadI16( b, user_type );
+		case TN_PACKET_TYPE_UNRELIABLE:
+		case TN_PACKET_TYPE_RELIABLE:
+		{
+			// Fiedler's ack algorithm
+			// http://gafferongames.com/building-a-game-network-protocol/reliable-ordered-messages/
+			uint16_t sequence;
+			uint32_t ack;
+			uint32_t ack_bits;
+			tnReadI16( b, &sequence );
+			tnReadI16( b, &ack );
+			tnReadU32( b, &ack_bits );
 
-			switch ( internal_type )
+			//TN_DEBUG_PRINT( "GOT PACKET %d %s\n", sequence, transport->debug_name );
+
+			tnSequenceBuffer* incoming = &transport->incoming;
+			tnSequenceBuffer* outgoing = &transport->outgoing;
+			tnInsertSequence( incoming, sequence );
+
+			tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnGetSequenceData( outgoing, sequence );
+
+			for ( uint16_t i = 0; i < 32; ++i )
 			{
-			case TN_PACKET_TYPE_UNRELIABLE:
-			case TN_PACKET_TYPE_RELIABLE:
-			{
-				// Fiedler's ack algorithm
-				// http://gafferongames.com/building-a-game-network-protocol/reliable-ordered-messages/
-				uint16_t sequence;
-				uint32_t ack;
-				uint32_t ack_bits;
-				tnReadI16( b, &sequence );
-				tnReadI16( b, &ack );
-				tnReadU32( b, &ack_bits );
-
-				//TN_DEBUG_PRINT( "GOT PACKET %d %s\n", sequence, transport->debug_name );
-
-				tnSequenceBuffer* incoming = &transport->incoming;
-				tnSequenceBuffer* outgoing = &transport->outgoing;
-				tnInsertSequence( incoming, sequence );
-
-				tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnGetSequenceData( outgoing, sequence );
-
-				for ( uint16_t i = 0; i < 32; ++i )
+				if ( ack_bits & (1 << i) )
 				{
-					if ( ack_bits & (1 << i) )
-					{
-						uint16_t index = ack - i;
-						tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnGetSequenceData( outgoing, index );
+					uint16_t index = ack - i;
+					tnOutgoingPacketData* data = (tnOutgoingPacketData*)tnGetSequenceData( outgoing, index );
 
-						if ( data && !data->acked )
-						{
-							data->acked = 1;
-							tnOnAck_internal( transport, index );
-						}
+					if ( data && !data->acked )
+					{
+						data->acked = 1;
+						tnOnAck_internal( transport, index, ticks );
 					}
 				}
-			}	break;
-
-			case TN_PACKET_TYPE_SLICE:
-				break;
-
-			default:
-				TN_CHECK( 0, "tnSendPacket aborted: unidentified packet type." );
 			}
+		}	break;
 
-			*packet_size_bytes = bytes - 8;
+		case TN_PACKET_TYPE_SLICE:
+			break;
+
+		default:
+			TN_CHECK( 0, "tnSendPacket aborted: unidentified packet type." );
 		}
 
-		else
-		{
-			transport->has_packet = 0;
-			TN_DEBUG_PRINT( "bad crc\n" );
-			TN_CHECK( 0, "tnSendPacket aborted: bad crc.\n" );
-		}
+		//*packet_size_bytes = bytes - 8;
+	}
+
+	else
+	{
+		TN_DEBUG_PRINT( "bad crc\n" );
+		TN_CHECK( 0, "tnSendPacket aborted: bad crc.\n" );
 	}
 
 	return 1;
 }
 
-int tnGetPacketData_internal( tnTransport* transport, void* data, int user_type )
+int tnPeak_internal( tnTransport* transport, tnAddress* from, uint32_t* words )
+{
+	tnAssertTransport( transport );
+	return tnRecievePacket_internal( transport->socket, from, words, TN_MTU );
+}
+
+int tnGetPacketData_internal( tnTransport* transport, uint32_t* words, void* data, int user_type )
 {
 	tnAssertTransport( transport );
 	TN_ASSERT( data );
-	TN_ASSERT( transport->has_packet );
 
 	// grab the packet data
-	transport->has_packet = 0;
 	int packet_type;
-	tnBuffer buffer = tnMakeBuffer( transport->words + 1, TN_MTU_WORDCOUNT );
+	tnBuffer buffer = tnMakeBuffer( words + 1, TN_MTU_WORDCOUNT );
 	tnBuffer* b = &buffer;
 	tnReadI16( b, &packet_type );
 	int offset = 0;
@@ -1602,7 +1820,7 @@ int tnGetPacketData_internal( tnTransport* transport, void* data, int user_type 
 	case TN_PACKET_TYPE_SLICE: TN_CHECK( 0, "not implemented." );
 	default: TN_CHECK( 0, "tnGetPacketData aborted: unknown packet type." );
 	}
-	buffer = tnMakeBuffer( transport->words + offset, TN_MTU_WORDCOUNT );
+	buffer = tnMakeBuffer( words + offset, TN_MTU_WORDCOUNT );
 	tnVTABLE* table = tnGetTable( transport->ctx, user_type );
 	TN_CHECK( table->Read( b, data ), "tnGetPacketData aborted: failed to read packet data with user-provided read function." );
 
@@ -1646,12 +1864,24 @@ int tnGetPacket( tnTransport* transport, tnAddress* from, int* user_type, void* 
 {
 	*user_type = 0;
 	int packet_type;
-	int packet_size_bytes;
-	tnPeak_internal( transport, from, &packet_type, &packet_size_bytes );
-	if ( transport->has_packet )
+	uint32_t words[ TN_MTU_WORDCOUNT ];
+	int bytes = 0;
+	int64_t ticks = 0;
+
+	if ( transport->using_worker_thread )
 	{
+		tnLock( transport );
+		bytes = tnQueuePop( transport->q, words, &ticks );
+		tnUnlock( transport );
+	}
+	else
+		bytes = tnPeak_internal( transport, from, words );
+
+	if ( bytes )
+	{
+		if ( !tnReadPacketHeader( transport, words, bytes, &packet_type, ticks ) ) return 0;
 		*user_type = packet_type;
-		return tnGetPacketData_internal( transport, buffer, packet_type );
+		return tnGetPacketData_internal( transport, words, buffer, packet_type );
 	}
 	return 0;
 }
@@ -1697,6 +1927,34 @@ int tnGetReliable( tnTransport* transport, int* user_type, void* data )
 	//TN_DEBUG_PRINT( "REMOVE INCOMING %d\t%s\n", sequence % TN_SEQUENCE_BUFFER_SIZE, transport->debug_name );
 	transport->reliable_next_incoming = sequence + 1;
 	return 1;
+}
+
+int tnDoWork( tnTransport* transport )
+{
+	// grab packets
+	tnAddress from;
+	uint32_t words[ TN_MTU_WORDCOUNT ];
+	int recieved_bytes = tnPeak_internal( transport, &from, words );
+	if ( recieved_bytes )
+	{
+		int64_t ticks = tnTicks( transport );
+		tnLock( transport );
+		int succeeded = tnQueuePush( transport->q, words, recieved_bytes, from, ticks );
+		tnUnlock( transport );
+		printf( "got time %d\n", (int)ticks );
+		if ( succeeded ) return 1;
+		else
+		{
+			// TODO
+			// warning, we dropped a packet
+			return 0;
+		}
+	}
+
+	tnLock( transport );
+	int did_work = tnQueueProcess( transport->q );
+	tnUnlock( transport );
+	return did_work;
 }
 
 #define TINYNET_H

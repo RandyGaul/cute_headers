@@ -94,16 +94,20 @@ int Reciever( )
 	PacketA p;
 	tnAddress from;
 	int packet_type;
-	int packet_size_bytes;
+	uint32_t words[ TN_MTU_WORDCOUNT ];
 
-	tnPeak_internal( &server, &from, &packet_type, &packet_size_bytes );
-
-	if ( server.has_packet )
+	int bytes = tnPeak_internal( &server, &from, words );
+	if ( bytes )
 	{
-		int serialize_was_ok = tnGetPacketData_internal( &server, &p, packet_type );
-		CHECK( serialize_was_ok );
-		CHECK( Check( packet, p ) );
-		return 1;
+		int header_was_ok = tnReadPacketHeader( &server, words, bytes, &packet_type, 0 );
+
+		if ( header_was_ok )
+		{
+			int serialize_was_ok = tnGetPacketData_internal( &server, words, &p, packet_type );
+			CHECK( serialize_was_ok );
+			CHECK( Check( packet, p ) );
+			return 1;
+		}
 	}
 
 	return 0;
@@ -155,7 +159,7 @@ void SoakBasicAcks( )
 
 		Sender( );
 		while ( Reciever( ) );
-		tnTick( ctx, time );
+		tnFlushNetSim( ctx );
 	}
 }
 
