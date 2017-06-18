@@ -1422,7 +1422,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 // Pitch processing tunables
 #define TS_MAX_FRAME_LENGTH 4096
 #define TS_PITCH_FRAME_SIZE 512
-#define TS_PITCH_QUALITY 4
+#define TS_PITCH_QUALITY 8
 
 // interals
 #define TS_STEPSIZE (TS_PITCH_FRAME_SIZE / TS_PITCH_QUALITY)
@@ -2135,6 +2135,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 	__m128 freq_per_bin = _mm_set_ps1( sampleRate / (float)TS_PITCH_FRAME_SIZE );
 	__m128 pi = *(__m128*)_ps_cephes_PIF;
 	__m128 two_pi = *(__m128*)_ps_cephes_2PIF;
+	__m128 pitch_quality = _mm_set_ps1( (float)TS_PITCH_QUALITY );
 	float* out_samples = pf->pitch_shifted_output_samples;
 	if ( pf->index == 0 ) pf->index = TS_OVERLAP;
 
@@ -2213,6 +2214,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 			tsFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, 1.0f );
 
 			{
+#if 1
 				__m128* fft_data = (__m128*)pf->fft_data;
 				__m128* previous_phase = (__m128*)pf->previous_phase;
 				__m128* magnitudes = (__m128*)pf->mag;
@@ -2250,6 +2252,40 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 					magnitudes[ k ] = mag;
 					frequencies[ k ] = true_freq_estimated;
 				}
+#else
+				for ( int k = 0; k <= TS_PITCH_FRAME_SIZE / 2; k++ )
+				{
+					float real = pf->fft_data[ k ];
+					float imag = pf->fft_data[ TS_PITCH_FRAME_SIZE + k ];
+
+					/* compute magnitude and phase */
+					float magn = 2.0f * sqrtf( real * real + imag * imag );
+					float phase = atan2f( imag, real );
+
+					/* compute phase difference */
+					float phase_dif = phase - pf->previous_phase[ k ];
+					pf->previous_phase[ k ] = phase;
+
+					/* subtract expected phase difference */
+					phase_dif -= (float)k * TS_EXPECTED_FREQUENCY;
+
+					/* map delta phase into +/- Pi interval */
+					int qpd = (int)(phase_dif / 3.14159265359f);
+					if ( qpd >= 0 ) qpd += qpd & 1;
+					else qpd -= qpd & 1;
+					phase_dif -= 3.14159265359f * (float)qpd;
+
+					/* get deviation from bin frequency from the +/- Pi interval */
+					float deviation = (float)TS_PITCH_QUALITY * phase_dif / (2.0f * 3.14159265359f);
+
+					/* compute the k-th partials' true frequency */
+					float true_freq_estimated = (float)k * freqPerBin + deviation * freqPerBin;
+
+					/* store magnitude and true frequency in analysis arrays */
+					pf->mag[ k ] = magn;
+					pf->freq[ k ] = true_freq_estimated;
+				}
+#endif
 			}
 
 			// actual pitch shifting work
@@ -2280,6 +2316,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 			magnitudes = pitch_shift_workspace;
 			
 			{
+#if 1
 				__m128* magnitudes4 = (__m128*)magnitudes;
 				__m128* frequencies4 = (__m128*)frequencies;
 				__m128* fft_data = (__m128*)pf->fft_data;
@@ -2295,7 +2332,6 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 					freq = _mm_sub_ps( freq, freq_per_bin_k );
 					freq = _mm_div_ps( freq, freq_per_bin );
 
-					__m128 pitch_quality = _mm_set_ps1( (FLOAT)TS_PITCH_QUALITY );
 					freq = _mm_mul_ps( two_pi, freq );
 					freq = _mm_div_ps( freq, pitch_quality );
 
@@ -2314,6 +2350,34 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 					fft_data[ k ] = real;
 					fft_data[ (TS_PITCH_FRAME_SIZE / 4) + k ] = imag;
 				}
+#else
+				for ( int k = 0; k <= TS_PITCH_FRAME_SIZE / 2; k++ )
+				{
+					/* get magnitude and true frequency from synthesis arrays */
+					float mag = magnitudes[ k ];
+					float freq = frequencies[ k ];
+
+					/* subtract bin mid frequency */
+					freq -= (float)k * freqPerBin;
+
+					/* get bin deviation from freq deviation */
+					freq /= freqPerBin;
+
+					/* take osamp into account */
+					freq = 2.f * 3.14159265359f * freq / (float)TS_PITCH_QUALITY;
+
+					/* add the overlap phase advance back in */
+					freq += (float)k * TS_EXPECTED_FREQUENCY;
+
+					/* accumulate delta phase to get bin phase */
+					pf->sum_phase[ k ] += freq;
+					float phase = pf->sum_phase[ k ];
+
+					/* get real and imag part and re-interleave */
+					pf->fft_data[ k ] = mag * cosf( phase );
+					pf->fft_data[ TS_PITCH_FRAME_SIZE + k ] = mag * sinf( phase );
+				}
+#endif
 			}
 
 			for ( int k = TS_PITCH_FRAME_SIZE + 2; k < 2 * TS_PITCH_FRAME_SIZE - 2; ++k )
@@ -2322,6 +2386,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 			tsFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, -1 );
 
 			{
+#if 1
 				__m128* fft_data = (__m128*)pf->fft_data;
 				__m128* window_accumulator = (__m128*)pf->window_accumulator;
 
@@ -2330,9 +2395,19 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 					__m128 von_hann = tsVonHann4( k );
 					__m128 fft_data_segment = fft_data[ k ];
 					__m128 accumulator_segment = window_accumulator[ k ];
-					accumulator_segment = _mm_add_ps( accumulator_segment, _mm_mul_ps( von_hann, fft_data_segment ) );
+					__m128 divisor = _mm_div_ps( pitch_quality, _mm_set_ps1( 8.0f ) );
+					fft_data_segment = _mm_mul_ps( von_hann, fft_data_segment );
+					fft_data_segment = _mm_div_ps( fft_data_segment, divisor );
+					accumulator_segment = _mm_add_ps( accumulator_segment, fft_data_segment );
 					window_accumulator[ k ] = accumulator_segment;
 				}
+#else
+				for ( int k = 0; k < TS_PITCH_FRAME_SIZE; ++k )
+				{
+					float window = tsVonHann( k );
+					pf->window_accumulator[ k ] += window * pf->fft_data[ k ] / ((float)TS_PITCH_QUALITY / 8.0f);
+				}
+#endif
 			}
 
 			memcpy( pf->out_FIFO, pf->window_accumulator, TS_STEPSIZE * sizeof( float ) );
