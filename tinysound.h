@@ -1,5 +1,5 @@
 /*
-	tinysound.h - v1.06
+	tinysound.h - v1.07
 
 	Summary:
 	tinysound is a C API for loading, playing, looping, panning and fading mono
@@ -29,7 +29,9 @@
 		                  fixed typo in malloc16 that caused heap corruption
 		1.05 (12/08/2016) tsStopAllSounds, suggested by Aaron Balint
 		1.06 (02/17/2017) port to CoreAudio for Apple machines
-		1.07 (06/18/2017) SIMD the pitch shift code
+		1.07 (06/18/2017) SIMD the pitch shift code; swapped out old Bernsee
+		                  code for a new re-write, updated docs as necessary,
+		                  support for compiling as .c and .cpp on Windows
 */
 
 /*
@@ -144,11 +146,11 @@
 	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
 		past the write cursor. To mitigate this pass in a larger number to tsMakeContext's 4th
 		parameter (buffer scale in seconds).
-	* Pitch shifting uses some code from 1996, so it's super slow. This should probably be
-		rewritten using SIMD intrinsics. Also for some reason the pitch shift code requires some
-		dynamic memory in order to store intermediary data, so it can process small chunks
-		of a sound at a time. This seems like code smells and dynamic memory probably should not
-		be required at all. Also getting rid of the WOL license would be great.
+	* Pitch shifting code is pretty darn expensive. This is due to the use of a Fast Fourier Transform
+		routine. The pitch shifting itself is written in rather efficient SIMD using SSE2 intrinsics,
+		but the FFT routine is very basic. FFT is a big bottleneck for pitch shifting. There is a
+		TODO optimization listed in this file for the FFT routine, but it's fairly low priority;
+		optimizing FFT routines is difficult and requires a lot of specialized knowledge.
 */
 
 /*
@@ -299,8 +301,7 @@ void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 // Change pitch (not duration) of sound. pitch = 0.5f for one octave lower, pitch = 2.0f for one octave higher.
 // pitch at 1.0f applies no change. pitch settings farther away from 1.0f create more distortion and lower
 // the output sample quality. pitch can be adjusted in real-time for doppler effects and the like. Going beyond
-// 0.5f and 2.0f may require some tweaking of the smbPitchShift function. See this link for more info:
-// http://blogs.zynaptiq.com/bernsee/pitch-shifting-using-the-ft/
+// 0.5f and 2.0f may require some tweaking the pitch shifting parameters, and is not recommended.
 
 // Additional important information about performance: This function
 // is quite expensive -- you have been warned! Try it out and be aware of how much CPU consumption it uses.
@@ -310,7 +311,7 @@ void tsSetVolume( tsPlayingSound* sound, float volume_left, float volume_right )
 // memory is freed once the sound finishes playing. If a one-time pitch adjustment is desired, for performance
 // reasons please consider doing an off-line pitch adjustment manually as a pre-processing step for your sounds.
 // Also, consider changing malloc16 and free16 to match your custom memory allocation needs. Try adjusting
-// TS_PITCH_QUALITY and see how this affects your performance.
+// TS_PITCH_QUALITY (must be a power of two) and see how this affects your performance.
 void tsSetPitch( tsPlayingSound* sound, float pitch );
 
 // Delays sound before actually playing it. Requires context to be passed in
