@@ -204,8 +204,8 @@ typedef struct
 	void* channels[ 2 ];
 } tsLoadedSound;
 
-struct tsPitchShift;
-typedef struct tsPitchShift tsPitchShift;
+struct tsPitchData;
+typedef struct tsPitchData tsPitchData;
 
 // represents an instance of a tsLoadedSound, can be played through the tsContext
 typedef struct tsPlayingSound
@@ -218,7 +218,7 @@ typedef struct tsPlayingSound
 	float pan0;
 	float pan1;
 	float pitch;
-	tsPitchShift* pitch_filter[ 2 ];
+	tsPitchData* pitch_filter[ 2 ];
 	int sample_index;
 	tsLoadedSound* loaded_sound;
 	struct tsPlayingSound* next;
@@ -1417,7 +1417,7 @@ void tsStopAllSounds( tsContext* ctx )
 #else
 #endif
 
-static void smbPitchShift( float pitchShift, int numSampsToProcess, float sampleRate, float* indata, tsPitchShift** pitch_filter );
+static void tsPitchShift( float pitchShift, int num_samples_to_process, float sampleRate, float* indata, tsPitchData** pitch_filter );
 
 // Pitch processing tunables
 #define TS_MAX_FRAME_LENGTH 4096
@@ -1434,7 +1434,7 @@ static void smbPitchShift( float pitchShift, int numSampsToProcess, float sample
 // Not high priority to use a pool, since pitch shifting is already really expensive,
 // and cost of malloc is dwarfed. But would be a nice-to-have for potential memory
 // fragmentation issues.
-typedef struct tsPitchShift
+typedef struct tsPitchData
 {
 	float pitch_shifted_output_samples[ TS_MAX_FRAME_LENGTH ];
 	float in_FIFO[ TS_STEPSIZE + TS_PITCH_FRAME_SIZE ];
@@ -1447,7 +1447,7 @@ typedef struct tsPitchShift
 	float mag[ TS_PITCH_FRAME_SIZE ];
 	float pitch_shift_workspace[ TS_PITCH_FRAME_SIZE ];
 	int index;
-} tsPitchShift;
+} tsPitchData;
 
 static void tsRemoveFilter( tsPlayingSound* playing )
 {
@@ -1558,7 +1558,7 @@ void tsMix( tsContext* ctx )
 		int offset_wide = (int)TS_TRUNC( offset, 4 ) / 4;
 		int delay_wide = (int)TS_ALIGN( delay_offset, 4 ) / 4;
 
-		// use smbPitchShift to on-the-fly pitch shift some samples
+		// use tsPitchShift to on-the-fly pitch shift some samples
 		// only call this function if the user set a custom pitch value
 		if ( playing->pitch != 1.0f )
 		{
@@ -1572,12 +1572,12 @@ void tsMix( tsContext* ctx )
 			// TS_PITCH_QUALITY to make it lower (must be a power of 2).
 			if ( !falling_behind )
 			{
-				smbPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter );
+				tsPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter );
 				cA = (__m128 *)playing->pitch_filter[ 0 ]->pitch_shifted_output_samples;
 
 				if ( loaded->channel_count == 2 )
 				{
-					smbPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1 );
+					tsPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1 );
 					cB = (__m128 *)playing->pitch_filter[ 1 ]->pitch_shifted_output_samples;
 				}
 
@@ -1693,7 +1693,7 @@ unlock:
 
 #include <math.h>
 
-static uint32_t Rev32( uint32_t x )
+static uint32_t tsRev32( uint32_t x )
 {
 	uint32_t a = ((x & 0xAAAAAAAA) >> 1) | ((x & 0x55555555) << 1);
 	uint32_t b = ((a & 0xCCCCCCCC) >> 2) | ((a & 0x33333333) << 2);
@@ -1702,7 +1702,7 @@ static uint32_t Rev32( uint32_t x )
 	return (d >> 16) | (d << 16);
 }
 
-static uint32_t PopCount( uint32_t x )
+static uint32_t tsPopCount( uint32_t x )
 {
 	uint32_t a = x - ((x >> 1) & 0x55555555);
 	uint32_t b = (((a >> 2) & 0x33333333) + (a & 0x33333333));
@@ -1713,7 +1713,7 @@ static uint32_t PopCount( uint32_t x )
 	return f;
 }
 
-static uint32_t Log2( uint32_t x )
+static uint32_t tsLog2( uint32_t x )
 {
 	uint32_t a = x | ( x >> 1 );
 	uint32_t b = a | ( a >> 2 );
@@ -1721,23 +1721,23 @@ static uint32_t Log2( uint32_t x )
 	uint32_t d = c | ( c >> 8 );
 	uint32_t e = d | ( d >> 16 );
 	uint32_t f = e >> 1;
-	return PopCount( f );
+	return tsPopCount( f );
 }
 
 // x contains real inputs
 // y contains imaginary inputs
 // count must be a power of 2
 // sign must be 1.0 (forward transform) or -1.0f (inverse transform)
-static void tinyFFT( float* x, float* y, int count, float sign )
+static void tsFFT( float* x, float* y, int count, float sign )
 {
-	int exponent = (int)Log2( (uint32_t)count );
+	int exponent = (int)tsLog2( (uint32_t)count );
 
 	// bit reversal stage
 	// swap all elements with their bit reversed index within the
 	// lowest level of the Cooley-Tukey recursion tree
 	for ( int i = 1; i < count - 1; i++ )
 	{
-		uint32_t j = Rev32( (uint32_t)i );
+		uint32_t j = tsRev32( (uint32_t)i );
 		j >>= (32 - exponent);
 		if ( i < (int)j )
 		{
@@ -1864,7 +1864,7 @@ _PI32_CONST( inv1, ~1 );
 _PI32_CONST( 2, 2 );
 _PI32_CONST( 4, 4 );
 
-__m128 _mm_atan_ps( __m128 x )
+static __m128 _mm_atan_ps( __m128 x )
 {
 	__m128 sign_bit, y;
 
@@ -1923,7 +1923,7 @@ __m128 _mm_atan_ps( __m128 x )
 	return y;
 }
 
-__m128 _mm_atan2_ps( __m128 y, __m128 x )
+static __m128 _mm_atan2_ps( __m128 y, __m128 x )
 {
 	__m128 x_eq_0 = _mm_cmpeq_ps( x, *(__m128*)_ps_0 );
 	__m128 x_gt_0 = _mm_cmpgt_ps( x, *(__m128*)_ps_0 );
@@ -1971,7 +1971,7 @@ __m128 _mm_atan2_ps( __m128 y, __m128 x )
 	return result;
 }
 
-void _mm_sincos_ps( __m128 x, __m128 *s, __m128 *c )
+static void _mm_sincos_ps( __m128 x, __m128 *s, __m128 *c )
 {
 	__m128 xmm1, xmm2, xmm3 = _mm_setzero_ps(), sign_bit_sin, y;
 	__m128i emm0, emm2, emm4;
@@ -2071,7 +2071,7 @@ static __m128i select_si( __m128i a, __m128i b, __m128i mask )
 
 #define tsVonHann( i ) (-0.5f * cosf( 2.0f * 3.14159265359f * (float)(i) / (float)TS_PITCH_FRAME_SIZE ) + 0.5f)
 
-__m128 tsVonHann4( int i )
+static __m128 tsVonHann4( int i )
 {
 	__m128 k4 = _mm_set_ps( (float)(i * 4 + 3), (float)(i * 4 + 2), (float)(i * 4 + 1), (float)(i * 4) );
 	k4 = _mm_mul_ps( *(__m128*)_ps_cephes_2PIF, k4 );
@@ -2103,27 +2103,27 @@ __m128 tsVonHann4( int i )
 
 // Analysis and synthesis steps learned from Bernsee's wonderful blog post:
 // http://blogs.zynaptiq.com/bernsee/pitch-shifting-using-the-ft/
-static void smbPitchShift(float pitchShift, int numSampsToProcess, float sampleRate, float* indata, tsPitchShift** pitch_filter)
+static void tsPitchShift( float pitchShift, int num_samples_to_process, float sampleRate, float* indata, tsPitchData** pitch_filter )
 {
-	TS_ASSERT( numSampsToProcess <= TS_MAX_FRAME_LENGTH );
+	TS_ASSERT( num_samples_to_process <= TS_MAX_FRAME_LENGTH );
 
 	// make sure compiler didn't do anything weird with the member
-	// offsets of tsPitchShift. All arrays must be 16 byte aligned
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->pitch_shifted_output_samples) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->fft_data) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->previous_phase) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->sum_phase) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->window_accumulator) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->freq) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->mag) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchShift*)0)->pitch_shift_workspace) & 15) );
+	// offsets of tsPitchData. All arrays must be 16 byte aligned
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->pitch_shifted_output_samples) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->fft_data) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->previous_phase) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->sum_phase) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->window_accumulator) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->freq) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->mag) & 15) );
+	TS_ASSERT( !((int)&(((tsPitchData*)0)->pitch_shift_workspace) & 15) );
 
-	tsPitchShift* pf;
+	tsPitchData* pf;
 
 	if ( *pitch_filter == NULL )
 	{
-		pf = (tsPitchShift*)malloc16( sizeof( tsPitchShift ) );
-		memset( pf, 0, sizeof( tsPitchShift ) );
+		pf = (tsPitchData*)malloc16( sizeof( tsPitchData ) );
+		memset( pf, 0, sizeof( tsPitchData ) );
 		*pitch_filter = pf;
 	}
 	else
@@ -2138,10 +2138,10 @@ static void smbPitchShift(float pitchShift, int numSampsToProcess, float sampleR
 	float* out_samples = pf->pitch_shifted_output_samples;
 	if ( pf->index == 0 ) pf->index = TS_OVERLAP;
 
-	while ( numSampsToProcess )
+	while ( num_samples_to_process )
 	{
 		int copy_count = TS_PITCH_FRAME_SIZE - pf->index;
-		if ( numSampsToProcess < copy_count ) copy_count = numSampsToProcess;
+		if ( num_samples_to_process < copy_count ) copy_count = num_samples_to_process;
 
 		memcpy( pf->in_FIFO + pf->index, indata, sizeof( float ) * copy_count );
 		memcpy( out_samples, pf->out_FIFO + pf->index - TS_OVERLAP, sizeof( float ) * copy_count );
@@ -2188,7 +2188,7 @@ static void smbPitchShift(float pitchShift, int numSampsToProcess, float sampleR
 		}
 
 		copy_count = copy_count * 4 + extra;
-		numSampsToProcess -= copy_count;
+		num_samples_to_process -= copy_count;
 		pf->index += copy_count;
 		indata += copy_count;
 		out_samples += copy_count;
@@ -2210,7 +2210,7 @@ static void smbPitchShift(float pitchShift, int numSampsToProcess, float sampleR
 			}
 
 			memset( pf->fft_data + TS_PITCH_FRAME_SIZE, 0, TS_PITCH_FRAME_SIZE * sizeof( float ) );
-			tinyFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, 1.0f );
+			tsFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, 1.0f );
 
 			{
 				__m128* fft_data = (__m128*)pf->fft_data;
@@ -2319,7 +2319,7 @@ static void smbPitchShift(float pitchShift, int numSampsToProcess, float sampleR
 			for ( int k = TS_PITCH_FRAME_SIZE + 2; k < 2 * TS_PITCH_FRAME_SIZE - 2; ++k )
 				pf->fft_data[ k ] = 0;
 
-			tinyFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, -1 );
+			tsFFT( pf->fft_data, pf->fft_data + TS_PITCH_FRAME_SIZE, TS_PITCH_FRAME_SIZE, -1 );
 
 			{
 				__m128* fft_data = (__m128*)pf->fft_data;
