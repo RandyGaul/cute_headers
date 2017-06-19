@@ -844,6 +844,8 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		DSBUFFERDESC bufdesc = { 0 };
 		LPDIRECTSOUND dsound;
 
+		TS_CHECK( hwnd, "Invalid hwnd passed to tsMakeContext." );
+
 		HRESULT res = DirectSoundCreate( 0, &dsound, 0 );
 		TS_CHECK( res == DS_OK, "DirectSoundCreate failed" );
 #ifdef __cplusplus
