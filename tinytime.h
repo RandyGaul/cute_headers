@@ -172,7 +172,7 @@ void ttRecord( ttTimer* timer );
 		
 		struct timespec now;
 		clock_gettime( CLOCK_MONOTONIC, &now );
-		float elapsed = (float)((double)(now.tv_nsec - prev.tv_nsec) * 1.0e-9);
+		float elapsed = (float)((double)(now.tv_sec - prev.tv_sec) + ((double)(now.tv_nsec - prev.tv_nsec) * 1.0e-9));
 		prev = now;
 		return elapsed;
 	}
