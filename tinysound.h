@@ -614,7 +614,7 @@ void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSou
 	{
 	case 1:
 	{
-		a = malloc16( wide_count * sizeof( __m128 ) );
+		a = (__m128*)malloc16( wide_count * sizeof( __m128 ) );
 		b = 0;
 
 		for ( int i = 0, j = 0; i < wide_count - 1; ++i, j += 4 )
