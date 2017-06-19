@@ -8,7 +8,8 @@
 	Windows XP since DirectSound ships with all recent versions of Windows.
 	tinysound implements a custom SSE2 mixer by explicitly locking and unlocking
 	portions of an internal. tinysound uses CoreAudio for Apple machines (like
-	OSX and iOS).
+	OSX and iOS). SDL is used for all other platforms. Define TS_FORCE_SDL
+	before placaing the TS_IMPLEMENTATION in order to force the use of SDL.
 
 	Revision history:
 		1.0  (06/04/2016) initial release
@@ -31,7 +32,10 @@
 		1.06 (02/17/2017) port to CoreAudio for Apple machines
 		1.07 (06/18/2017) SIMD the pitch shift code; swapped out old Bernsee
 		                  code for a new re-write, updated docs as necessary,
-		                  support for compiling as .c and .cpp on Windows
+		                  support for compiling as .c and .cpp on Windows,
+		                  port for SDL (for Linux, or any other platform).
+		                  Special thanks to DexP of github for 90% of the work
+		                  on the SDL port!
 */
 
 /*
@@ -180,14 +184,28 @@
 #define TS_WINDOWS	1
 #define TS_MAC		2
 #define TS_UNIX		3
+#define TS_SDL		4
 
 #if defined( _WIN32 )
 	#define TS_PLATFORM TS_WINDOWS
 #elif defined( __APPLE__ )
 	#define TS_PLATFORM TS_MAC
 #else
-	#define TS_PLATFORM TS_UNIX
-	#error unsupported platform
+	#define TS_PLATFORM TS_SDL
+
+	// please note TS_UNIX is not directly support
+	// instead, unix-style OSes are encouraged to use SDL
+	// see: https://www.libsdl.org/
+
+#endif
+
+// Use TS_FORCE_SDL to override the above macros and use
+// the SDL port.
+#ifdef TS_FORCE_SDL
+
+	#undef TS_PLATFORM
+	#define TS_PLATFORM TS_SDL
+
 #endif
 
 #include <stdint.h>
@@ -373,6 +391,9 @@ void tsStopAllSounds( tsContext* ctx );
 	#include <mach/mach_time.h>
 
 #else
+
+	#include "SDL2/SDL.h"
+
 #endif
 
 #define TS_CHECK( X, Y ) do { if ( !(X) ) { g_tsErrorReason = Y; goto ts_err; } } while ( 0 )
@@ -971,100 +992,6 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		free( ctx );
 	}
 
-	static int tsSamplesWritten( tsContext* ctx )
-	{
-		int index0 = ctx->index0;
-		int index1 = ctx->index1;
-		if ( index0 <= index1 ) return index1 - index0;
-		else return ctx->sample_count - index0 + index1;
-	}
-
-	static int tsSamplesUnwritten( tsContext* ctx )
-	{
-		int index0 = ctx->index0;
-		int index1 = ctx->index1;
-		if ( index0 <= index1 ) return ctx->sample_count - index1 + index0;
-		else return index0 - index1;
-	}
-
-	static int tsSamplesToMix( tsContext* ctx )
-	{
-		int lat = ctx->latency_samples;
-		int written = tsSamplesWritten( ctx );
-		int dif = lat - written;
-		TS_ASSERT( dif >= 0 );
-		if ( dif )
-		{
-			int unwritten = tsSamplesUnwritten( ctx );
-			return dif < unwritten ? dif : unwritten;
-		}
-		return 0;
-	}
-
-#define TS_SAMPLES_TO_BYTES( interleaved_sample_count ) ((interleaved_sample_count) * ctx->bps)
-#define TS_BYTES_TO_SAMPLES( byte_count ) ((byte_count) / ctx->bps)
-
-	static void tsPushBytes( tsContext* ctx, void* data, int size )
-	{
-		int index0 = ctx->index0;
-		int index1 = ctx->index1;
-		int samples = TS_BYTES_TO_SAMPLES( size );
-		int sample_count = ctx->sample_count;
-
-		int unwritten = tsSamplesUnwritten( ctx );
-		if ( unwritten < samples ) samples = unwritten;
-		int can_overflow = index0 <= index1;
-		int would_overflow = index1 + samples > sample_count;
-
-		if ( can_overflow && would_overflow )
-		{
-			int first_size = TS_SAMPLES_TO_BYTES( sample_count - index1 );
-			int second_size = size - first_size;
-			memcpy( (char*)ctx->samples + TS_SAMPLES_TO_BYTES( index1 ), data, first_size );
-			memcpy( ctx->samples, (char*)data + first_size, second_size );
-			ctx->index1 = TS_BYTES_TO_SAMPLES( second_size );
-		}
-
-		else
-		{
-			memcpy( (char*)ctx->samples + TS_SAMPLES_TO_BYTES( index1 ), data, size );
-			ctx->index1 += TS_BYTES_TO_SAMPLES( size );
-		}
-	}
-
-	static int tsPullBytes( tsContext* ctx, void* dst, int size )
-	{
-		int index0 = ctx->index0;
-		int index1 = ctx->index1;
-		int allowed_size = TS_SAMPLES_TO_BYTES( tsSamplesWritten( ctx ) );
-		int zeros = 0;
-
-		if ( allowed_size < size )
-		{
-			zeros = size - allowed_size;
-			size = allowed_size;
-		}
-
-		if ( index1 >= index0 )
-		{
-			memcpy( dst, ((char*)ctx->samples) + TS_SAMPLES_TO_BYTES( index0 ), size );
-			ctx->index0 += TS_BYTES_TO_SAMPLES( size );
-		}
-
-		else
-		{
-			int first_size = TS_SAMPLES_TO_BYTES( ctx->sample_count ) - TS_SAMPLES_TO_BYTES( index0 );
-			if ( first_size > size ) first_size = size;
-			int second_size = size - first_size;
-			memcpy( dst, ((char*)ctx->samples) + TS_SAMPLES_TO_BYTES( index0 ), first_size );
-			memcpy( ((char*)dst) + first_size, ctx->samples, second_size );
-			if ( second_size ) ctx->index0 = TS_BYTES_TO_SAMPLES( second_size );
-			else ctx->index0 += TS_BYTES_TO_SAMPLES( first_size );
-		}
-
-		return zeros;
-	}
-
 	static void* tsCtxThread( void* udata )
 	{
 		tsContext* ctx = (tsContext*)udata;
@@ -1200,6 +1127,252 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 	}
 
 #else
+
+	void tsSleep( int milliseconds )
+	{
+		SDL_Delay( milliseconds );
+	}
+
+	struct tsContext
+	{
+		unsigned latency_samples;
+		unsigned index0; // read
+		unsigned index1; // write
+		unsigned running_index;
+		int Hz;
+		int bps;
+		int buffer_size;
+		int wide_count;
+		int sample_count;
+		tsPlayingSound* playing;
+		__m128* floatA;
+		__m128* floatB;
+		__m128i* samples;
+		tsPlayingSound* playing_pool;
+		tsPlayingSound* playing_free;
+
+		// data for tsMix thread, enable these with tsSpawnMixThread
+		SDL_Thread* thread;
+		SDL_mutex* mutex;
+		int separate_thread;
+		int running;
+		int sleep_milliseconds;
+	};
+
+	static void tsReleaseContext( tsContext* ctx )
+	{
+		if ( ctx->separate_thread )	SDL_DestroyMutex( ctx->mutex );
+		tsPlayingSound* playing = ctx->playing;
+		while ( playing )
+		{
+			tsRemoveFilter( playing );
+			playing = playing->next;
+		}
+		SDL_CloseAudio( );
+		free( ctx );
+	}
+
+	int tsCtxThread( void* udata )
+	{
+		tsContext* ctx = (tsContext*)udata;
+
+		while ( ctx->running )
+		{
+			tsMix( ctx );
+			if ( ctx->sleep_milliseconds ) tsSleep( ctx->sleep_milliseconds );
+			else tsSleep( 1 );
+		}
+
+		ctx->separate_thread = 0;
+		return 0;
+	}
+
+	static void tsLock( tsContext* ctx )
+	{
+		if ( ctx->separate_thread ) SDL_LockMutex( ctx->mutex );
+	}
+
+	static void tsUnlock( tsContext* ctx )
+	{
+		if ( ctx->separate_thread ) SDL_UnlockMutex( ctx->mutex );
+	}
+
+	void tsSDL_AudioCallback( void* udata, Uint8* stream, int len );
+
+	tsContext* tsMakeContext( void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count )
+	{
+		(void)unused;
+		int bps = sizeof( uint16_t ) * 2;
+		int sample_count = play_frequency_in_Hz * num_buffered_seconds;
+		int latency_count = (unsigned)TS_ALIGN( play_frequency_in_Hz / latency_factor_in_Hz, 4 );
+		TS_ASSERT( sample_count > latency_count );
+		int wide_count = (int)TS_ALIGN( sample_count, 4 ) / 4;
+		int pool_size = playing_pool_count * sizeof( tsPlayingSound );
+		int mix_buffers_size = sizeof( __m128 ) * wide_count * 2;
+		int sample_buffer_size = sizeof( __m128i ) * wide_count;
+		tsContext* ctx = 0;
+		SDL_AudioSpec wanted;
+		int ret = SDL_Init( SDL_INIT_AUDIO );
+		TS_CHECK( ret >= 0, "Can't init SDL audio" );
+
+		ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
+		TS_CHECK( ctx != NULL, "Can't create audio context" );
+		ctx->latency_samples = latency_count;
+		ctx->index0 = 0;
+		ctx->index1 = 0;
+		ctx->Hz = play_frequency_in_Hz;
+		ctx->bps = bps;
+		ctx->wide_count = wide_count;
+		ctx->sample_count = wide_count * 4;
+		ctx->playing = 0;
+		ctx->floatA = (__m128*)(ctx + 1);
+		ctx->floatA = (__m128*)TS_ALIGN( ctx->floatA, 16 );
+		TS_ASSERT( !((size_t)ctx->floatA & 15) );
+		ctx->floatB = ctx->floatA + wide_count;
+		ctx->samples = (__m128i*)ctx->floatB + wide_count;
+		ctx->running = 1;
+		ctx->separate_thread = 0;
+		ctx->sleep_milliseconds = 0;
+
+		SDL_memset( &wanted, 0, sizeof( wanted ) );
+		wanted.freq = play_frequency_in_Hz;
+		wanted.format = AUDIO_S16SYS;
+		wanted.channels = 2; /* 1 = mono, 2 = stereo */
+		wanted.samples = 1024;
+		wanted.callback = tsSDL_AudioCallback;
+		wanted.userdata = ctx;
+		ret = SDL_OpenAudio( &wanted, NULL );
+		TS_CHECK( ret >= 0, "Can't open SDL audio" );
+		SDL_PauseAudio( 0 );
+
+		if ( playing_pool_count )
+		{
+			ctx->playing_pool = (tsPlayingSound*)(ctx->samples + wide_count);
+			for ( int i = 0; i < playing_pool_count - 1; ++i )
+				ctx->playing_pool[ i ].next = ctx->playing_pool + i + 1;
+			ctx->playing_pool[ playing_pool_count - 1 ].next = 0;
+			ctx->playing_free = ctx->playing_pool;
+		}
+
+		else
+		{
+			ctx->playing_pool = 0;
+			ctx->playing_free = 0;
+		}
+
+		return ctx;
+
+	ts_err:
+		if ( ctx ) free( ctx );
+		return 0;
+	}
+
+	void tsSpawnMixThread( tsContext* ctx )
+	{
+		if ( ctx->separate_thread ) return;
+		ctx->mutex = SDL_CreateMutex( );
+		ctx->separate_thread = 1;
+		ctx->thread = SDL_CreateThread( &tsCtxThread, "TinySoundThread", ctx );
+	}
+
+#endif
+
+#if TS_PLATFORM == TS_SDL || TS_PLATFORM == TS_MAC
+
+	static int tsSamplesWritten( tsContext* ctx )
+	{
+		int index0 = ctx->index0;
+		int index1 = ctx->index1;
+		if ( index0 <= index1 ) return index1 - index0;
+		else return ctx->sample_count - index0 + index1;
+	}
+
+	static int tsSamplesUnwritten( tsContext* ctx )
+	{
+		int index0 = ctx->index0;
+		int index1 = ctx->index1;
+		if ( index0 <= index1 ) return ctx->sample_count - index1 + index0;
+		else return index0 - index1;
+	}
+
+	static int tsSamplesToMix( tsContext* ctx )
+	{
+		int lat = ctx->latency_samples;
+		int written = tsSamplesWritten( ctx );
+		int dif = lat - written;
+		TS_ASSERT( dif >= 0 );
+		if ( dif )
+		{
+			int unwritten = tsSamplesUnwritten( ctx );
+			return dif < unwritten ? dif : unwritten;
+		}
+		return 0;
+	}
+
+#define TS_SAMPLES_TO_BYTES( interleaved_sample_count ) ((interleaved_sample_count) * ctx->bps)
+#define TS_BYTES_TO_SAMPLES( byte_count ) ((byte_count) / ctx->bps)
+
+	static void tsPushBytes( tsContext* ctx, void* data, int size )
+	{
+		int index0 = ctx->index0;
+		int index1 = ctx->index1;
+		int samples = TS_BYTES_TO_SAMPLES( size );
+		int sample_count = ctx->sample_count;
+
+		int unwritten = tsSamplesUnwritten( ctx );
+		if ( unwritten < samples ) samples = unwritten;
+		int can_overflow = index0 <= index1;
+		int would_overflow = index1 + samples > sample_count;
+
+		if ( can_overflow && would_overflow )
+		{
+			int first_size = TS_SAMPLES_TO_BYTES( sample_count - index1 );
+			int second_size = size - first_size;
+			memcpy( (char*)ctx->samples + TS_SAMPLES_TO_BYTES( index1 ), data, first_size );
+			memcpy( ctx->samples, (char*)data + first_size, second_size );
+			ctx->index1 = TS_BYTES_TO_SAMPLES( second_size );
+		}
+
+		else
+		{
+			memcpy( (char*)ctx->samples + TS_SAMPLES_TO_BYTES( index1 ), data, size );
+			ctx->index1 += TS_BYTES_TO_SAMPLES( size );
+		}
+	}
+
+	static int tsPullBytes( tsContext* ctx, void* dst, int size )
+	{
+		int index0 = ctx->index0;
+		int index1 = ctx->index1;
+		int allowed_size = TS_SAMPLES_TO_BYTES( tsSamplesWritten( ctx ) );
+		int zeros = 0;
+
+		if ( allowed_size < size )
+		{
+			zeros = size - allowed_size;
+			size = allowed_size;
+		}
+
+		if ( index1 >= index0 )
+		{
+			memcpy( dst, ((char*)ctx->samples) + TS_SAMPLES_TO_BYTES( index0 ), size );
+			ctx->index0 += TS_BYTES_TO_SAMPLES( size );
+		}
+
+		else
+		{
+			int first_size = TS_SAMPLES_TO_BYTES( ctx->sample_count ) - TS_SAMPLES_TO_BYTES( index0 );
+			if ( first_size > size ) first_size = size;
+			int second_size = size - first_size;
+			memcpy( dst, ((char*)ctx->samples) + TS_SAMPLES_TO_BYTES( index0 ), first_size );
+			memcpy( ((char*)dst) + first_size, ctx->samples, second_size );
+			if ( second_size ) ctx->index0 = TS_BYTES_TO_SAMPLES( second_size );
+			else ctx->index0 += TS_BYTES_TO_SAMPLES( first_size );
+		}
+
+		return zeros;
+	}
+
 #endif
 
 void tsShutdownContext( tsContext* ctx )
@@ -1414,7 +1587,15 @@ void tsStopAllSounds( tsContext* ctx )
 		return noErr;
 	}
 
-#else
+#elif TS_PLATFORM == TS_SDL
+
+	static void tsSDL_AudioCallback( void* udata, Uint8* stream, int len )
+	{
+		tsContext* ctx = (tsContext*)udata;
+		int zero_bytes = tsPullBytes( ctx, stream, len );
+		memset( stream + (len - zero_bytes), 0, zero_bytes );
+	}
+
 #endif
 
 static void tsPitchShift( float pitchShift, int num_samples_to_process, float sampleRate, float* indata, tsPitchData** pitch_filter );
@@ -1474,7 +1655,7 @@ void tsMix( tsContext* ctx )
 	if ( !bytes_to_write ) goto unlock;
 	int samples_to_write = bytes_to_write / ctx->bps;
 
-#elif TS_PLATFORM == TS_MAC
+#elif TS_PLATFORM == TS_MAC || TS_PLATFORM == TS_SDL
 
 	int samples_to_write = tsSamplesToMix( ctx );
 	if ( !samples_to_write ) goto unlock;
@@ -1662,7 +1843,7 @@ void tsMix( tsContext* ctx )
 	}
 	tsMemcpyToDS( ctx, (int16_t*)samples, byte_to_lock, bytes_to_write );
 
-#elif TS_PLATFORM == TS_MAC
+#elif TS_PLATFORM == TS_MAC || TS_PLATFORM == TS_SDL
 
 	// Since the ctx->samples array is already in use as a ring buffer
 	// reusing floatA to store output is a good way to temporarly store
