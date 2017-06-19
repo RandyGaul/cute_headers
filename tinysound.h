@@ -43,6 +43,7 @@
 		Aaron Balint      1.04 - real time pitch
 		                  1.04 - separate thread for tsMix
 		                  1.04 - bugfix, removed extra free16 call for second channel
+		DeXP              1.07 - initial work on SDL port
 */
 
 /*
