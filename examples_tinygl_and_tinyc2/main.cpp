@@ -896,6 +896,33 @@ void PlastburkRayBug( )
 	}
 }
 
+void sro5hRayBug( )
+{
+	c2Ray ray;
+	ray.p = c2V( 100.0f, 100.0f );
+	ray.d = c2Norm( c2V( 100.0f, 100.0f ) );
+	ray.t = 1.0f;
+
+	c2Circle circle;
+	circle.r = 30.0f;
+	circle.p = c2V( 200.0f, 200.0f );
+
+	DrawCircle( circle.p, circle.r );
+
+	c2Raycast cast;
+	if ( c2RaytoCircle( ray, circle, &cast ) )
+	{
+		c2v impact = c2Impact( ray, cast.t );
+		c2v end = c2Add( impact, c2Mulvs( cast.n, 10.0f ) );
+		tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
+	}
+
+	//c2v end = c2Add( ray.p, c2Mulvs( ray.d, ray.t ) );
+	//tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	//tgLine( ctx, ray.p.x, ray.p.y, 0, end.x, end.y, 0 );
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -985,8 +1012,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 10;
-		if ( arrow_pressed ) code = (code + 1) % 11;
+		static int code = 11;
+		if ( arrow_pressed ) code = (code + 1) % 12;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -1000,6 +1027,7 @@ int main( )
 		case 8: TestManifold1( ); break;
 		case 9: TestManifold2( ); break;
 		case 10: PlastburkRayBug( ); break;
+		case 11: sro5hRayBug( ); break;
 		}
 
 		// push a draw call to tinygl

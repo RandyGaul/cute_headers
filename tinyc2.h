@@ -190,6 +190,11 @@ typedef struct
 	c2v norms[ C2_MAX_POLYGON_VERTS ];
 } c2Poly;
 
+// IMPORTANT:
+// Many algorithms in this file are sensitive to the magnitude of the
+// ray direction (c2Ray::d). It is highly recommended to normalize the
+// ray direction and use t to specify a distance. Please see this link
+// for an in-depth explanation: https://github.com/RandyGaul/tinyheaders/issues/30
 typedef struct
 {
 	c2v p;   // position
