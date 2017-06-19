@@ -1992,7 +1992,7 @@ static void tsFFT( float* x, float* y, int count, float sign )
 
 	#define TS_ALIGN16_0 __declspec( align( 16 ) )
 	#define TS_ALIGN16_1
-	#define TS_SELECTANY const __declspec( selectany )
+	#define TS_SELECTANY extern const __declspec( selectany )
 
 #else
 
