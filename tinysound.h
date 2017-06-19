@@ -1988,17 +1988,17 @@ static void tsFFT( float* x, float* y, int count, float sign )
 	}
 }
 
-#ifdef _WIN32
+#ifdef _MSC_VER
 
 	#define TS_ALIGN16_0 __declspec( align( 16 ) )
 	#define TS_ALIGN16_1
-	#define TS_SELECTANY extern const __declspec( selectany )
+	#define TS_SELECTANY const __declspec( selectany )
 
 #else
 
 	#define TS_ALIGN16_0
-	#define TS_ALIGN16_1 __attribute__( aligned( 16 ) )
-	#define TS_SELECTANY extern const __attribute__( selectany )
+	#define TS_ALIGN16_1 __attribute__( (aligned( 16 )) )
+	#define TS_SELECTANY const __attribute__( (selectany) )
 
 #endif
 
@@ -2290,14 +2290,14 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 
 	// make sure compiler didn't do anything weird with the member
 	// offsets of tsPitchData. All arrays must be 16 byte aligned
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->pitch_shifted_output_samples) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->fft_data) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->previous_phase) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->sum_phase) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->window_accumulator) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->freq) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->mag) & 15) );
-	TS_ASSERT( !((int)&(((tsPitchData*)0)->pitch_shift_workspace) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->pitch_shifted_output_samples) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->fft_data) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->previous_phase) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->sum_phase) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->window_accumulator) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->freq) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->mag) & 15) );
+	TS_ASSERT( !((size_t)&(((tsPitchData*)0)->pitch_shift_workspace) & 15) );
 
 	tsPitchData* pf;
 
@@ -2338,7 +2338,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 		int extra = copy_count & 3;
 		copy_count = copy_count / 4 - extra;
 		__m128* in_FIFO = (__m128*)(pf->in_FIFO + pf->index + offset);
-		TS_ASSERT( !((int)in_FIFO & 15) );
+		TS_ASSERT( !((size_t)in_FIFO & 15) );
 		__m128 int16_max = _mm_set_ps1( 32768.0f );
 
 		for ( int i = 0; i < copy_count; ++i )
@@ -2351,10 +2351,10 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 		for ( int i = 0, copy_count4 = copy_count * 4; i < extra; ++i )
 		{
 			int index = copy_count4 + i;
-			pf->in_FIFO[ pf->index + i ] /= 32768.0f;
+			pf->in_FIFO[ pf->index + index ] /= 32768.0f;
 		}
 
-		TS_ASSERT( !((int)out_samples & 15) );
+		TS_ASSERT( !((size_t)out_samples & 15) );
 		__m128* out_samples4 = (__m128*)out_samples;
 		for ( int i = 0; i < copy_count; ++i )
 		{
@@ -2366,7 +2366,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 		for ( int i = 0, copy_count4 = copy_count * 4; i < extra; ++i )
 		{
 			int index = copy_count4 + i;
-			out_samples[ i ] *= 32768.0f;
+			out_samples[ index ] *= 32768.0f;
 		}
 
 		copy_count = copy_count * 4 + extra;
