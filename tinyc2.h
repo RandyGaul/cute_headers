@@ -304,6 +304,7 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 #endif
 
 // adjust these primitives as seen fit
+#include <string.h> // memcpy
 #include <math.h>
 #define c2Sin( radians ) sinf( radians )
 #define c2Cos( radians ) cosf( radians )
