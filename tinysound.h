@@ -157,17 +157,19 @@
 
 /*
 	FAQ
-	Q : Why DirectSound instead of (insert API here)?
+	Q : Why DirectSound instead of (insert API here) on Windows?
 	A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
 	shipped on Windows XP all the way through Windows 10 -- using this header effectively intro-
 	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
 	implement needed features, and users won't hear the difference between various APIs. Latency is
-	not that great with DS but it is shippable.
+	not that great with DS but it is shippable. Additionally, many other APIs will in the end speak
+	to Windows through the DS API.
 
 	Q : Why not include Linux support?
-	A : I don't have time right now. I'm sure somewhere out there some great programmers already
-	know all about how to do audio on Linux. tinysound is port-ready, so by all means, please
-	contribute to the project and submit a pull request!
+	A : There have been a couple requests for ALSA support on Linux. For now the only option is to use
+	SDL backend, which can indirectly support ALSA. SDL is used only in a very low-level manner;
+	to get sound samples to the sound card via callback, so there shouldn't be much in the way of
+	considering SDL a good option for "name your flavor" of Linux backend.
 
 	Q : I would like to use my own memory management, how can I achieve this?
 	A : This header makes a couple uses of malloc/free, and malloc16/free16. Simply find these bits
