@@ -1363,7 +1363,7 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 			l = c2Sqrt( l );
 			m->count = 1;
 			m->contact_points[ 0 ] = b;
-			m->depths[ 0 ] = l;
+			m->depths[ 0 ] = A.r - l;
 			m->normal = c2Mulvs( n, 1.0f / l );
 		}
 	}
