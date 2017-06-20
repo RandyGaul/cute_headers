@@ -225,6 +225,9 @@ typedef struct
 	int count;
 	float depths[ 2 ];
 	c2v contact_points[ 2 ];
+
+	// always points from shape A to shape B (first and second shapes passed into
+	// any of the c2***to***Manifold functions)
 	c2v normal;
 } c2Manifold;
 
