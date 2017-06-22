@@ -1397,8 +1397,8 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 		c2v p = c2Project( h, local );
 		m->count = 1;
 		m->contact_points[ 0 ] = c2Mulxv( bx, p );
-		m->depths[ 0 ] = sep;
-		m->normal = c2Mulrv( bx.r, B->norms[ index ] );
+		m->depths[ 0 ] = A.r - sep;
+		m->normal = c2Neg( c2Mulrv( bx.r, B->norms[ index ] ) );
 	}
 }
 
