@@ -1191,10 +1191,10 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 		if ( d2 != 0 )
 		{
 			float d = c2Sqrt( d2 );
-			c2v n = c2Norm( c2Neg( ab ) );
+			c2v n = c2Norm( ab );
 			m->count = 1;
 			m->depths[ 0 ] = A.r - d;
-			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, -d ) );
+			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, d ) );
 			m->normal = n;
 		}
 
@@ -1213,13 +1213,13 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			{
 				if ( d.x < 0 )
 				{
-					n = c2V( -1.0f, 0 );
+					n = c2V( 1.0f, 0 );
 					p.x = mid.x - e.x;
 				}
 
 				else
 				{
-					n = c2V( 1.0f, 0 );
+					n = c2V( -1.0f, 0 );
 					p.x = mid.x + e.x;
 				}
 				depth = e.x - abs_d.x;
@@ -1228,19 +1228,19 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			{
 				if ( d.y < 0 )
 				{
-					n = c2V( 0, -1.0f );
+					n = c2V( 0, 1.0f );
 					p.y = mid.y - e.y;
 				}
 
 				else
 				{
-					n = c2V( 0, 1.0f );
+					n = c2V( 0, -1.0f );
 					p.y = mid.y + e.y;
 				}
 				depth = e.y - abs_d.y;
 			}
 			m->count = 1;
-			m->depths[ 0 ] = depth;
+			m->depths[ 0 ] = A.r + depth;
 			m->contact_points[ 0 ] = p;
 			m->normal = n;
 		}
