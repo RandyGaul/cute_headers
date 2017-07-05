@@ -23,6 +23,7 @@
 		mmozeiko          1.02 - 3 compile bugfixes
 		felipefs          1.02 - 3 compile bugfixes
 		seemk             1.02 - fix branching bug in c2Collide
+		sro5h             1.02 - bug reports for multiple manifold funcs
 */
 
 /*
@@ -225,6 +226,9 @@ typedef struct
 	int count;
 	float depths[ 2 ];
 	c2v contact_points[ 2 ];
+
+	// always points from shape A to shape B (first and second shapes passed into
+	// any of the c2***to***Manifold functions)
 	c2v normal;
 } c2Manifold;
 
@@ -1363,7 +1367,7 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 			l = c2Sqrt( l );
 			m->count = 1;
 			m->contact_points[ 0 ] = b;
-			m->depths[ 0 ] = l;
+			m->depths[ 0 ] = A.r - l;
 			m->normal = c2Mulvs( n, 1.0f / l );
 		}
 	}
@@ -1612,17 +1616,20 @@ void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, 
 	c2x rx, ix;
 	int re;
 	float kRelTol = 0.95f, kAbsTol = 0.01f;
+	int flip;
 	if ( sa * kRelTol > sb + kAbsTol )
 	{
 		rp = A; rx = ax;
 		ip = B; ix = bx;
 		re = ea;
+		flip = 0;
 	}
 	else
 	{
 		rp = B; rx = bx;
 		ip = A; ix = ax;
 		re = eb;
+		flip = 1;
 	}
 
 	c2v incident[ 2 ];
@@ -1630,6 +1637,7 @@ void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, 
 	c2h rh;
 	if ( !c2SidePlanes( incident, rx, rp, re, &rh ) ) return;
 	c2KeepDeep( incident, rh, m );
+	if ( flip ) m->normal = c2Neg( m->normal );
 }
 
 #endif // TINYC2_IMPL

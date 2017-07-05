@@ -265,6 +265,19 @@ void DrawCircle( c2v p, float r )
 	}
 }
 
+void DrawManifold( c2Manifold m )
+{
+	c2v n = m.normal;
+	tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
+	for ( int i = 0; i < m.count; ++i )
+	{
+		c2v p = m.contact_points[ i ];
+		float d = m.depths[ i ];
+		DrawCircle( p, 3.0f );
+		tgLine( ctx, p.x, p.y, 0, p.x + n.x * d, p.y + n.y * d, 0 );
+	}
+}
+
 // should see slow rotation CCW, then CW
 // space toggles between two different rotation implements
 // after toggling implementations space toggles rotation direction
@@ -414,10 +427,10 @@ void TestBoolean2( )
 		first = 0;
 		poly.count = C2_MAX_POLYGON_VERTS;
 		for ( int i = 0; i < poly.count; ++i ) poly.verts[ i ] = RandomVec( );
-		poly.count = c2Hull( poly.verts, poly.count );
+		c2MakePoly( &poly );
 		poly2.count = C2_MAX_POLYGON_VERTS;
 		for ( int i = 0; i < poly2.count; ++i ) poly2.verts[ i ] = RandomVec( );
-		poly2.count = c2Hull( poly2.verts, poly2.count );
+		c2MakePoly( &poly2 );
 	}
 
 	static int which;
@@ -434,8 +447,17 @@ void TestBoolean2( )
 		DrawCircle( b, 2.0f );
 		tgLine( ctx, a.x, a.y, 0, b.x, b.y, 0 );
 
+#if 0
 		if ( c2CircletoPoly( user_circle, &poly, 0 ) ) tgLineColor( ctx, 1.0f, 0.0f, 0.0f );
 		else tgLineColor( ctx, 5.0f, 7.0f, 9.0f );
+#else
+		c2Manifold m;
+		c2CircletoPolyManifold( user_circle, &poly, 0, &m );
+		if ( m.count )
+		{
+			DrawManifold( m );
+		}
+#endif
 		DrawPoly( poly.verts, poly.count );
 
 		tgLineColor( ctx, 0.5f, 0.7f, 0.9f );
@@ -611,19 +633,6 @@ void TestRay2( )
 	}
 
 	tgLine( ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0 );
-}
-
-void DrawManifold( c2Manifold m )
-{
-	c2v n = m.normal;
-	tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
-	for ( int i = 0; i < m.count; ++i )
-	{
-		c2v p = m.contact_points[ i ];
-		float d = m.depths[ i ];
-		DrawCircle( p, 3.0f );
-		tgLine( ctx, p.x, p.y, 0, p.x + n.x * d, p.y + n.y * d, 0 );
-	}
 }
 
 void DrawCircles( c2Circle ca, c2Circle cb )
