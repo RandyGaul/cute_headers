@@ -441,7 +441,7 @@ int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		{
 		case C2_CIRCLE:  return c2CircletoPoly( *(c2Circle*)B, (const c2Poly*)A, ax );
 		case C2_AABB:    return c2AABBtoPoly( *(c2AABB*)B, (const c2Poly*)A, ax );
-		case C2_CAPSULE: return c2CapsuletoPoly( *(c2Capsule*)A, (const c2Poly*)A, ax );
+		case C2_CAPSULE: return c2CapsuletoPoly( *(c2Capsule*)B, (const c2Poly*)A, ax );
 		case C2_POLY:    return c2PolytoPoly( (const c2Poly*)A, ax, (const c2Poly*)B, bx );
 		default:         return 0;
 		}
