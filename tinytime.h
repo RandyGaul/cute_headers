@@ -105,7 +105,7 @@ void ttRecord( ttTimer* timer );
 	{
 		LARGE_INTEGER now;
 		QueryPerformanceCounter( &now );
-		return (int64_t)(timer->prev.QuadPart - now.QuadPart);
+		return (int64_t)(timer->now.QuadPart - prev.QuadPart);
 	}
 
 	int64_t ttSeconds( ttTimer* timer, int64_t ticks )
