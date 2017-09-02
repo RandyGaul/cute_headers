@@ -216,6 +216,13 @@
 
 #endif
 
+#if TS_PLATFORM == TS_SDL
+	#ifndef TS_SDL_PATH
+		#define TS_SDL_PATH "SDL2/SDL.h"
+	#endif
+	#include TS_SDL_PATH
+#endif
+
 #include <stdint.h>
 
 // read this in the event of tsLoadWAV/tsLoadOGG errors
