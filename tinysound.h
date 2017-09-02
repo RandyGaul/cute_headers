@@ -258,6 +258,10 @@ typedef struct tsContext tsContext;
 // in the case of errors. Read g_tsErrorReason string for details on what happened.
 // Calls tsReadMemWAV internally.
 tsLoadedSound tsLoadWAV( const char* path );
+#if TS_PLATFORM == TS_SDL
+// Provides the ability to use tsLoadWAV with an SDL_RWops object.
+tsLoadedSound tsLoadWAVRW( SDL_RWops* context );
+#endif
 
 // Reads a WAV file from memory. Still allocates memory for the tsLoadedSound since
 // WAV format will interlace stereo, and we need separate data streams to do SIMD
@@ -269,6 +273,10 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound );
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound );
 tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
+#if TS_PLATFORM == TS_SDL
+// Provides the ability to use tsLoadOGG with an SDL_RWops object.
+tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate );
+#endif
 #endif
 
 // Uses free16 (aligned free, implemented later in this file) to free up both of
@@ -436,6 +444,31 @@ static void* tsReadFileToMemory( const char* path, int* size )
 	return data;
 }
 
+#if TS_PLATFORM == TS_SDL
+// Load an SDL_RWops object's data into memory.
+static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
+{
+	Sint64 res_size = SDL_RWsize(rw);
+	void* data = (void*)malloc(res_size + 1);
+
+	Sint64 nb_read_total = 0, nb_read = 1;
+	void* buf = data;
+	while ( nb_read_total < res_size && nb_read != 0 ) {
+		nb_read = SDL_RWread(rw, buf, 1, (res_size - nb_read_total));
+		nb_read_total += nb_read;
+		buf += nb_read;
+	}
+	SDL_RWclose(rw);
+	if ( nb_read_total != res_size ) {
+		free(data);
+		return NULL;
+	}
+
+	if ( size ) *size = (int)res_size;
+	return data;
+}
+#endif
+
 static int tsFourCC( const char* CC, void* memory )
 {
 	if ( !memcmp( CC, memory, 4 ) ) return 1;
@@ -600,6 +633,17 @@ tsLoadedSound tsLoadWAV( const char* path )
 	return sound;
 }
 
+#if TS_PLATFORM == TS_SDL
+tsLoadedSound tsLoadWAVRW( SDL_RWops* context )
+{
+	tsLoadedSound sound = { 0 };
+	char* wav = (char*)tsReadRWToMemory( context, 0 );
+	tsReadMemWAV( wav, &sound );
+	free( wav );
+	return sound;
+}
+#endif
+
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
@@ -686,6 +730,19 @@ tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
 
 	return sound;
 }
+
+#if TS_PLATFORM == TS_SDL
+tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate )
+{
+	int length;
+	void* memory = tsReadRWToMemory( rw, &length );
+	tsLoadedSound sound;
+	tsReadMemOGG( memory, length, sample_rate, &sound );
+	free( memory );
+
+	return sound;
+}
+#endif
 #endif
 
 void tsFreeSound( tsLoadedSound* sound )
