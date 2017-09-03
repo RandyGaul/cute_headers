@@ -455,27 +455,24 @@ static void* tsReadFileToMemory( const char* path, int* size )
 // Load an SDL_RWops object's data into memory.
 static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
 {
-	char* data = 0;
-	int totalSize = 0;
-	int i = 0;
-	char c;
+	Sint64 res_size = SDL_RWsize(rw);
+	void* data = (void*)malloc(res_size + 1);
 
-	while ( SDL_RWread(rw, &c, sizeof(char), 1) > 0 )
-	{
-		totalSize++;
+	Sint64 nb_read_total = 0, nb_read = 1;
+	void* buf = data;
+	while ( nb_read_total < res_size && nb_read != 0 ) {
+		nb_read = SDL_RWread(rw, buf, 1, (res_size - nb_read_total));
+		nb_read_total += nb_read;
+		buf += nb_read;
 	}
-
-	data = (char*)malloc(totalSize + 1);
-	memset(data, 0, totalSize + 1);
-	SDL_RWseek(rw, 0, RW_SEEK_SET);
-	while ( SDL_RWread(rw, &c, sizeof(char), 1) > 0 )
-	{
-		data[i++] = c;
-	}
-
 	SDL_RWclose(rw);
-	if ( size ) *size = totalSize;
-	return (void*)data;
+	if ( nb_read_total != res_size ) {
+		free(data);
+		return NULL;
+	}
+
+	if ( size ) *size = (int)res_size;
+	return data;
 }
 #endif
 
