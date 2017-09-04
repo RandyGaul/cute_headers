@@ -8,6 +8,11 @@ int main( int argc, char *args[] )
 {
 	tsContext* ctx = tsMakeContext( 0, 44100, 15, 5, 0 );
 	tsLoadedSound loaded = tsLoadWAV( "../jump.wav" );
+
+	// Demo of loading through a SDL_RWops object.
+	//SDL_RWops* file = SDL_RWFromFile( "../jump.wav", "rb");
+	//tsLoadedSound loaded = tsLoadWAVRW(file);
+
 	tsPlayingSound jump = tsMakePlayingSound( &loaded );
 	tsSpawnMixThread( ctx );
 
