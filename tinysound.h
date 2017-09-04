@@ -415,7 +415,10 @@ void tsStopAllSounds( tsContext* ctx );
 
 #else
 
-	#include "SDL2/SDL.h"
+	#ifndef TS_SDL_PATH
+	#define TS_SDL_PATH "SDL2/SDL.h"
+	#endif
+	#include TS_SDL_PATH
 
 #endif
 
