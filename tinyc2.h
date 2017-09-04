@@ -1171,10 +1171,11 @@ void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 	if ( d2 < r * r )
 	{
 		float l = c2Sqrt( d2 );
+		c2v n = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 0, 1.0f );
 		m->count = 1;
 		m->depths[ 0 ] = r - l;
-		m->contact_points[ 0 ] = c2Mulvs( c2Add( A.p, B.p ), 0.5f );
-		m->normal = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 0, 1.0f );
+		m->contact_points[ 0 ] = c2Sub( B.p, c2Mulvs( n, B.r ) );
+		m->normal = n;
 	}
 }
 
