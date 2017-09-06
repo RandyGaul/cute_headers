@@ -80,7 +80,7 @@ void tfTraverse( const char* path, tfCallback cb, void* udata );
 // file contents, and instead performs more lightweight OS-specific calls.
 int tfReadFile( tfDIR* dir, tfFILE* file );
 
-// Once a tfDIR is opened, this function can be used to grab another directory
+// Once a tfDIR is opened, this function can be used to grab another file
 // from the operating system.
 void tfDirNext( tfDIR* dir );
 
