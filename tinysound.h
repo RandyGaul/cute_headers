@@ -1,5 +1,5 @@
 /*
-	tinysound.h - v1.07
+	tinysound.h - v1.08
 
 	Summary:
 	tinysound is a C API for loading, playing, looping, panning and fading mono
