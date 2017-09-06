@@ -1347,7 +1347,9 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 
 static C2_INLINE c2h C2_PLANE_AT( const c2Poly* p, const int i )
 {
-	c2h h = { p->norms[ i ], c2Dot( p->norms[ i ], p->verts[ i ] ) };
+	c2h h;
+	h.n = p->norms[ i ];
+	h.d = c2Dot( p->norms[ i ], p->verts[ i ] );
 	return h;
 }
 
