@@ -36,6 +36,7 @@
 		                  port for SDL (for Linux, or any other platform).
 		                  Special thanks to DexP of github for 90% of the work
 		                  on the SDL port!
+		1.08 (09/6/2017)  SDL_RWops support by RobLoach
 */
 
 /*
@@ -44,6 +45,7 @@
 		                  1.04 - separate thread for tsMix
 		                  1.04 - bugfix, removed extra free16 call for second channel
 		DeXP              1.07 - initial work on SDL port
+		RobLoach          1.08 - SDL_RWops support
 */
 
 /*
@@ -217,10 +219,9 @@
 #endif
 
 #if TS_PLATFORM == TS_SDL
-	#ifndef TS_SDL_PATH
-		#define TS_SDL_PATH "SDL2/SDL.h"
-	#endif
-	#include TS_SDL_PATH
+
+	#include <SDL2/SDL.h>
+	
 #endif
 
 #include <stdint.h>
@@ -265,10 +266,6 @@ typedef struct tsContext tsContext;
 // in the case of errors. Read g_tsErrorReason string for details on what happened.
 // Calls tsReadMemWAV internally.
 tsLoadedSound tsLoadWAV( const char* path );
-#if TS_PLATFORM == TS_SDL
-// Provides the ability to use tsLoadWAV with an SDL_RWops object.
-tsLoadedSound tsLoadWAVRW( SDL_RWops* context );
-#endif
 
 // Reads a WAV file from memory. Still allocates memory for the tsLoadedSound since
 // WAV format will interlace stereo, and we need separate data streams to do SIMD
@@ -278,12 +275,10 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound );
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
-void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound );
-tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
-#if TS_PLATFORM == TS_SDL
-// Provides the ability to use tsLoadOGG with an SDL_RWops object.
-tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate );
-#endif
+
+	void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound );
+	tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
+
 #endif
 
 // Uses free16 (aligned free, implemented later in this file) to free up both of
@@ -385,6 +380,21 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
 tsPlaySoundDef tsMakeDef( tsLoadedSound* sound );
 void tsStopAllSounds( tsContext* ctx );
 
+// SDL_RWops specific functions
+#if TS_PLATFORM == TS_SDL
+
+	// Provides the ability to use tsLoadWAV with an SDL_RWops object.
+	tsLoadedSound tsLoadWAVRW( SDL_RWops* context );
+
+	#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
+
+		// Provides the ability to use tsLoadOGG with an SDL_RWops object.
+		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate );
+
+	#endif
+
+#endif
+
 #define TINYSOUND_H
 #endif
 
@@ -414,11 +424,6 @@ void tsStopAllSounds( tsContext* ctx );
 	#include <mach/mach_time.h>
 
 #else
-
-	#ifndef TS_SDL_PATH
-	#define TS_SDL_PATH "SDL2/SDL.h"
-	#endif
-	#include TS_SDL_PATH
 
 #endif
 
@@ -453,31 +458,6 @@ static void* tsReadFileToMemory( const char* path, int* size )
 	if ( size ) *size = sizeNum;
 	return data;
 }
-
-#if TS_PLATFORM == TS_SDL
-// Load an SDL_RWops object's data into memory.
-static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
-{
-	Sint64 res_size = SDL_RWsize(rw);
-	void* data = (void*)malloc(res_size + 1);
-
-	Sint64 nb_read_total = 0, nb_read = 1;
-	void* buf = data;
-	while ( nb_read_total < res_size && nb_read != 0 ) {
-		nb_read = SDL_RWread(rw, buf, 1, (res_size - nb_read_total));
-		nb_read_total += nb_read;
-		buf += nb_read;
-	}
-	SDL_RWclose(rw);
-	if ( nb_read_total != res_size ) {
-		free(data);
-		return NULL;
-	}
-
-	if ( size ) *size = (int)res_size;
-	return data;
-}
-#endif
 
 static int tsFourCC( const char* CC, void* memory )
 {
@@ -644,115 +624,145 @@ tsLoadedSound tsLoadWAV( const char* path )
 }
 
 #if TS_PLATFORM == TS_SDL
-tsLoadedSound tsLoadWAVRW( SDL_RWops* context )
-{
-	tsLoadedSound sound = { 0 };
-	char* wav = (char*)tsReadRWToMemory( context, 0 );
-	tsReadMemWAV( wav, &sound );
-	free( wav );
-	return sound;
-}
+
+	// Load an SDL_RWops object's data into memory.
+	// Ripped straight from: https://wiki.libsdl.org/SDL_RWread
+	static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
+	{
+		Sint64 res_size = SDL_RWsize(rw);
+		void* data = (void*)malloc(res_size + 1);
+
+		Sint64 nb_read_total = 0, nb_read = 1;
+		void* buf = data;
+		while ( nb_read_total < res_size && nb_read != 0 ) {
+			nb_read = SDL_RWread(rw, buf, 1, (res_size - nb_read_total));
+			nb_read_total += nb_read;
+			buf += nb_read;
+		}
+		SDL_RWclose(rw);
+		if ( nb_read_total != res_size ) {
+			free(data);
+			return NULL;
+		}
+
+		if ( size ) *size = (int)res_size;
+		return data;
+	}
+
+	tsLoadedSound tsLoadWAVRW( SDL_RWops* context )
+	{
+		tsLoadedSound sound = { 0 };
+		char* wav = (char*)tsReadRWToMemory( context, 0 );
+		tsReadMemWAV( wav, &sound );
+		free( wav );
+		return sound;
+	}
+
 #endif
 
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
-void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound )
-{
-	int16_t* samples = 0;
-	int channel_count;
-	int sample_count = stb_vorbis_decode_memory( (const unsigned char*)memory, length, &channel_count, sample_rate, &samples );
 
-	TS_CHECK( sample_count > 0, "stb_vorbis_decode_memory failed. Make sure your file exists and is a valid OGG file." );
-
-	int wide_count = (int)TS_ALIGN( sample_count, 4 ) / 4;
-	int wide_offset = sample_count & 3;
-	float* sample = (float*)alloca( sizeof( float ) * 4 + 16 );
-	sample = (float*)TS_ALIGN( sample, 16 );
-	__m128* a;
-	__m128* b;
-
-	switch ( channel_count )
+	void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound )
 	{
-	case 1:
-	{
-		a = (__m128*)malloc16( wide_count * sizeof( __m128 ) );
-		b = 0;
+		int16_t* samples = 0;
+		int channel_count;
+		int sample_count = stb_vorbis_decode_memory( (const unsigned char*)memory, length, &channel_count, sample_rate, &samples );
 
-		for ( int i = 0, j = 0; i < wide_count - 1; ++i, j += 4 )
+		TS_CHECK( sample_count > 0, "stb_vorbis_decode_memory failed. Make sure your file exists and is a valid OGG file." );
+
+		int wide_count = (int)TS_ALIGN( sample_count, 4 ) / 4;
+		int wide_offset = sample_count & 3;
+		float* sample = (float*)alloca( sizeof( float ) * 4 + 16 );
+		sample = (float*)TS_ALIGN( sample, 16 );
+		__m128* a;
+		__m128* b;
+
+		switch ( channel_count )
 		{
-			sample[ 0 ] = (float)samples[ j ];
-			sample[ 1 ] = (float)samples[ j + 1 ];
-			sample[ 2 ] = (float)samples[ j + 2 ];
-			sample[ 3 ] = (float)samples[ j + 3 ];
-			a[ i ] = _mm_load_ps( sample );
+		case 1:
+		{
+			a = (__m128*)malloc16( wide_count * sizeof( __m128 ) );
+			b = 0;
+
+			for ( int i = 0, j = 0; i < wide_count - 1; ++i, j += 4 )
+			{
+				sample[ 0 ] = (float)samples[ j ];
+				sample[ 1 ] = (float)samples[ j + 1 ];
+				sample[ 2 ] = (float)samples[ j + 2 ];
+				sample[ 3 ] = (float)samples[ j + 3 ];
+				a[ i ] = _mm_load_ps( sample );
+			}
+
+			tsLastElement( a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset );
+		}	break;
+
+		case 2:
+			a = (__m128*)malloc16( wide_count * sizeof( __m128 ) * 2 );
+			b = a + wide_count;
+
+			for ( int i = 0, j = 0; i < wide_count - 1; ++i, j += 8 )
+			{
+				sample[ 0 ] = (float)samples[ j ];
+				sample[ 1 ] = (float)samples[ j + 2 ];
+				sample[ 2 ] = (float)samples[ j + 4 ];
+				sample[ 3 ] = (float)samples[ j + 6 ];
+				a[ i ] = _mm_load_ps( sample );
+
+				sample[ 0 ] = (float)samples[ j + 1 ];
+				sample[ 1 ] = (float)samples[ j + 3 ];
+				sample[ 2 ] = (float)samples[ j + 5 ];
+				sample[ 3 ] = (float)samples[ j + 7 ];
+				b[ i ] = _mm_load_ps( sample );
+			}
+
+			tsLastElement( a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset );
+			tsLastElement( b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset );
+			break;
+
+		default:
+			TS_CHECK( 0, "Unsupported channel count." );
 		}
 
-		tsLastElement( a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset );
-	}	break;
+		sound->sample_count = sample_count;
+		sound->channel_count = channel_count;
+		sound->channels[ 0 ] = a;
+		sound->channels[ 1 ] = b;
+		free( samples );
+		return;
 
-	case 2:
-		a = (__m128*)malloc16( wide_count * sizeof( __m128 ) * 2 );
-		b = a + wide_count;
-
-		for ( int i = 0, j = 0; i < wide_count - 1; ++i, j += 8 )
-		{
-			sample[ 0 ] = (float)samples[ j ];
-			sample[ 1 ] = (float)samples[ j + 2 ];
-			sample[ 2 ] = (float)samples[ j + 4 ];
-			sample[ 3 ] = (float)samples[ j + 6 ];
-			a[ i ] = _mm_load_ps( sample );
-
-			sample[ 0 ] = (float)samples[ j + 1 ];
-			sample[ 1 ] = (float)samples[ j + 3 ];
-			sample[ 2 ] = (float)samples[ j + 5 ];
-			sample[ 3 ] = (float)samples[ j + 7 ];
-			b[ i ] = _mm_load_ps( sample );
-		}
-
-		tsLastElement( a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset );
-		tsLastElement( b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset );
-		break;
-
-	default:
-		TS_CHECK( 0, "Unsupported channel count." );
+	ts_err:
+		free( samples );
+		memset( sound, 0, sizeof( tsLoadedSound ) );
 	}
 
-	sound->sample_count = sample_count;
-	sound->channel_count = channel_count;
-	sound->channels[ 0 ] = a;
-	sound->channels[ 1 ] = b;
-	free( samples );
-	return;
+	tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
+	{
+		int length;
+		void* memory = tsReadFileToMemory( path, &length );
+		tsLoadedSound sound;
+		tsReadMemOGG( memory, length, sample_rate, &sound );
+		free( memory );
 
-ts_err:
-	free( samples );
-	memset( sound, 0, sizeof( tsLoadedSound ) );
-}
+		return sound;
+	}
 
-tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
-{
-	int length;
-	void* memory = tsReadFileToMemory( path, &length );
-	tsLoadedSound sound;
-	tsReadMemOGG( memory, length, sample_rate, &sound );
-	free( memory );
+	#if TS_PLATFORM == TS_SDL
 
-	return sound;
-}
+		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate )
+		{
+			int length;
+			void* memory = tsReadRWToMemory( rw, &length );
+			tsLoadedSound sound;
+			tsReadMemOGG( memory, length, sample_rate, &sound );
+			free( memory );
 
-#if TS_PLATFORM == TS_SDL
-tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate )
-{
-	int length;
-	void* memory = tsReadRWToMemory( rw, &length );
-	tsLoadedSound sound;
-	tsReadMemOGG( memory, length, sample_rate, &sound );
-	free( memory );
+			return sound;
+		}
+		
+	#endif
 
-	return sound;
-}
-#endif
 #endif
 
 void tsFreeSound( tsLoadedSound* sound )
