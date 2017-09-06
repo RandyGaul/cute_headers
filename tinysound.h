@@ -36,7 +36,7 @@
 		                  port for SDL (for Linux, or any other platform).
 		                  Special thanks to DexP of github for 90% of the work
 		                  on the SDL port!
-		1.08 (09/06/2017)  SDL_RWops support by RobLoach
+		1.08 (09/06/2017) SDL_RWops support by RobLoach
 */
 
 /*
