@@ -76,6 +76,9 @@
 	
 	Here is a past discussion thread on this header:
 	https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
+
+	Here is a very nice repo containing various tests and examples using SFML for rendering:
+	https://github.com/sro5h/tinyc2-tests
 */
 
 /*
