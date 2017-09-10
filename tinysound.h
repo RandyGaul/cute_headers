@@ -34,8 +34,8 @@
 		                  code for a new re-write, updated docs as necessary,
 		                  support for compiling as .c and .cpp on Windows,
 		                  port for SDL (for Linux, or any other platform).
-		                  Special thanks to DexP of github for 90% of the work
-		                  on the SDL port!
+		                  Special thanks to DeXP (Dmitry Hrabrov) for 90% of
+		                  the work on the SDL port!
 		1.08 (09/06/2017) SDL_RWops support by RobLoach
 */
 
@@ -1284,7 +1284,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		if ( ctx->separate_thread ) SDL_UnlockMutex( ctx->mutex );
 	}
 
-	void tsSDL_AudioCallback( void* udata, Uint8* stream, int len );
+	static void tsSDL_AudioCallback( void* udata, Uint8* stream, int len );
 
 	tsContext* tsMakeContext( void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count )
 	{
