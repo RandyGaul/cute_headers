@@ -629,19 +629,23 @@ tsLoadedSound tsLoadWAV( const char* path )
 	// Ripped straight from: https://wiki.libsdl.org/SDL_RWread
 	static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
 	{
-		Sint64 res_size = SDL_RWsize(rw);
-		void* data = (void*)malloc(res_size + 1);
+		Sint64 res_size = SDL_RWsize( rw );
+		char* data = (char*)malloc( (size_t)(res_size + 1) );
 
 		Sint64 nb_read_total = 0, nb_read = 1;
-		void* buf = data;
-		while ( nb_read_total < res_size && nb_read != 0 ) {
-			nb_read = SDL_RWread(rw, buf, 1, (res_size - nb_read_total));
+		char* buf = data;
+		while ( nb_read_total < res_size && nb_read != 0 )
+		{
+			nb_read = SDL_RWread( rw, buf, 1, (size_t)(res_size - nb_read_total) );
 			nb_read_total += nb_read;
 			buf += nb_read;
 		}
+
 		SDL_RWclose(rw);
-		if ( nb_read_total != res_size ) {
-			free(data);
+
+		if ( nb_read_total != res_size )
+		{
+			free( data );
 			return NULL;
 		}
 
@@ -1937,7 +1941,6 @@ void tsMix( tsContext* ctx )
 	// the final samples. Then a single ring buffer push can be used
 	// afterwards. Pretty hacky, but whatever :)
 	__m128i* samples = (__m128i*)floatA;
-	memset( samples, 0, sizeof( __m128i ) * wide_count );
 	for ( int i = 0; i < wide_count; ++i )
 	{
 		__m128i a = _mm_cvtps_epi32( floatA[ i ] );

@@ -7,8 +7,8 @@ in vec3 in_col;
 
 out vec3 v_col;
 
-void main( )
+void main()
 {
 	v_col = in_col;
-	gl_Position = u_mvp * vec4( in_pos, 0, 1 );
+	gl_Position = u_mvp * vec4(in_pos, 0, 1);
 }
