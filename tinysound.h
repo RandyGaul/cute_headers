@@ -1545,6 +1545,7 @@ tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def )
 	return playing;
 }
 
+
 void tsStopAllSounds( tsContext* ctx )
 {
 	// This is apart of the high level API, not the low level API.
@@ -1552,16 +1553,15 @@ void tsStopAllSounds( tsContext* ctx )
 	// stop playing all sounds.
 	TS_ASSERT( ctx->playing_pool == 0 );
 
+	tsLock( ctx );
 	tsPlayingSound* sound = ctx->playing;
-	ctx->playing = 0;
-
 	while ( sound )
 	{
-		tsPlayingSound* next = sound->next;
-		sound->next = ctx->playing_free;
-		ctx->playing_free = sound;
-		sound = next;
+		// let tsMix() remove the sound
+		sound->active = 0;
+		sound = sound->next;
 	}
+	tsUnlock( ctx );
 }
 
 #if TS_PLATFORM == TS_WINDOWS
@@ -1832,7 +1832,8 @@ void tsMix( tsContext* ctx )
 
 		// use tsPitchShift to on-the-fly pitch shift some samples
 		// only call this function if the user set a custom pitch value
-		if ( playing->pitch != 1.0f )
+		float pitch = playing->pitch;
+		if ( pitch != 1.0f )
 		{
 			int sample_count = (mix_wide - 2 * delay_wide) * 4;
 			int falling_behind = sample_count > TS_MAX_FRAME_LENGTH;
@@ -1844,12 +1845,12 @@ void tsMix( tsContext* ctx )
 			// TS_PITCH_QUALITY to make it lower (must be a power of 2).
 			if ( !falling_behind )
 			{
-				tsPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter );
+				tsPitchShift( pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter );
 				cA = (__m128 *)playing->pitch_filter[ 0 ]->pitch_shifted_output_samples;
 
 				if ( loaded->channel_count == 2 )
 				{
-					tsPitchShift( playing->pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1 );
+					tsPitchShift( pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1 );
 					cB = (__m128 *)playing->pitch_filter[ 1 ]->pitch_shifted_output_samples;
 				}
 
