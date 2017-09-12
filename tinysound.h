@@ -2089,7 +2089,11 @@ static void tsFFT( float* x, float* y, int count, float sign )
 
 	#define TS_ALIGN16_0
 	#define TS_ALIGN16_1 __attribute__( (aligned( 16 )) )
-	#define TS_SELECTANY const __attribute__( (selectany) )
+	#if defined(__unix__)
+		#define TS_SELECTANY const __attribute__( (weak) )
+	#else
+		#define TS_SELECTANY const __attribute__( (selectany) )
+	#endif
 
 #endif
 
