@@ -2373,6 +2373,14 @@ static __m128 tsVonHann4( int i )
 	return von_hann;
 }
 
+float smbAtan2f( float x, float y )
+{
+	float signx = x > 0 ? 1.0f : -1.0f;
+	if (x == 0) return 0;
+	if (y == 0) return signx * 3.14159265f / 2.0f;
+	return atan2f( x, y );
+}
+
 // Analysis and synthesis steps learned from Bernsee's wonderful blog post:
 // http://blogs.zynaptiq.com/bernsee/pitch-shifting-using-the-ft/
 static void tsPitchShift( float pitchShift, int num_samples_to_process, float sampleRate, float* indata, tsPitchData** pitch_filter )
@@ -2500,7 +2508,15 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 					__m128 k4 = _mm_set_ps( (float)(k * 4 + 3), (float)(k * 4 + 2), (float)(k * 4 + 1), (float)(k * 4) );
 
 					__m128 mag = _mm_mul_ps( _mm_set_ps1( 2.0f ), _mm_sqrt_ps( _mm_add_ps( _mm_mul_ps( real, real ), _mm_mul_ps( imag, imag ) ) ) );
+#if 0
 					__m128 phase = _mm_atan2_ps( imag, real );
+#else
+					__m128 phase; // = _mm_atan2_ps( imag, real );
+					float *phasef = (float*)&phase;
+					float *realf = (float*)&real;
+					float *imagf = (float*)&imag;
+					for ( int i=0; i<4; i++ ) phasef[ i ] = smbAtan2f( imagf[ i ], realf[ i ] );
+#endif
 					__m128 phase_dif = _mm_sub_ps( phase, previous_phase[ k ] );
 
 					previous_phase[ k ] = phase;
