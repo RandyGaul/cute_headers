@@ -1,5 +1,5 @@
 /*
-	tinyc2.h - v1.02
+	tinyc2.h - v1.03
 
 	SUMMARY:
 	tinyc2 is a single-file header that implements 2D collision detection routines
