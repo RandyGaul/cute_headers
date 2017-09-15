@@ -500,7 +500,7 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		{
 		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_POLY:    return c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
