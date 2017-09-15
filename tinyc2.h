@@ -15,6 +15,7 @@
 		1.0  (02/13/2017) initial release
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
 		1.02 (03/21/2017) compile fixes for c on more compilers
+		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
 */
 
 /*
@@ -24,6 +25,7 @@
 		felipefs          1.02 - 3 compile bugfixes
 		seemk             1.02 - fix branching bug in c2Collide
 		sro5h             1.02 - bug reports for multiple manifold funcs
+		sro5h             1.03 - work involving quality of life fixes for manifolds
 */
 
 /*
