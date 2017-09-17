@@ -54,6 +54,7 @@
 	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
 	* c2Collided         - generic version of c2***to*** funcs
 	* c2Collide          - generic version of c2***to***Manifold funcs
+	* c2CastRay          - generic version of c2Rayto*** funcs
 	
 	The rest of the header is more or less for internal use. Here is an example of
 	making some shapes and testing for collision:
@@ -114,7 +115,7 @@
 	* Robust 2D convex hull generator
 	* Lots of correctly implemented and tested 2D math routines
 	* Implemented in portable C, and is readily portable to other languages
-	* Generic c2Collide and c2Collided function (can pass in any shape type)
+	* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
 	* Extensive examples at: https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
 */
 
