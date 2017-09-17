@@ -305,6 +305,7 @@ void c2MakePoly( c2Poly* p );
 // model to world transformations, or be NULL for identity transforms.
 int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB );
 void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m );
+int c2CastRay( c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out );
 
 #ifdef _MSC_VER
 	#define C2_INLINE __forceinline
@@ -507,6 +508,19 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		}
 		break;
 	}
+}
+
+int c2CastRay( c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out )
+{
+	switch ( typeB )
+	{
+	case C2_CIRCLE:  return c2RaytoCircle( A, *(c2Circle*)B, out );
+	case C2_AABB:    return c2RaytoAABB( A, *(c2AABB*)B, out );
+	case C2_CAPSULE: return c2RaytoCapsule( A, *(c2Capsule*)B, out );
+	case C2_POLY:    return c2RaytoPoly( A, (const c2Poly*)B, bx, out );
+	}
+
+	return 0;
 }
 
 #define C2_GJK_ITERS 20
