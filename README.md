@@ -56,3 +56,7 @@ Unfortunately writing a good header library is pretty hard, so just any random h
 > - *Why do many of these libraries use zlib license, instead of public domain?*
 
 I am a younger engineer early in my career. The zlib license is a nice way to get my name out there a little more. It is very permissive. Basically nobody can claim they wrote the original code, or say I wrote modified versions. The difference between zlib and public domain is very minimal. If anyone needs a public domain version I would be happy to create a copy with a public domain license -- just contact me and ask.
+
+> - *Why are only a few libraries public domain?*
+
+The public domain libraries in this repository contain code I myself didn't write, and isntead extracted from other open source libraries. Usually the inside of each header will document where the code came from.
