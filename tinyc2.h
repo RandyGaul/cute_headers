@@ -324,7 +324,7 @@ int c2CastRay( c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* 
 #define c2Max( a, b ) ((a) > (b) ? (a) : (b))
 #define c2Abs( a ) ((a) < 0 ? -(a) : (a))
 #define c2Clamp( a, lo, hi ) c2Max( lo, c2Min( a, hi ) )
-C2_INLINE void c2SinCos( float radians, float* s, float* c ) { *c = c2Cos( radians ); *s = c2Sin( radians ); }
+C2_INLINE void c2SinCos( float radians, float* s, float* c ) do { *c = c2Cos( radians ); *s = c2Sin( radians ); } while ( 0 )
 #define c2Sign( a ) (a < 0 ? -1.0f : 1.0f)
 
 // The rest of the functions in the header-only portion are all for internal use
