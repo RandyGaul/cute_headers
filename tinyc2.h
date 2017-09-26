@@ -570,6 +570,7 @@ static C2_INLINE void c2MakeProxy( const void* shape, C2_TYPE type, c2Proxy* p )
 		c2BBVerts( p->verts, bb );
 	}	break;
 
+	case C2_CAPSULE:
 	{
 		c2Capsule* c = (c2Capsule*)shape;
 		p->radius = c->r;
