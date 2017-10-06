@@ -16,6 +16,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinygl](tinygl.h)** | OpenGL wrapper with carefully designed API to foster fast iteration | 1.01 | C/C++ | zlib
 **[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
 **[tinyhuff](tinyhuff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
+**[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++ | zlib
 
 &ast; Not yet hit first release
 
