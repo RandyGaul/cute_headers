@@ -1,7 +1,7 @@
 #if !defined( TINYMATH_H )
 
 /*
-	tinymath - v1.0
+	tinymath - v1.1
 
 	SUMMARY:
 		A professional level implementation of SIMD intrinsics, suitable for creating high
@@ -21,36 +21,6 @@
 		affine translation. A 4x4 matrix would store an additional row of { 0, 0, 0, 1 },
 		so in most cases this bottom row is wasted anyways. This is all my own preference
 		so feel free to adjust the header and add in 4x4 matrix routines as desired.
-
-	Some tips for writing efficient SIMD code:
-		SIMD operates on XMM (128 bit) and YMM (256 bit) registers. There aren't very many
-		of these registers. The functions in this file pass arguments by value in an attempt
-		to keep values in registers at all times.
-
-		This means that when writing SIMD code tighter (no branching) loops without a whole
-		lot of different variables are preffered. Split larger loops into smaller individual
-		loops to relieve register pressure when appropriate.
-
-		Loading and storing (load/store, or _mm_set_ps) is very inefficient. Good SIMD code will
-		load and store a single time while performing many SIMD operations in between. If done
-		properly a 3-4x speedup should arise in most cases.
-
-		Casting between the FPU and SIMD registers is expensive. Often times it's best to
-		store a single float inside an entire vector (same value in each component). A single
-		_mm_mul_ps operation between two vectors can emulate this FPU operation: Vector *
-		Scalar.
-
-		Try to use SIMD comparison functions to create a comparison mask. This mask can be
-		used with select() to choose between one of two vectors. This lets the user avoid
-		branching in trade for extra computations. Here's a link to the list of SSE comparison
-		intrinsics: https://msdn.microsoft.com/en-us/library/w8kez9sf%28v=vs.90%29.aspx
-
-	These links were referenced during the creation of this code:
-		http://www.gamasutra.com/view/feature/4248/designing_fast_crossplatform_simd_.php
-		https://msdn.microsoft.com/en-us/library/windows/desktop/hh437833%28v=vs.85%29.aspx
-		http://box2d.org/2012/08/__m128/
-		https://msdn.microsoft.com/en-us/library/dn375768.aspx
-		http://www.codersnotes.com/notes/maths-lib-2016/
 */
 
 #include <stdint.h>
@@ -65,6 +35,7 @@
 
 #define TM_SHUFFLE( a, b, x, y, z ) _mm_shuffle_ps( a, b, _MM_SHUFFLE( 3, z, y, x ) )
 #define TM_CDECL __cdecl
+#define TM_VCALL __vectorcall
 
 #ifdef _WIN32
 
@@ -84,8 +55,6 @@ struct v3
 	TM_INLINE explicit v3( float x, float y, float z ) { m = _mm_set_ps( 0, z, y, x ); }
 	TM_INLINE explicit v3( float a ) { m = _mm_set_ps( 0, a, a, a ); }
 	TM_INLINE explicit v3( float *a ) { m = _mm_set_ps( 0, a[ 0 ], a[ 1 ], a[ 2 ] ); }
-
-	// seems a lil sketch? can get rid of these a la Mitton
 	TM_INLINE v3( __m128 v ) { m = v; }
 	TM_INLINE operator __m128( ) { return m; }
 	TM_INLINE operator __m128( ) const { return m; }
@@ -93,10 +62,23 @@ struct v3
 	__m128 m;
 };
 
-// try not to use these if possible, instead use splat
-TM_INLINE float getx( v3 a ) { return _mm_cvtss_f32( a ); }
-TM_INLINE float gety( v3 a ) { return _mm_cvtss_f32( TM_SHUFFLE( a, a, 1, 1, 1 ) ); }
-TM_INLINE float getz( v3 a ) { return _mm_cvtss_f32( TM_SHUFFLE( a, a, 2, 2, 2 ) ); }
+struct vfloat
+{
+	TM_INLINE vfloat( ) { }
+	TM_INLINE explicit vfloat( float a ) { m = _mm_set_ps( 0, a, a, a ); }
+	TM_INLINE explicit vfloat( v3 a ) { m = _mm_shuffle_ps( a, a, _MM_SHUFFLE( 3, 3, 3, 3 ) ); }
+	TM_INLINE operator float( ) { return _mm_cvtss_f32( m ); };
+	TM_INLINE operator float( ) const { return _mm_cvtss_f32( m ); };
+	TM_INLINE vfloat( __m128 v ) { m = v; }
+	TM_INLINE operator __m128( ) { return m; }
+	TM_INLINE operator __m128( ) const { return m; }
+
+	__m128 m;
+};
+
+TM_INLINE vfloat getx( v3 a ) { return vfloat( TM_SHUFFLE( a, a, 0, 0, 0 ) ); }
+TM_INLINE vfloat gety( v3 a ) { return vfloat( TM_SHUFFLE( a, a, 1, 1, 1 ) ); }
+TM_INLINE vfloat getz( v3 a ) { return vfloat( TM_SHUFFLE( a, a, 2, 2, 2 ) ); }
 
 TM_INLINE v3 splatx( v3 a ) { return TM_SHUFFLE( a, a, 0, 0, 0 ); }
 TM_INLINE v3 splaty( v3 a ) { return TM_SHUFFLE( a, a, 1, 1, 1 ); }
@@ -134,7 +116,7 @@ struct v3_consti
 {
 	union { uint32_t i[ 4 ]; __m128 m; };
 	TM_INLINE operator v3( ) const { return v3( m ); }
-	TM_INLINE operator __m128( ) const { m; }
+	TM_INLINE operator __m128( ) const { return m; }
 };
 
 struct v3_constf
@@ -158,6 +140,15 @@ TM_INLINE v3& operator-=( v3 &a, v3 b ) { a = a - b; return a; }
 TM_INLINE v3& operator*=( v3 &a, v3 b ) { a = a * b; return a; }
 TM_INLINE v3& operator/=( v3 &a, v3 b ) { a = a / b; return a; }
 
+TM_INLINE vfloat operator+( vfloat a, vfloat b ) { return _mm_add_ps( a, b ); }
+TM_INLINE vfloat operator-( vfloat a, vfloat b ) { return _mm_sub_ps( a, b ); }
+TM_INLINE vfloat operator*( vfloat a, vfloat b ) { return _mm_mul_ps( a, b ); }
+TM_INLINE vfloat operator/( vfloat a, vfloat b ) { return _mm_div_ps( a, b ); }
+TM_INLINE vfloat& operator+=( vfloat &a, vfloat b ) { a = a + b; return a; }
+TM_INLINE vfloat& operator-=( vfloat &a, vfloat b ) { a = a - b; return a; }
+TM_INLINE vfloat& operator*=( vfloat &a, vfloat b ) { a = a * b; return a; }
+TM_INLINE vfloat& operator/=( vfloat &a, vfloat b ) { a = a / b; return a; }
+
 // generally comparisons are followed up with a mask(v3) call (or any(v3))
 TM_INLINE v3 operator==( v3 a, v3 b ) { return _mm_cmpeq_ps( a, b ); }
 TM_INLINE v3 operator!=( v3 a, v3 b ) { return _mm_cmpneq_ps( a, b ); }
@@ -166,11 +157,19 @@ TM_INLINE v3 operator>( v3 a, v3 b ) { return _mm_cmpgt_ps( a, b ); }
 TM_INLINE v3 operator<=( v3 a, v3 b ) { return _mm_cmple_ps( a, b ); }
 TM_INLINE v3 operator>=( v3 a, v3 b ) { return _mm_cmpge_ps( a, b ); }
 TM_INLINE v3 operator-( v3 a ) { return _mm_setzero_ps( ) - a; }
-TM_INLINE unsigned mask( v3 a ) { return _mm_movemask_ps( a ) & 7; }
-TM_INLINE int any( v3 a ) { return mask( a ) != 0; }
-TM_INLINE int all( v3 a ) { return mask( a ) == 7; }
 
-// generally avoid these next three functions
+TM_INLINE vfloat operator==( vfloat a, vfloat b ) { return _mm_cmpeq_ps( a, b ); }
+TM_INLINE vfloat operator!=( vfloat a, vfloat b ) { return _mm_cmpneq_ps( a, b ); }
+TM_INLINE vfloat operator<( vfloat a, vfloat b ) { return _mm_cmplt_ps( a, b ); }
+TM_INLINE vfloat operator>( vfloat a, vfloat b ) { return _mm_cmpgt_ps( a, b ); }
+TM_INLINE vfloat operator<=( vfloat a, vfloat b ) { return _mm_cmple_ps( a, b ); }
+TM_INLINE vfloat operator>=( vfloat a, vfloat b ) { return _mm_cmpge_ps( a, b ); }
+TM_INLINE vfloat operator-( vfloat a ) { return _mm_setzero_ps( ) - a; }
+
+TM_INLINE unsigned mask( vfloat a ) { return _mm_movemask_ps( a ) & 7; }
+TM_INLINE int any( vfloat a ) { return mask( a ) != 0; }
+TM_INLINE int all( vfloat a ) { return mask( a ) == 7; }
+
 TM_INLINE v3 setx( v3 a, float x )
 {
 	v3 t0 = _mm_set_ss( x );
@@ -193,26 +192,25 @@ TM_INLINE v3 setz( v3 a, float z )
 	return TM_SHUFFLE( t2, t2, 2, 1, 0 );
 }
 
-// try to avoid using these, but sometimes the convenience is just worth it
 TM_INLINE v3 operator*( v3 a, float b ) { return _mm_mul_ps( a, _mm_set1_ps( b ) ); }
 TM_INLINE v3 operator/( v3 a, float b ) { return _mm_div_ps( a, _mm_set1_ps( b ) ); }
 TM_INLINE v3 operator*( float a, v3 b ) { return _mm_mul_ps( _mm_set1_ps( a ), b ); }
 TM_INLINE v3 operator/( float a, v3 b ) { return _mm_div_ps( _mm_set1_ps( a ), b ); }
-TM_INLINE v3& operator*=( v3 &a, float b ) { a = a * b; return a; }
-TM_INLINE v3& operator/=( v3 &a, float b ) { a = a / b; return a; }
+TM_INLINE v3& operator*=( v3& a, float b ) { a = a * b; return a; }
+TM_INLINE v3& operator/=( v3& a, float b ) { a = a / b; return a; }
 
 // f must be 16 byte aligned
 TM_INLINE v3 load( float* f ) { return _mm_load_ps( f ); }
 TM_INLINE void store( v3 v, float* f ) { _mm_store_ps( f, v ); }
 
-TM_INLINE v3 dot( v3 a, v3 b )
+TM_INLINE vfloat dot( v3 a, v3 b )
 {
 	v3 t0 = _mm_mul_ps( a, b );
 	v3 t1 = TM_SHUFFLE( t0, t0, 1, 0, 0 );
 	v3 t2 = _mm_add_ss( t0, t1 );
 	v3 t3 = TM_SHUFFLE( t2, t2, 2, 0, 0 );
 	v3 t4 = _mm_add_ss( t2, t3 );
-	return splatx( t4 );
+	return vfloat( t4 );
 }
 
 TM_INLINE v3 cross( v3 a, v3 b )
@@ -228,9 +226,9 @@ TM_INLINE v3 cross( v3 a, v3 b )
 	return _mm_sub_ps( t2, t0 );
 }
 
-TM_INLINE v3 lengthSq( v3 a ) { return dot( a, a ); }
-TM_INLINE v3 sqrt( v3 a ) {	return _mm_sqrt_ps( a ); }
-TM_INLINE v3 length( v3 a ) { return sqrt( dot( a, a ) ); }
+TM_INLINE vfloat lengthSq( v3 a ) { return dot( a, a ); }
+TM_INLINE vfloat sqrt( vfloat a ) {	return _mm_sqrt_ps( a ); }
+TM_INLINE vfloat length( v3 a ) { return sqrt( dot( a, a ) ); }
 TM_INLINE v3 abs( v3 a ) { return _mm_andnot_ps( tmMaskSign, a ); }
 TM_INLINE v3 min( v3 a, v3 b ) { return _mm_min_ps( a, b ); }
 TM_INLINE v3 max( v3 a, v3 b ) { return _mm_max_ps( a, b ); }
@@ -242,25 +240,25 @@ TM_INLINE v3 lerp( v3 a, v3 b, v3 t ) { return a + (b - a) * t; }
 // TM_INLINE v3 lerp( v3 a, v3 b, float t ) { return a * (1.0f - t) + b * t; }
 // TM_INLINE v3 lerp( v3 a, v3 b, v3 t ) { return a * (1.0f - t) + b * t; }
 
-TM_INLINE float hmin( v3 a )
+TM_INLINE vfloat hmin( v3 a )
 {
 	v3 t0 = TM_SHUFFLE( a, a, 1, 0, 2 );
 	a = min( a, t0 );
 	v3 t1 = TM_SHUFFLE( a, a, 2, 0, 1 );
-	return getx( min( a, t1 ) );
+	return vfloat( min( a, t1 ) );
 }
 
-TM_INLINE float hmax( v3 a )
+TM_INLINE vfloat hmax( v3 a )
 {
 	v3 t0 = TM_SHUFFLE( a, a, 1, 0, 2 );
 	a = max( a, t0 );
 	v3 t1 = TM_SHUFFLE( a, a, 2, 0, 1 );
-	return getx( max( a, t1 ) );
+	return vfloat( max( a, t1 ) );
 }
 
 TM_INLINE v3 norm( v3 a )
 { 
-	v3 t0 = dot( a, a );
+	vfloat t0 = dot( a, a );
 	v3 t1 = _mm_sqrt_ps( t0 );
 	v3 t2 = _mm_div_ps( a, t1 );
 	return _mm_and_ps( t2, tmMaskAllBits );
@@ -277,7 +275,7 @@ TM_INLINE v3 clamp( v3 a, v3 vmin, v3 vmax )
 TM_INLINE v3 mask( int x, int y, int z )
 {
 	v3_consti c;
-	int elements[] = { 0x00000000, 0xFFFFFFFF };
+	unsigned elements[] = { 0x00000000, 0xFFFFFFFF };
 
 	TM_ASSERT( x < 2 && x >= 0 );
 	TM_ASSERT( y < 2 && y >= 0 );
@@ -358,6 +356,36 @@ TM_INLINE m3 basis( v3 a )
 	return rows( a, b, c );
 }
 
+TM_INLINE m3 operator-( m3 a, m3 b )
+{
+	m3 c;
+	c.x = a.x - b.x;
+	c.y = a.y - b.y;
+	c.z = a.z - b.z;
+	return c;
+}
+
+TM_INLINE m3 operator+( m3 a, m3 b )
+{
+	m3 c;
+	c.x = a.x + b.x;
+	c.y = a.y + b.y;
+	c.z = a.z + b.z;
+	return c;
+}
+
+TM_INLINE m3& operator+=( m3& a, m3 b ) { a = a + b; return a; }
+TM_INLINE m3& operator-=( m3& a, m3 b ) { a = a - b; return a; }
+
+TM_INLINE m3 operator*( float a, m3 b )
+{
+	m3 c;
+	c.x = b.x * a;
+	c.y = b.y * a;
+	c.z = b.z * a;
+	return c;
+}
+
 struct transform
 {
 	v3 p; // position
@@ -386,11 +414,11 @@ TM_INLINE transform mulT( transform a, transform b )
 struct halfspace
 {
 	v3 n;
-	v3 d;
+	vfloat d;
 };
 
 TM_INLINE v3 origin( halfspace h ) { return h.n * h.d; }
-TM_INLINE v3 distance( halfspace h, v3 p ) { return dot( h.n, p ) - h.d; }
+TM_INLINE vfloat distance( halfspace h, v3 p ) { return dot( h.n, p ) - h.d; }
 TM_INLINE v3 projected( halfspace h, v3 p ) { return p - h.n * distance( h, p ); }
 
 TM_INLINE halfspace mul( transform a, halfspace b )
@@ -436,6 +464,81 @@ TM_INLINE m3 outer( v3 u, v3 v )
 	v3 b = v * splaty( u );
 	v3 c = v * splatz( u );
 	return rows( a, b, c );
+}
+
+void lookAt( float* world_to_cam, v3 eye, v3 target, v3 up, float* cam_to_world = 0 )
+{
+	v3 front = norm( target - eye );
+	v3 side = norm( cross( front, up ) );
+	v3 top = norm( cross( side, front ) );
+
+	world_to_cam[ 0 ] = getx( side );
+	world_to_cam[ 1 ] = getx( top );
+	world_to_cam[ 2 ] = -getx( front );
+	world_to_cam[ 3 ] = 0;
+
+	world_to_cam[ 4 ] = gety( side );
+	world_to_cam[ 5 ] = gety( top );
+	world_to_cam[ 6 ] = -gety( front );
+	world_to_cam[ 7 ] = 0;
+
+	world_to_cam[ 8 ] = getz( side );
+	world_to_cam[ 9 ] = getz( top );
+	world_to_cam[ 10 ] = -getz( front );
+	world_to_cam[ 11 ] = 0;
+
+	v3 x = v3( world_to_cam[ 0 ], world_to_cam[ 4 ], world_to_cam[ 8 ] );
+	v3 y = v3( world_to_cam[ 1 ], world_to_cam[ 5 ], world_to_cam[ 9 ] );
+	v3 z = v3( world_to_cam[ 2 ], world_to_cam[ 6 ], world_to_cam[ 10 ] );
+
+	world_to_cam[ 12 ] = -dot( x, eye );
+	world_to_cam[ 13 ] = -dot( y, eye );
+	world_to_cam[ 14 ] = -dot( z, eye );
+	world_to_cam[ 15 ] = 1.0f;
+
+	if ( cam_to_world )
+	{
+		cam_to_world[ 0 ] = getx( side );
+		cam_to_world[ 1 ] = gety( side );
+		cam_to_world[ 2 ] = getz( side );
+		cam_to_world[ 3 ] = 0;
+
+		cam_to_world[ 4 ] = getx( top );
+		cam_to_world[ 5 ] = gety( top );
+		cam_to_world[ 6 ] = getz( top );
+		cam_to_world[ 7 ] = 0;
+
+		cam_to_world[ 8 ] = -getx( front );
+		cam_to_world[ 9 ] = -gety( front );
+		cam_to_world[ 10 ] = -getz( front );
+		cam_to_world[ 11 ] = 0;
+
+		cam_to_world[ 12 ] = getx( eye );
+		cam_to_world[ 13 ] = gety( eye );
+		cam_to_world[ 14 ] = getz( eye );
+		cam_to_world[ 15 ] = 1.0f;
+	}
+}
+
+void compute_mouse_ray( float mouse_x, float mouse_y, float fov, float viewport_w, float viewport_h, float* cam_inv, float near_plane_dist, v3* mouse_pos, v3* mouse_dir )
+{
+	float aspect = (float)viewport_w / (float)viewport_h;
+	float px = 2.0f * aspect * mouse_x / viewport_w - aspect;
+	float py = -2.0f * mouse_y / viewport_h + 1.0f;
+	float pz = -1.0f / tanf( fov / 2.0f );
+	v3 point_in_view_space( px, py, pz );
+
+	v3 cam_pos( cam_inv[ 12 ], cam_inv[ 13 ], cam_inv[ 14 ] );
+	float pf[ 4 ] = { getx( point_in_view_space ), gety( point_in_view_space ), getz( point_in_view_space ), 1.0f };
+	tgMulv( cam_inv, pf );
+	v3 point_on_clipping_plane( pf[ 0 ] , pf[ 1 ], pf[ 2 ] );
+	v3 dir_in_world_space = point_on_clipping_plane - cam_pos;
+
+	v3 dir = norm( dir_in_world_space );
+	v3 cam_forward( cam_inv[ 8 ], cam_inv[ 9 ], cam_inv[ 10 ] );
+
+	*mouse_dir = dir;
+	*mouse_pos = cam_pos + dir * dot( dir, cam_forward ) * near_plane_dist;
 }
 
 #define TINYMATH_H
