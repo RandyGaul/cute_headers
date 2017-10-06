@@ -1,5 +1,5 @@
 /*
-	tinyc2.h - v1.02
+	tinyc2.h - v1.03
 
 	SUMMARY:
 	tinyc2 is a single-file header that implements 2D collision detection routines
@@ -15,6 +15,7 @@
 		1.0  (02/13/2017) initial release
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
 		1.02 (03/21/2017) compile fixes for c on more compilers
+		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
 */
 
 /*
@@ -24,6 +25,7 @@
 		felipefs          1.02 - 3 compile bugfixes
 		seemk             1.02 - fix branching bug in c2Collide
 		sro5h             1.02 - bug reports for multiple manifold funcs
+		sro5h             1.03 - work involving quality of life fixes for manifolds
 */
 
 /*
@@ -52,6 +54,7 @@
 	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
 	* c2Collided         - generic version of c2***to*** funcs
 	* c2Collide          - generic version of c2***to***Manifold funcs
+	* c2CastRay          - generic version of c2Rayto*** funcs
 	
 	The rest of the header is more or less for internal use. Here is an example of
 	making some shapes and testing for collision:
@@ -112,7 +115,7 @@
 	* Robust 2D convex hull generator
 	* Lots of correctly implemented and tested 2D math routines
 	* Implemented in portable C, and is readily portable to other languages
-	* Generic c2Collide and c2Collided function (can pass in any shape type)
+	* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
 	* Extensive examples at: https://github.com/RandyGaul/tinyheaders/tree/master/examples_tinygl_and_tinyc2
 */
 
@@ -303,6 +306,7 @@ void c2MakePoly( c2Poly* p );
 // model to world transformations, or be NULL for identity transforms.
 int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB );
 void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m );
+int c2CastRay( c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out );
 
 #ifdef _MSC_VER
 	#define C2_INLINE __forceinline
@@ -478,7 +482,7 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_AABB:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  return c2CircletoAABBManifold( *(c2Circle*)B, *(c2AABB*)A, m );
+		case C2_CIRCLE:  c2CircletoAABBManifold( *(c2Circle*)B, *(c2AABB*)A, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_AABB:    return c2AABBtoAABBManifold( *(c2AABB*)A, *(c2AABB*)B, m );
 		case C2_CAPSULE: return c2AABBtoCapsuleManifold( *(c2AABB*)A, *(c2Capsule*)B, m );
 		case C2_POLY:    return c2AABBtoPolyManifold( *(c2AABB*)A, (const c2Poly*)B, bx, m );
@@ -488,8 +492,8 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_CAPSULE:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  return c2CircletoCapsuleManifold( *(c2Circle*)B, *(c2Capsule*)A, m );
-		case C2_AABB:    return c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m );
+		case C2_CIRCLE:  c2CircletoCapsuleManifold( *(c2Circle*)B, *(c2Capsule*)A, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_AABB:    c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_CAPSULE: return c2CapsuletoCapsuleManifold( *(c2Capsule*)A, *(c2Capsule*)B, m );
 		case C2_POLY:    return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)B, bx, m );
 		}
@@ -498,13 +502,26 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_POLY:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  return c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m );
-		case C2_AABB:    return c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m );
-		case C2_CAPSULE: return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)A, ax, m );
+		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_POLY:    return c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
 	}
+}
+
+int c2CastRay( c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out )
+{
+	switch ( typeB )
+	{
+	case C2_CIRCLE:  return c2RaytoCircle( A, *(c2Circle*)B, out );
+	case C2_AABB:    return c2RaytoAABB( A, *(c2AABB*)B, out );
+	case C2_CAPSULE: return c2RaytoCapsule( A, *(c2Capsule*)B, out );
+	case C2_POLY:    return c2RaytoPoly( A, (const c2Poly*)B, bx, out );
+	}
+
+	return 0;
 }
 
 #define C2_GJK_ITERS 20

@@ -4,7 +4,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 
 | library | description | latest version| language(s) | license
 |---------|-------------|---------------|-------------|--------
-**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.02 |C/C++ | zlib
+**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.03 |C/C++ | zlib
 **[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.08 | C/C++ | zlib
 **[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++ | zlib
 **[tinytime](tinytime.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++ | zlib
@@ -56,3 +56,7 @@ Unfortunately writing a good header library is pretty hard, so just any random h
 > - *Why do many of these libraries use zlib license, instead of public domain?*
 
 I am a younger engineer early in my career. The zlib license is a nice way to get my name out there a little more. It is very permissive. Basically nobody can claim they wrote the original code, or say I wrote modified versions. The difference between zlib and public domain is very minimal. If anyone needs a public domain version I would be happy to create a copy with a public domain license -- just contact me and ask.
+
+> - *Why are only a few libraries public domain?*
+
+The public domain libraries in this repository contain code I myself didn't write, and isntead extracted from other open source libraries. Usually the inside of each header will document where the code came from.

@@ -2089,7 +2089,11 @@ static void tsFFT( float* x, float* y, int count, float sign )
 
 	#define TS_ALIGN16_0
 	#define TS_ALIGN16_1 __attribute__( (aligned( 16 )) )
-	#define TS_SELECTANY const __attribute__( (selectany) )
+	#if defined(__unix__)
+		#define TS_SELECTANY const __attribute__( (weak) )
+	#else
+		#define TS_SELECTANY const __attribute__( (selectany) )
+	#endif
 
 #endif
 
@@ -2136,6 +2140,7 @@ _PI32_CONST( inv1, ~1 );
 _PI32_CONST( 2, 2 );
 _PI32_CONST( 4, 4 );
 
+#if 0 /* temporary comment it out, remove "unused functions" warning */
 static __m128 _mm_atan_ps( __m128 x )
 {
 	__m128 sign_bit, y;
@@ -2242,6 +2247,7 @@ static __m128 _mm_atan2_ps( __m128 y, __m128 x )
 
 	return result;
 }
+#endif
 
 static void _mm_sincos_ps( __m128 x, __m128 *s, __m128 *c )
 {
