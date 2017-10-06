@@ -79,8 +79,8 @@
 // recommended to leave this on as long as possible (perhaps until release)
 #define TG_DEBUG_CHECKS 1
 
-// feel free to turn this off if unused
-// used to render lines over everything else (besides post fx) with no depth testing
+// feel free to turn this off if unused.
+// This is used to render lines on-top of all other rendering (besides post fx); rendered with no depth testing.
 #define TG_LINE_RENDERER 1
 
 enum
@@ -131,7 +131,6 @@ typedef struct
 		uint64_t key;
 	};
 } tgRenderState;
-
 
 struct tgShader;
 typedef struct tgShader tgShader;
@@ -190,7 +189,10 @@ typedef struct
 	uint32_t textures[ 8 ];
 } tgDrawCall;
 
-void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits );
+struct tgContext;
+typedef struct tgContext tgContext;
+
+tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits );
 void tgFreeCtx( void* ctx );
 
 void tgLineMVP( void* context, float* mvp );
@@ -224,6 +226,8 @@ void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb );
 
 void tgOrtho2D( float w, float h, float x, float y, float* m );
 void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float f );
+void tgMul( float* a, float* b, float* out ); // perform a * b where a and b are 4x4 matrices, stores result in out
+void tgIdentity( float* m );
 
 #if TG_DEBUG_CHECKS
 
@@ -253,7 +257,7 @@ void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float 
 
 #endif
 
-typedef struct
+struct tgContext
 {
 	uint32_t clear_bits;
 	uint32_t settings_bits;
@@ -270,12 +274,12 @@ typedef struct
 	float r, g, b;
 	int line_depth_test;
 #endif
-} tgContext;
+};
 
 #include <stdlib.h> // malloc, free, NULL
 #include <string.h> // memset
 
-void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits )
+tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits )
 {
 	tgContext* ctx = (tgContext*)malloc( sizeof( tgContext ) );
 	ctx->clear_bits = clear_bits;
@@ -299,7 +303,7 @@ void* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings
 	tgAddAttribute( &vd, "in_pos", 3, TG_FLOAT, 0 );
 	tgAddAttribute( &vd, "in_col", 3, TG_FLOAT, TG_LINE_STRIDE / 2 );
 	tgMakeRenderable( &ctx->line_r, &vd );
-	const char* vs = "#version 410\nuniform mat4 u_mvp;in vec2 in_pos;in vec3 in_col;out vec3 v_col;void main( ){v_col = in_col;gl_Position = u_mvp * vec4( in_pos, 0, 1 );}";
+	const char* vs = "#version 410\nuniform mat4 u_mvp;in vec3 in_pos;in vec3 in_col;out vec3 v_col;void main( ){v_col = in_col;gl_Position = u_mvp * vec4( in_pos, 1 );}";
 	char* ps = "#version 410\nin vec3 v_col;out vec4 out_col;void main( ){out_col = vec4( v_col, 1 );}";
 	tgLoadShader( &ctx->line_s, vs, ps );
 	tgSetShader( &ctx->line_r, &ctx->line_s );
@@ -1090,6 +1094,55 @@ void tgOrtho2D( float w, float h, float x, float y, float* m )
 	// translate
 	m[ 12 ] = -x;
 	m[ 13 ] = -y;
+}
+
+void tgMul( float* a, float* b, float* out )
+{
+	float c[ 16 ];
+
+	c[ 0 + 0 * 4 ] = a[ 0 + 0 * 4 ] * b[ 0 + 0 * 4 ] + a[ 0 + 1 * 4 ] * b[ 1 + 0 * 4 ] + a[ 0 + 2 * 4 ] * b[ 2 + 0 * 4 ] + a[ 0 + 3 * 4 ] * b[ 3 + 0 * 4 ];
+	c[ 0 + 1 * 4 ] = a[ 0 + 0 * 4 ] * b[ 0 + 1 * 4 ] + a[ 0 + 1 * 4 ] * b[ 1 + 1 * 4 ] + a[ 0 + 2 * 4 ] * b[ 2 + 1 * 4 ] + a[ 0 + 3 * 4 ] * b[ 3 + 1 * 4 ];
+	c[ 0 + 2 * 4 ] = a[ 0 + 0 * 4 ] * b[ 0 + 2 * 4 ] + a[ 0 + 1 * 4 ] * b[ 1 + 2 * 4 ] + a[ 0 + 2 * 4 ] * b[ 2 + 2 * 4 ] + a[ 0 + 3 * 4 ] * b[ 3 + 2 * 4 ];
+	c[ 0 + 3 * 4 ] = a[ 0 + 0 * 4 ] * b[ 0 + 3 * 4 ] + a[ 0 + 1 * 4 ] * b[ 1 + 3 * 4 ] + a[ 0 + 2 * 4 ] * b[ 2 + 3 * 4 ] + a[ 0 + 3 * 4 ] * b[ 3 + 3 * 4 ];
+	c[ 1 + 0 * 4 ] = a[ 1 + 0 * 4 ] * b[ 0 + 0 * 4 ] + a[ 1 + 1 * 4 ] * b[ 1 + 0 * 4 ] + a[ 1 + 2 * 4 ] * b[ 2 + 0 * 4 ] + a[ 1 + 3 * 4 ] * b[ 3 + 0 * 4 ];
+	c[ 1 + 1 * 4 ] = a[ 1 + 0 * 4 ] * b[ 0 + 1 * 4 ] + a[ 1 + 1 * 4 ] * b[ 1 + 1 * 4 ] + a[ 1 + 2 * 4 ] * b[ 2 + 1 * 4 ] + a[ 1 + 3 * 4 ] * b[ 3 + 1 * 4 ];
+	c[ 1 + 2 * 4 ] = a[ 1 + 0 * 4 ] * b[ 0 + 2 * 4 ] + a[ 1 + 1 * 4 ] * b[ 1 + 2 * 4 ] + a[ 1 + 2 * 4 ] * b[ 2 + 2 * 4 ] + a[ 1 + 3 * 4 ] * b[ 3 + 2 * 4 ];
+	c[ 1 + 3 * 4 ] = a[ 1 + 0 * 4 ] * b[ 0 + 3 * 4 ] + a[ 1 + 1 * 4 ] * b[ 1 + 3 * 4 ] + a[ 1 + 2 * 4 ] * b[ 2 + 3 * 4 ] + a[ 1 + 3 * 4 ] * b[ 3 + 3 * 4 ];
+	c[ 2 + 0 * 4 ] = a[ 2 + 0 * 4 ] * b[ 0 + 0 * 4 ] + a[ 2 + 1 * 4 ] * b[ 1 + 0 * 4 ] + a[ 2 + 2 * 4 ] * b[ 2 + 0 * 4 ] + a[ 2 + 3 * 4 ] * b[ 3 + 0 * 4 ];
+	c[ 2 + 1 * 4 ] = a[ 2 + 0 * 4 ] * b[ 0 + 1 * 4 ] + a[ 2 + 1 * 4 ] * b[ 1 + 1 * 4 ] + a[ 2 + 2 * 4 ] * b[ 2 + 1 * 4 ] + a[ 2 + 3 * 4 ] * b[ 3 + 1 * 4 ];
+	c[ 2 + 2 * 4 ] = a[ 2 + 0 * 4 ] * b[ 0 + 2 * 4 ] + a[ 2 + 1 * 4 ] * b[ 1 + 2 * 4 ] + a[ 2 + 2 * 4 ] * b[ 2 + 2 * 4 ] + a[ 2 + 3 * 4 ] * b[ 3 + 2 * 4 ];
+	c[ 2 + 3 * 4 ] = a[ 2 + 0 * 4 ] * b[ 0 + 3 * 4 ] + a[ 2 + 1 * 4 ] * b[ 1 + 3 * 4 ] + a[ 2 + 2 * 4 ] * b[ 2 + 3 * 4 ] + a[ 2 + 3 * 4 ] * b[ 3 + 3 * 4 ];
+	c[ 3 + 0 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 0 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 0 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 0 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 0 * 4 ];
+	c[ 3 + 1 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 1 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 1 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 1 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 1 * 4 ];
+	c[ 3 + 2 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 2 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 2 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 2 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 2 * 4 ];
+	c[ 3 + 3 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 3 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 3 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 3 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 3 * 4 ];
+
+	for ( int i = 0; i < 16; ++i )
+		out[ i ] = c[ i ];
+}
+
+void tgMulv( float* a, float* b )
+{
+	float result[ 4 ];
+
+	result[ 0 ] = a[ 0 ] * b[ 0 ] + a[4] * b[ 1 ] + a[ 8 ] * b[ 2 ] + a[ 12 ] * b[ 3 ];
+	result[ 1 ] = a[ 1 ] * b[ 0 ] + a[5] * b[ 1 ] + a[ 9 ] * b[ 2 ] + a[ 13 ] * b[ 3 ];
+	result[ 2 ] = a[ 2 ] * b[ 0 ] + a[6] * b[ 1 ] + a[ 10 ] * b[ 2 ] + a[ 14 ] * b[ 3 ];
+	result[ 3 ] = a[ 3 ] * b[ 0 ] + a[7] * b[ 1 ] + a[ 11 ] * b[ 2 ] + a[ 15 ] * b[ 3 ];
+
+	b[ 0 ] = result[ 0 ];
+	b[ 1 ] = result[ 1 ];
+	b[ 2 ] = result[ 2 ];
+	b[ 3 ] = result[ 3 ];
+}
+
+void tgIdentity( float* m )
+{
+	memset( m, 0, sizeof( float ) * 16 );
+	m[ 0 ] = 1.0f;
+	m[ 5 ] = 1.0f;
+	m[ 10 ] = 1.0f;
+	m[ 15 ] = 1.0f;
 }
 
 #if TG_DEBUG_CHECKS
