@@ -2,8 +2,12 @@
 /*
 	tinyspheremesh - v1.0 - 10/06/17
 
+	To create implementation (the function definitions)
+		#define TINYSPHEREMESH_IMPL
+	in *one* C/CPP file (translation unit) that includes this file
+
 	This header contains functions to generate a spherical mesh. The output
-	is an array of floats represent triplets of vectors. Each triplet represents
+	is an array of floats representing triplets of vectors. Each triplet is
 	a triangle. Gathering up the triangles is a matter of writing a loop somewhat
 	like so (for 3 component vectors):
 
@@ -37,9 +41,9 @@
 	(see: https://en.wikipedia.org/wiki/Geodesic_polyhedron). The modification is
 	to perform normalization after each subdivision, which results in triangles with
 	uniform area. Normalization after more than one subdivision will result in triangles
-	with varying areas.
+	with varying areas (not implemented in this header, as uniform area is way cooler).
 
-	EXAMPLE PROGRAM:
+	EXAMPLE DEMO PROGRAM:
 
 		// make sphere verts
 		int num_subdivisions = 5;
@@ -49,7 +53,7 @@
 		float* sphere_floats = tsmGenerateSphereMeshVerts3(sphere_scratch, num_subdivisions, &sphere_verts_count);
 		free(sphere_scratch);
 
-		// example of drawing sphere with tinygl.h
+		// example of drawing sphere with tinygl.h (https://github.com/RandyGaul/tinyheaders/blob/master/tinygl.h)
 		for (int i = 0; i < sphere_verts_count * 3; i += 9)
 		{
 			float ax = sphere_floats[i];
