@@ -60,7 +60,7 @@ struct v3
 	TM_INLINE v3( ) { }
 	TM_INLINE explicit v3( float x, float y, float z ) { m = _mm_set_ps( 0, z, y, x ); }
 	TM_INLINE explicit v3( float a ) { m = _mm_set_ps( 0, a, a, a ); }
-	TM_INLINE explicit v3( float *a ) { m = _mm_set_ps( 0, a[ 0 ], a[ 1 ], a[ 2 ] ); }
+	TM_INLINE explicit v3( float *a ) { m = _mm_set_ps( 0, a[ 2 ], a[ 1 ], a[ 0 ] ); }
 	TM_INLINE explicit v3( __m128 v ) { m = v; }
 	TM_INLINE operator __m128( ) { return m; }
 	TM_INLINE operator __m128( ) const { return m; }
@@ -323,6 +323,49 @@ TM_INLINE v3 mask( int x, int y, int z )
 	c.i[ 3 ] = elements[ 0 ];
 
 	return c;
+}
+
+TM_INLINE m3 m3_from_quat( vfloat x, vfloat y, vfloat z, vfloat w )
+{
+	vfloat x2 = x + x;
+	vfloat y2 = y + y;
+	vfloat z2 = z + z;
+
+	vfloat xx = x * x2;
+	vfloat xy = x * y2;
+	vfloat xz = x * z2;
+	vfloat xw = w * x2;
+	vfloat yy = y * y2;
+	vfloat yz = y * z2;
+	vfloat yw = w * y2;
+	vfloat zz = z * z2;
+	vfloat zw = w * z2;
+
+	vfloat one = vfloat( 1.0f );
+
+	return rows(
+		v3( one - yy - zz, xy + zw, xz - yw ),
+		v3( xy - zw, one - xx - zz, yz + xw ),
+		v3( xz + yw, yz - xw, one - xx - yy )
+	);
+}
+
+TM_INLINE m3 m3_axis_angle( v3 axis, vfloat angle )
+{
+	vfloat s = vfloat( sinf( angle * 0.5f ) );
+	vfloat c = vfloat( cosf( angle * 0.5f ) );
+
+	vfloat x = getx( axis ) * s;
+	vfloat y = gety( axis ) * s;
+	vfloat z = getz( axis ) * s;
+	vfloat w = c;
+
+	return m3_from_quat( x, y, z, w );
+}
+
+TM_INLINE m3 m3_axis_angle( v3 axis, float angle )
+{
+	return m3_axis_angle( axis, vfloat( angle ) );
 }
 
 // Does not preserve 0.0f in w to get rid of extra shuffles.
@@ -600,6 +643,98 @@ void compute_mouse_ray( float mouse_x, float mouse_y, float fov, float viewport_
 	*mouse_dir = dir;
 	*mouse_pos = cam_pos + dir * dot( dir, cam_forward ) * vfloat( near_plane_dist );
 }
+
+struct q4
+{
+	q4( ) { }
+	TM_INLINE explicit q4( v3& vector_part, vfloat& scalar_part ) { m = _mm_set_ps( scalar_part, getz( vector_part ), gety( vector_part ), getx( vector_part ) ); }
+	TM_INLINE explicit q4( float x, float y, float z, float w ) { m = _mm_set_ps( w, z, y, x ); }
+
+	TM_INLINE operator __m128( ) { return m; }
+	TM_INLINE operator __m128( ) const { return m; }
+
+	__m128 m;
+};
+
+TM_INLINE q4 q3_axis_angle( v3 axis_normalized, vfloat angle )
+{
+	vfloat s = vfloat( sinf( angle * 0.5f ) );
+	vfloat c = vfloat( cosf( angle * 0.5f ) );
+	return q4( axis_normalized * s, c );
+}
+
+TM_INLINE vfloat getx( q4 a ) { return vfloat( TM_SHUFFLE( a, a, 0, 0, 0 ) ); }
+TM_INLINE vfloat gety( q4 a ) { return vfloat( TM_SHUFFLE( a, a, 1, 1, 1 ) ); }
+TM_INLINE vfloat getz( q4 a ) { return vfloat( TM_SHUFFLE( a, a, 2, 2, 2 ) ); }
+TM_INLINE vfloat getw( q4 a ) { return vfloat( TM_SHUFFLE( a, a, 3, 3, 3 ) ); }
+
+// un-optimized
+TM_INLINE q4 norm( q4 q )
+{
+	vfloat x = getx( q );
+	vfloat y = gety( q );
+	vfloat z = getz( q );
+	vfloat w = getw( q );
+
+	vfloat d = w * w + x * x + y * y + z * z;
+
+	if( d == 0 )
+		w = vfloat( 1.0 );
+
+	d = vfloat( 1.0 ) / sqrtf( d );
+
+	if ( d > vfloat( 1.0e-8f ) )
+	{
+		x *= d;
+		y *= d;
+		z *= d;
+		w *= d;
+	}
+
+	return q4( x, y, z, w );
+}
+
+// un-optimized
+TM_INLINE q4 operator*( q4 a, q4 b )
+{
+	return q4(
+		getw( a ) * getx( b ) + getx( a ) * getw( b ) + gety( a ) * getz( b ) - getz( a ) * gety( b ),
+		getw( a ) * gety( b ) + gety( a ) * getw( b ) + getz( a ) * getx( b ) - getx( a ) * getz( b ),
+		getw( a ) * getz( b ) + getz( a ) * getw( b ) + getx( a ) * gety( b ) - gety( a ) * getx( b ),
+		getw( a ) * getw( b ) - getx( a ) * getx( b ) - gety( a ) * gety( b ) - getz( a ) * getz( b )
+		);
+}
+
+// un-optimized
+TM_INLINE q4 integrate( q4 q, v3 w, vfloat h )
+{
+	q4 wq( getx( w ) * h, gety( w ) * h, getz( w ) * h, 0.0f );
+
+	wq = wq * q;
+
+	q4 q0 = q4(
+		getx( q ) + getx( wq ) * vfloat( 0.5 ),
+		gety( q ) + gety( wq ) * vfloat( 0.5 ),
+		getz( q ) + getz( wq ) * vfloat( 0.5 ),
+		getw( q ) + getw( wq ) * vfloat( 0.5 )
+	);
+
+	return norm( q0 );
+}
+
+// un-optimized
+TM_INLINE m3 m3_from_quat( q4 q )
+{
+	return m3_from_quat( getx( q ), gety( q ), getz( q ), getw( q ) );
+}
+
+// globals
+TM_SELECTANY m3 identity_m3 = rows( v3( 1.0f, 0.0f, 0.0f ), v3( 0.0f, 1.0f, 0.0f ), v3( 0.0f, 0.0f, 1.0f ) );
+TM_SELECTANY m3 zero_m3 = rows( v3( 0.0f, 0.0f, 0.0f ), v3( 0.0f, 0.0f, 0.0f ), v3( 0.0f, 0.0f, 0.0f ) );
+TM_SELECTANY v3 zero_v3 = v3( 0.0f, 0.0f, 0.0f );
+TM_SELECTANY vfloat zero_vf = vfloat( 0.0f );
+TM_SELECTANY vfloat one_vf = vfloat( 1.0f );
+TM_SELECTANY q4 identity_q4 = q4( 0.0f, 0.0f, 0.0f, 1.0f );
 
 #define TINYMATH_H
 #endif
