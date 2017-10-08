@@ -33,9 +33,6 @@ int main( int argc, const char** argv )
 		printf( "Incorrect parameter usage. Should only pass the path to source directory.\n" );
 		return -1;
 	}
-	
-	printf( "size of unsigned is %d\n", sizeof( unsigned ) );
-	printf( "size void* is %d\n", sizeof( void* ) );
 
 	tfTraverse( argv[ 1 ], CB_DoPreprocess, 0 );
 	return 0;
