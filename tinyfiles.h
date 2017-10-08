@@ -92,6 +92,9 @@ int tfDirOpen( tfDIR* dir, const char* path );
 
 #if TF_PLATFORM == TF_WINDOWS
 
+#if !defined _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 #include <Windows.h>
 
 	struct tfFILE
@@ -112,7 +115,7 @@ int tfDirOpen( tfDIR* dir, const char* path );
 		WIN32_FIND_DATAA fdata;
 	};
 	
-#elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
@@ -342,7 +345,7 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		return 1;
 	}
 
-#endif // TN_PLATFORM
+#endif // TF_PLATFORM
 
 #endif
 
