@@ -161,6 +161,11 @@ int tfFileExists( const char* path );
 		struct dirent* entry;
 	};
 
+	struct tfFILETIME
+	{
+		time_t time;
+	};
+
 #endif
 
 #define TINYFILES_H
