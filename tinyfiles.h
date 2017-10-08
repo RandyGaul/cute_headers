@@ -143,11 +143,6 @@ int tfCompareFileTimes( const char* path_a, const char* path_b );
 		struct dirent* entry;
 	};
 
-	struct tfFILETIME
-	{
-		time_t time;
-	};
-
 #endif
 
 #define TINYFILES_H
