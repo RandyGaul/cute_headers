@@ -140,12 +140,8 @@ static int tsNext_internal( char** dataPtr, char** outPtr )
 	return result;
 }
 
-void tsPreprocess( const char* path, const char* out_path )
+int tsPreprocess( const char* path, const char* out_path )
 {
-#if defined( _WIN32 ) && defined( _MSC_VER )
-	_set_printf_count_output( 1 );
-#endif
-
 	char* data = 0;
 	int size = 0;
 	FILE* fp = fopen( path, "rb" );
@@ -164,7 +160,7 @@ void tsPreprocess( const char* path, const char* out_path )
 	else
 	{
 		printf( "SID ERROR: sid.exe could not open input file %s.\n", path );
-		return;
+		return 0;
 	}
 
 	char* out = (char*)malloc( size * 2 );
@@ -184,7 +180,7 @@ void tsPreprocess( const char* path, const char* out_path )
 		{
 			printf( "SID ERROR: Only strings can be placed inside of the SID macro.\n" );
 			assert( 0 );
-			return;
+			return 0;
 		}
 
 		char* ptr = ++data;
@@ -204,11 +200,10 @@ void tsPreprocess( const char* path, const char* out_path )
 			++ptr;
 		}
 
-		int count = 0;
 		unsigned h = djb2( data, ptr ); // TODO: detect and report collisions
 		int bytes = ptr - data;
-		sprintf( out, "0x%x /* \"%.*s\" */%n", h, bytes, data, &count );
-		out += count;
+		sprintf( out, "0x%.8x /* \"%.*s\" */", h, bytes, data );
+		out += 19 + bytes;
 
 		data = ptr + 1;
 		while ( isspace( *data ) )
@@ -217,7 +212,7 @@ void tsPreprocess( const char* path, const char* out_path )
 		{
 			printf( "SID ERROR: Must have ) immediately after the SID macro (look near the string \"%.*s\").\n", (int)(ptr - data), data );
 			assert( 0 );
-			return;
+			return 0;
 		}
 		data += 1;
 	}
@@ -228,6 +223,8 @@ void tsPreprocess( const char* path, const char* out_path )
 		fwrite( outOriginal, out - outOriginal, 1, fp );
 		fclose( fp );
 	}
+
+	return fileWasModified;
 }
 
 #endif

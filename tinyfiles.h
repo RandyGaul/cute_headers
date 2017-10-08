@@ -92,6 +92,8 @@ int tfDirOpen( tfDIR* dir, const char* path );
 
 #if TF_PLATFORM == TF_WINDOWS
 
+#include <Windows.h>
+
 	struct tfFILE
 	{
 		char path[ TF_MAX_PATH ];
@@ -223,7 +225,8 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		tfSafeStrCpy( fname, dname, 0, TF_MAX_FILENAME );
 		tfSafeStrCpy( fpath, fname, n - 1, TF_MAX_PATH );
 
-		file->size = ((size_t)dir->fdata.nFileSizeHigh * ((size_t)MAXDWORD + 1)) + (size_t)dir->fdata.nFileSizeLow;
+		size_t max_dword = MAXDWORD;
+		file->size = ((size_t)dir->fdata.nFileSizeHigh * (max_dword + 1)) + (size_t)dir->fdata.nFileSizeLow;
 		tfGetExt( file );
 
 		file->is_dir = !!(dir->fdata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
