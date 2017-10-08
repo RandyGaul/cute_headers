@@ -39,7 +39,6 @@ unsigned djb2( char* str, char* end );
 #include <stdlib.h> // malloc, free
 #include <stdio.h>  // fopen, fseek, ftell, fclose, fwrite, fread
 #include <ctype.h>  // isspace
-#include <assert.h>
 
 unsigned djb2( char* str, char* end )
 {
@@ -159,7 +158,7 @@ int tsPreprocess( const char* path, const char* out_path )
 
 	else
 	{
-		printf( "SID ERROR: sid.exe could not open input file %s.\n", path );
+		printf( "SID ERROR: sid.exe could not open input file %s. Skipping this file.\n", path );
 		return 0;
 	}
 
@@ -178,8 +177,7 @@ int tsPreprocess( const char* path, const char* out_path )
 		// TODO: handle escaped quotes
 		if ( *data != '"' )
 		{
-			printf( "SID ERROR: Only strings can be placed inside of the SID macro.\n" );
-			assert( 0 );
+			printf( "SID WARN (%s): Only strings can be placed inside of the SID macro. Skipping this file.\n", path );
 			return 0;
 		}
 
@@ -210,8 +208,7 @@ int tsPreprocess( const char* path, const char* out_path )
 			data++;
 		if ( data[ 0 ] != ')' )
 		{
-			printf( "SID ERROR: Must have ) immediately after the SID macro (look near the string \"%.*s\").\n", (int)(ptr - data), data );
-			assert( 0 );
+			printf( "SID ERROR (%s): Must have ) immediately after the SID macro (look near the string \"%.*s\"). Skipping this file.\n", path, (int)(ptr - data), data );
 			return 0;
 		}
 		data += 1;
