@@ -90,6 +90,10 @@ void tfDirClose( tfDIR* dir );
 // Performs lightweight OS-specific call to open a file handle on a directory.
 int tfDirOpen( tfDIR* dir, const char* path );
 
+// Compares file last write times. -1 if file at path_a was modified earlier than path_b.
+// 0 if they are equal. 1 if file at path_b was modified earlier than path_a.
+int tfCompareFileTimes( const char* path_a, const char* path_b );
+
 #if TF_PLATFORM == TF_WINDOWS
 
 #if !defined _CRT_SECURE_NO_WARNINGS
@@ -114,7 +118,7 @@ int tfDirOpen( tfDIR* dir, const char* path );
 		HANDLE handle;
 		WIN32_FIND_DATAA fdata;
 	};
-	
+
 #elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
 
 	#include <sys/stat.h>
@@ -137,6 +141,11 @@ int tfDirOpen( tfDIR* dir, const char* path );
 		int has_next;
 		DIR* dir;
 		struct dirent* entry;
+	};
+
+	struct tfFILETIME
+	{
+		time_t time;
 	};
 
 #endif
@@ -278,6 +287,17 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		return 1;
 	}
 
+	int tfCompareFileTimes( const char* path_a, const char* path_b )
+	{
+		FILETIME time_a = { 0 };
+		FILETIME time_b = { 0 };
+		WIN32_FILE_ATTRIBUTE_DATA data;
+
+		if ( GetFileAttributesExA( path_a, GetFileExInfoStandard, &data ) ) time_a = data.ftLastWriteTime;
+		if ( GetFileAttributesExA( path_b, GetFileExInfoStandard, &data ) ) time_b = data.ftLastWriteTime;
+		return CompareFileTime( &time_a, &time_b );
+	}
+
 #elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
@@ -343,6 +363,19 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		if ( !dir->dir ) dir->has_next = 0;
 
 		return 1;
+	}
+
+	// Warning : untested code! (let me know if it breaks)
+	int tfCompareFileTimes( const char* path_a, const char* path_b )
+	{
+		time_t time_a;
+		time_t time_b;
+		struct stat info;
+		if ( stat( path_a, &info ) ) return 0;
+		time_a = info.st_mtime;
+		if ( stat( path_b, &info ) ) return 0;
+		time_a = info.st_mtime;
+		return (int)difftime( time_a, time_b );
 	}
 
 #endif // TF_PLATFORM
