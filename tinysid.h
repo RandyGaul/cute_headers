@@ -20,7 +20,7 @@
 #if !defined( TINYSID_H )
 
 // path and out_path can point to the same file, or to different files
-void tsPreprocess( const char* path, const char* out_path );
+int tsPreprocess( const char* path, const char* out_path );
 
 // Feel free to use SID at run-time to hash strings on the spot. Then at
 // some point in time (as a pre-build step or even when your application
