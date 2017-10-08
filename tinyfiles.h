@@ -65,8 +65,10 @@
 
 struct tfFILE;
 struct tfDIR;
+struct tfFILETIME;
 typedef struct tfFILE tfFILE;
 typedef struct tfDIR tfDIR;
+typedef struct tfFILETIME tfFILETIME;
 typedef void (*tfCallback)( tfFILE* file, void* udata );
 
 // Stores the file extension in tfFILE::ext
@@ -92,7 +94,17 @@ int tfDirOpen( tfDIR* dir, const char* path );
 
 // Compares file last write times. -1 if file at path_a was modified earlier than path_b.
 // 0 if they are equal. 1 if file at path_b was modified earlier than path_a.
-int tfCompareFileTimes( const char* path_a, const char* path_b );
+int tfCompareFileTimesByPath( const char* path_a, const char* path_b );
+
+// Retrieves time file was last modified, returns 0 upon failure
+int tfGetFileTime( const char* path, tfFILETIME* time );
+
+// Compares file last write times. -1 if time_a was modified earlier than path_b.
+// 0 if they are equal. 1 if time_b was modified earlier than path_a.
+int tfCompareFileTimes( tfFILETIME* time_a, tfFILETIME* time_b );
+
+// Returns 1 of file exists, otherwise returns 0.
+int tfFileExists( const char* path );
 
 #if TF_PLATFORM == TF_WINDOWS
 
@@ -119,10 +131,16 @@ int tfCompareFileTimes( const char* path_a, const char* path_b );
 		WIN32_FIND_DATAA fdata;
 	};
 
+	struct tfFILETIME
+	{
+		FILETIME time;
+	};
+
 #elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
+	#include <unistd.h>
 
 	struct tfFILE
 	{
@@ -287,7 +305,7 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		return 1;
 	}
 
-	int tfCompareFileTimes( const char* path_a, const char* path_b )
+	int tfCompareFileTimesByPath( const char* path_a, const char* path_b )
 	{
 		FILETIME time_a = { 0 };
 		FILETIME time_b = { 0 };
@@ -296,6 +314,29 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		if ( GetFileAttributesExA( path_a, GetFileExInfoStandard, &data ) ) time_a = data.ftLastWriteTime;
 		if ( GetFileAttributesExA( path_b, GetFileExInfoStandard, &data ) ) time_b = data.ftLastWriteTime;
 		return CompareFileTime( &time_a, &time_b );
+	}
+
+	int tfGetFileTime( const char* path, tfFILETIME* time )
+	{
+		*time = { 0 };
+		WIN32_FILE_ATTRIBUTE_DATA data;
+		if ( GetFileAttributesExA( path, GetFileExInfoStandard, &data ) )
+		{
+			time->time = data.ftLastWriteTime;
+			return 1;
+		}
+		return 0;
+	}
+
+	int tfCompareFileTimes( tfFILETIME* time_a, tfFILETIME* time_b )
+	{
+		return CompareFileTime( &time_a->time, &time_b->time );
+	}
+
+	int tfFileExists( const char* path )
+	{
+		WIN32_FILE_ATTRIBUTE_DATA unused;
+		return GetFileAttributesExA( path, GetFileExInfoStandard, &unused );
 	}
 
 #elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
@@ -366,7 +407,7 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 	}
 
 	// Warning : untested code! (let me know if it breaks)
-	int tfCompareFileTimes( const char* path_a, const char* path_b )
+	int tfCompareFileTimesByPath( const char* path_a, const char* path_b )
 	{
 		time_t time_a;
 		time_t time_b;
@@ -376,6 +417,27 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		if ( stat( path_b, &info ) ) return 0;
 		time_a = info.st_mtime;
 		return (int)difftime( time_a, time_b );
+	}
+
+	// Warning : untested code! (let me know if it breaks)
+	int tfGetFileTime( const char* path, tfFILETIME* time )
+	{
+		struct stat info;
+		if ( stat( path, &info ) ) return 0;
+		time->time = info.st_mtime;
+		return 1;
+	}
+
+	// Warning : untested code! (let me know if it breaks)
+	int tfCompareFileTimes( tfFILETIME* time_a, tfFILETIME* time_b )
+	{
+		return (int)difftime( time_a->time, time_b->time );
+	}
+
+	// Warning : untested code! (let me know if it breaks)
+	int tfFileExists( const char* path )
+	{
+		return access( path, F_OK ) != -1;
 	}
 
 #endif // TF_PLATFORM
