@@ -400,8 +400,15 @@ void tsStopAllSounds( tsContext* ctx );
 
 #ifdef TS_IMPLEMENTATION
 
+#if !defined _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS FUCK_YOU
+#endif // _CRT_SECURE_NO_WARNINGS
+
+// Change the allocator as necessary
 #include <stdlib.h>	// malloc, free
+#define TS_ALLOC(size) malloc(size)
+#define TS_FREE(mem) free(mem)
+
 #include <stdio.h>	// fopen, fclose
 #include <string.h>	// memcmp, memset, memcpy
 #include <xmmintrin.h>
@@ -409,6 +416,9 @@ void tsStopAllSounds( tsContext* ctx );
 
 #if TS_PLATFORM == TS_WINDOWS
 
+	// You may need to include mmreg or possibly Windows.h
+	// I'm actually uncertain how Windows decides which headers are required...
+	// #include <mmreg.h>
 	#include <dsound.h>
 	#undef PlaySound
 	
@@ -450,7 +460,7 @@ static void* tsReadFileToMemory( const char* path, int* size )
 		fseek( fp, 0, SEEK_END );
 		sizeNum = (int)ftell( fp );
 		fseek( fp, 0, SEEK_SET );
-		data = malloc( sizeNum );
+		data = TS_ALLOC( sizeNum );
 		fread( data, sizeNum, 1, fp );
 		fclose( fp );
 	}
@@ -474,7 +484,7 @@ static char* tsNext( char* data )
 
 static void* malloc16( size_t size )
 {
-	void* p = malloc( size + 16 );
+	void* p = TS_ALLOC( size + 16 );
 	if ( !p ) return 0;
 	unsigned char offset = (size_t)p & 15;
 	p = (void*)TS_ALIGN( p + 1, 16 );
@@ -486,7 +496,7 @@ static void* malloc16( size_t size )
 static void free16( void* p )
 {
 	if ( !p ) return;
-	free( (char*)p - (size_t)*((char*)p - 1) );
+	TS_FREE( (char*)p - (size_t)*((char*)p - 1) );
 }
 
 static void tsLastElement( __m128* a, int i, int j, int16_t* samples, int offset )
@@ -619,7 +629,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 	tsLoadedSound sound = { 0 };
 	char* wav = (char*)tsReadFileToMemory( path, 0 );
 	tsReadMemWAV( wav, &sound );
-	free( wav );
+	TS_FREE( wav );
 	return sound;
 }
 
@@ -630,7 +640,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 	static void* tsReadRWToMemory( SDL_RWops* rw, int* size )
 	{
 		Sint64 res_size = SDL_RWsize( rw );
-		char* data = (char*)malloc( (size_t)(res_size + 1) );
+		char* data = (char*)TS_ALLOC( (size_t)(res_size + 1) );
 
 		Sint64 nb_read_total = 0, nb_read = 1;
 		char* buf = data;
@@ -645,7 +655,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 
 		if ( nb_read_total != res_size )
 		{
-			free( data );
+			TS_FREE( data );
 			return NULL;
 		}
 
@@ -658,7 +668,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 		tsLoadedSound sound = { 0 };
 		char* wav = (char*)tsReadRWToMemory( context, 0 );
 		tsReadMemWAV( wav, &sound );
-		free( wav );
+		TS_FREE( wav );
 		return sound;
 	}
 
@@ -733,11 +743,11 @@ tsLoadedSound tsLoadWAV( const char* path )
 		sound->channel_count = channel_count;
 		sound->channels[ 0 ] = a;
 		sound->channels[ 1 ] = b;
-		free( samples );
+		TS_FREE( samples );
 		return;
 
 	ts_err:
-		free( samples );
+		TS_FREE( samples );
 		memset( sound, 0, sizeof( tsLoadedSound ) );
 	}
 
@@ -747,7 +757,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 		void* memory = tsReadFileToMemory( path, &length );
 		tsLoadedSound sound;
 		tsReadMemOGG( memory, length, sample_rate, &sound );
-		free( memory );
+		TS_FREE( memory );
 
 		return sound;
 	}
@@ -760,7 +770,7 @@ tsLoadedSound tsLoadWAV( const char* path )
 			void* memory = tsReadRWToMemory( rw, &length );
 			tsLoadedSound sound;
 			tsReadMemOGG( memory, length, sample_rate, &sound );
-			free( memory );
+			TS_FREE( memory );
 
 			return sound;
 		}
@@ -896,7 +906,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 			tsRemoveFilter( playing );
 			playing = playing->next;
 		}
-		free( ctx );
+		TS_FREE( ctx );
 	}
 
 	static DWORD WINAPI tsCtxThread( LPVOID lpParameter )
@@ -984,7 +994,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		int pool_size = playing_pool_count * sizeof( tsPlayingSound );
 		int mix_buffers_size = sizeof( __m128 ) * wide_count * 2;
 		int sample_buffer_size = sizeof( __m128i ) * wide_count;
-		ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
+		ctx = (tsContext*)TS_ALLOC( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
 		ctx->latency_samples = (unsigned)TS_ALIGN( play_frequency_in_Hz / latency_factor_in_Hz, 4 );
 		ctx->running_index = 0;
 		ctx->Hz = play_frequency_in_Hz;
@@ -1022,7 +1032,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		return ctx;
 
 	ts_err:
-		free( ctx );
+		TS_FREE( ctx );
 		return 0;
 	}
 
@@ -1080,7 +1090,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 			tsRemoveFilter( playing );
 			playing = playing->next;
 		}
-		free( ctx );
+		TS_FREE( ctx );
 	}
 
 	static void* tsCtxThread( void* udata )
@@ -1153,7 +1163,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		int pool_size = playing_pool_count * sizeof( tsPlayingSound );
 		int mix_buffers_size = sizeof( __m128 ) * wide_count * 2;
 		int sample_buffer_size = sizeof( __m128i ) * wide_count;
-		tsContext* ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
+		tsContext* ctx = (tsContext*)TS_ALLOC( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
 		TS_CHECK( ret == noErr, "AudioComponentInstanceNew failed" );
 		ctx->latency_samples = latency_count;
 		ctx->index0 = 0;
@@ -1205,7 +1215,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		return ctx;
 
 	ts_err:
-		free( ctx );
+		TS_FREE( ctx );
 		return 0;
 	}
 
@@ -1260,7 +1270,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 			playing = playing->next;
 		}
 		SDL_CloseAudio( );
-		free( ctx );
+		TS_FREE( ctx );
 	}
 
 	int tsCtxThread( void* udata )
@@ -1306,7 +1316,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		int ret = SDL_Init( SDL_INIT_AUDIO );
 		TS_CHECK( ret >= 0, "Can't init SDL audio" );
 
-		ctx = (tsContext*)malloc( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
+		ctx = (tsContext*)TS_ALLOC( sizeof( tsContext ) + mix_buffers_size + sample_buffer_size + 16 + pool_size );
 		TS_CHECK( ctx != NULL, "Can't create audio context" );
 		ctx->latency_samples = latency_count;
 		ctx->index0 = 0;
@@ -1354,7 +1364,7 @@ static void tsRemoveFilter( tsPlayingSound* playing );
 		return ctx;
 
 	ts_err:
-		if ( ctx ) free( ctx );
+		if ( ctx ) TS_FREE( ctx );
 		return 0;
 	}
 
