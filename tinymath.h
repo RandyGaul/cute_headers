@@ -11,7 +11,7 @@
 
 	SUMMARY:
 		A professional level implementation of SIMD intrinsics, suitable for creating high
-		performance output. Please make sure to minimize your loads and stores!
+		performance output.
 
 		The __vectorcall convention needs to be used to build on MSVC. Set the flag /Gv to
 		setup this convention by default (recommended). This flag will not affect class
