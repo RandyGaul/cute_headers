@@ -136,7 +136,7 @@ int tfFileExists( const char* path );
 		FILETIME time;
 	};
 
-#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
@@ -339,7 +339,7 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 		return GetFileAttributesExA( path, GetFileExInfoStandard, &unused );
 	}
 
-#elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
 	{
