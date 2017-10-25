@@ -1358,13 +1358,18 @@ void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
 {
 	m->count = 0;
 	c2v a, b;
+	float r = A.r + B.r;
 	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
-	if ( d < A.r + B.r )
+	if ( d < r )
 	{
+		c2v n;
+		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( A.b, A.a ) ) );
+		else n = c2Norm( c2Sub( b, a ) );
+
 		m->count = 1;
-		m->contact_points[ 0 ] = c2Mulvs( c2Add( a, b ), 0.5f );
-		m->depths[ 0 ] = d;
-		m->normal = d != 0 ? c2Norm( c2Sub( b, a ) ) : c2Norm( c2Skew( c2Sub( A.b, A.a ) ) );
+		m->depths[ 0 ] = r - d;
+		m->contact_points[ 0 ] = c2Sub( b, c2Mulvs( n, B.r ) );
+		m->normal = n;
 	}
 }
 
