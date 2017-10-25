@@ -1276,11 +1276,14 @@ void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
 	float d = c2GJK( &A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
 	if ( d < r )
 	{
+		c2v n;
+		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( B.b, B.a ) ) );
+		else n = c2Norm( c2Sub( b, a ) );
+
 		m->count = 1;
 		m->depths[ 0 ] = r - d;
-		m->contact_points[ 0 ] = c2Mulvs( c2Add( a, b ), 0.5f );
-		if ( d == 0 ) m->normal = c2Skew( c2Norm( c2Sub( B.b, B.a ) ) );
-		else m->normal = c2Norm( c2Sub( b, a ) );
+		m->contact_points[ 0 ] = c2Sub( b, c2Mulvs( n, B.r ) );
+		m->normal = n;
 	}
 }
 
