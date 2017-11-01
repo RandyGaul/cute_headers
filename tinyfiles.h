@@ -1,6 +1,10 @@
 /*
 	tinyfiles.h - v1.0
 
+	To create implementation (the function definitions)
+		#define TINYFILES_IMPL
+	in *one* C/CPP file (translation unit) that includes this file
+
 	Summary:
 		Utility header for traversing directories to apply a function on each found file.
 		Recursively finds sub-directories. Can also be used to iterate over files in a
@@ -30,6 +34,23 @@
 
 #if !defined( TINYFILES_H )
 
+#define TF_WINDOWS	1
+#define TF_MAC		2
+#define TF_UNIX		3
+
+#if defined( _WIN32 )
+	#define TF_PLATFORM TF_WINDOWS
+	#if !defined( _CRT_SECURE_NO_WARNINGS )
+	#define _CRT_SECURE_NO_WARNINGS
+	#endif
+#elif defined( __APPLE__ )
+	#define TF_PLATFORM TF_MAC
+#else
+	#define TF_PLATFORM TF_UNIX
+#endif
+
+#include <string.h> // strerror, strncpy
+
 // change to 0 to compile out any debug checks
 #define TF_DEBUG_CHECKS 1
 
@@ -37,7 +58,6 @@
 
 	#include <stdio.h>  // printf
 	#include <assert.h> // assert
-	#include <string.h> // strerror
 	#include <errno.h>
 	#define TF_ASSERT assert
 	
@@ -46,18 +66,6 @@
 	#define TF_ASSERT( ... )
 
 #endif // TF_DEBUG_CHECKS
-
-#define TF_WINDOWS	1
-#define TF_MAC		2
-#define TF_UNIX		3
-
-#if defined( _WIN32 )
-	#define TF_PLATFORM TF_WINDOWS
-#elif defined( __APPLE__ )
-	#define TF_PLATFORM TF_MAC
-#else
-	#define TF_PLATFORM TF_UNIX
-#endif
 
 #define TF_MAX_PATH 1024
 #define TF_MAX_FILENAME 256
@@ -71,7 +79,8 @@ typedef struct tfDIR tfDIR;
 typedef struct tfFILETIME tfFILETIME;
 typedef void (*tfCallback)( tfFILE* file, void* udata );
 
-// Stores the file extension in tfFILE::ext
+// Stores the file extension in tfFILE::ext, and returns a pointer to
+// tfFILE::ext
 const char* tfGetExt( tfFILE* file );
 
 // Applies a function (cb) to all files in a directory. Will recursively visit
@@ -105,6 +114,13 @@ int tfCompareFileTimes( tfFILETIME* time_a, tfFILETIME* time_b );
 
 // Returns 1 of file exists, otherwise returns 0.
 int tfFileExists( const char* path );
+
+// Returns 1 if the file's extension matches the string in ext
+// Returns 0 otherwise
+int tfMatchExt( tfFILE* file, const char* ext );
+
+// Prints detected errors to stdout
+void tfDoUnitTests();
 
 #if TF_PLATFORM == TF_WINDOWS
 
@@ -236,6 +252,12 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 	tfDirClose( &dir );
 }
 
+int tfMatchExt( tfFILE* file, const char* ext )
+{
+	if (*ext == '.') ++ext;
+	return !strcmp( file->ext, ext );
+}
+
 #if TF_PLATFORM == TF_WINDOWS
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
@@ -318,7 +340,8 @@ void tfTraverse( const char* path, tfCallback cb, void* udata )
 
 	int tfGetFileTime( const char* path, tfFILETIME* time )
 	{
-		*time = { 0 };
+		FILETIME initialized_to_zero = { 0 };
+		time->time = initialized_to_zero;
 		WIN32_FILE_ATTRIBUTE_DATA data;
 		if ( GetFileAttributesExA( path, GetFileExInfoStandard, &data ) )
 		{

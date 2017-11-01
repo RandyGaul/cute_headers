@@ -1004,6 +1004,11 @@ int main( )
 	user_capsule.b = c2V( 30.0f, 0 );
 	user_capsule.r = 10.0f;
 
+		for (int i = 0; i < 16; ++i)
+		{
+			printf("%10.10f\n", projection[i]);
+		}
+
 	// main loop
 	glClearColor( 0, 0, 0, 1 );
 	float t = 0;
@@ -1017,7 +1022,7 @@ int main( )
 		float dt = ttTime( );
 		t += dt;
 		t = fmod( t, 2.0f * 3.14159265f );
-		tgSendF32( &post_fx, "u_time", 1, &t, 1 );
+		//tgSendF32( &post_fx, "u_time", 1, &t, 1 );
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
@@ -1041,15 +1046,15 @@ int main( )
 
 		// push a draw call to tinygl
 		// all members of a tgDrawCall *must* be initialized
-		if ( verts.size( ) )
-		{
-			tgDrawCall call;
-			call.r = &r;
-			call.texture_count = 0;
-			call.verts = &verts[ 0 ];
-			call.vert_count = verts.size( );
-			tgPushDrawCall( ctx, call );
-		}
+		//if ( verts.size( ) )
+		//{
+		//	tgDrawCall call;
+		//	call.r = &r;
+		//	call.texture_count = 0;
+		//	call.verts = &verts[ 0 ];
+		//	call.vert_count = verts.size( );
+		//	tgPushDrawCall( ctx, call );
+		//}
 
 		// flush all draw calls to screen
 		// optionally the fb can be NULL or 0 to signify no post-processing fx
