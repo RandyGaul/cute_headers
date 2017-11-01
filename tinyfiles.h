@@ -152,7 +152,7 @@ void tfDoUnitTests();
 		FILETIME time;
 	};
 
-#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
@@ -362,7 +362,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 		return GetFileAttributesExA( path, GetFileExInfoStandard, &unused );
 	}
 
-#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
+#elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
 	{
@@ -468,20 +468,14 @@ int tfMatchExt( tfFILE* file, const char* ext )
 #endif
 
 /*
-	zlib license:
-	
-	Copyright (c) 2016 Randy Gaul http://www.randygaul.net
-	This software is provided 'as-is', without any express or implied warranty.
-	In no event will the authors be held liable for any damages arising from
-	the use of this software.
-	Permission is granted to anyone to use this software for any purpose,
-	including commercial applications, and to alter it and redistribute it
-	freely, subject to the following restrictions:
-	  1. The origin of this software must not be misrepresented; you must not
-	     claim that you wrote the original software. If you use this software
-	     in a product, an acknowledgment in the product documentation would be
-	     appreciated but is not required.
-	  2. Altered source versions must be plainly marked as such, and must not
-	     be misrepresented as being the original software.
-	  3. This notice may not be removed or altered from any source distribution.
+	This is free and unencumbered software released into the public domain.
+
+	Our intent is that anyone is free to copy and use this software,
+	for any purpose, in any form, and by any means.
+
+	The authors dedicate any and all copyright interest in the software
+	to the public domain, at their own expense for the betterment of mankind.
+
+	The software is provided "as is", without any kind of warranty, including
+	any implied warranty. If it breaks, you get to keep both pieces.
 */
