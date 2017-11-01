@@ -12,11 +12,12 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++ | zlib
 **[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++ | zlib
 **[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.1 | C++ | zlib
-**[tinydeflate](tinydeflate.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant compressor/decompressor | 1.02 | C/C++ | public domain
+**[tinypng](tinypng.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.02 | C/C++ | public domain
 **[tinygl](tinygl.h)** | OpenGL wrapper with carefully designed API to foster fast iteration | 1.01 | C/C++ | zlib
 **[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
 **[tinyhuff](tinyhuff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
 **[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++ | zlib
+**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.0 | C/C++ | zlib
 
 &ast; Not yet hit first release
 
