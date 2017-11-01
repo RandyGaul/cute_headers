@@ -152,7 +152,7 @@ void tfDoUnitTests();
 		FILETIME time;
 	};
 
-#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
@@ -362,7 +362,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 		return GetFileAttributesExA( path, GetFileExInfoStandard, &unused );
 	}
 
-#elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
 	{
