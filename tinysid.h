@@ -19,6 +19,8 @@
 
 #if !defined( TINYSID_H )
 
+#include <stdint.h>   // uint64_t
+
 // path and out_path can point to the same file, or to different files
 int tsPreprocess( const char* path, const char* out_path );
 
@@ -26,33 +28,40 @@ int tsPreprocess( const char* path, const char* out_path );
 // some point in time (as a pre-build step or even when your application
 // is running) preprocess your files to create hard-coded constants.
 // The underlying hash function can be swapped out as-needed by modifying
-// this source file. Just replace all instances of djb2 with your own
+// this source file. Just replace all instances of FNV1a with your own
 // hash function, along with a matching signature.
-#define SID( str ) djb2( str, str + strlen( str ) )
-unsigned djb2( char* str, char* end );
+#define SID( str, len ) FNV1a( str, str + strlen( str ) )
+uint64_t FNV1a(const void* buf, int len);
 
 #define TINYSID_H
 #endif
 
 #ifdef TINYSID_IMPL
 
-#include <stdlib.h> // malloc, free
-#include <stdio.h>  // fopen, fseek, ftell, fclose, fwrite, fread
-#include <ctype.h>  // isspace
+#include <stdlib.h>   // malloc, free
+#include <stdio.h>    // fopen, fseek, ftell, fclose, fwrite, fread
+#include <ctype.h>    // isspace
+#include <inttypes.h> // PRIx64
 
-unsigned djb2( char* str, char* end )
+uint64_t FNV1a( const void* buf, int len )
 {
-	unsigned h = 5381;
-	int c;
+	uint64_t h = (uint64_t)14695981039346656037U;
+	const char* str = (const char*)buf;
 
-	while ( str != end )
+	while ( len-- )
 	{
-		c = *str;
-		h = ((h << 5) + h) + c;
-		++str;
+		char c = *str++;
+		h = h ^ (uint64_t)c;
+		h = h * (uint64_t)1099511628211;
 	}
 
 	return h;
+}
+
+uint64_t FNV1a_str_end( char* str, char* end )
+{
+	int len = end - str;
+	return FNV1a( str, len );
 }
 
 static void tsSkipWhite_internal( char** dataPtr, char** outPtr )
@@ -198,9 +207,9 @@ int tsPreprocess( const char* path, const char* out_path )
 			++ptr;
 		}
 
-		unsigned h = djb2( data, ptr ); // TODO: detect and report collisions
+		unsigned h = FNV1a_str_end( data, ptr ); // TODO: detect and report collisions
 		int bytes = ptr - data;
-		sprintf( out, "0x%.8x /* \"%.*s\" */", h, bytes, data );
+		sprintf( out, "0x%.16" PRIx64 " /* \"%.*s\" */", h, bytes, data );
 		out += 19 + bytes;
 
 		data = ptr + 1;

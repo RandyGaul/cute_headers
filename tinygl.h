@@ -1,11 +1,11 @@
 #if !defined( TINYGL_H )
 
 /*
-	tinygl - v1.01
+	tinygl - v1.02
 
 	Summary:
-	Wrapper for OpenGL for vertex attributes, shader creation, draw calls, and
-	post-processing fx. The API was carefully designed to facilitate trying out
+	Wrapper for OpenGL ES 3.0+ for vertex attributes, shader creation, draw calls,
+	and post-processing fx. The API was carefully designed to facilitate trying out
 	one-off techqniques or experiments, of which are critical for certain kinds
 	of development styles (i.e. fast iteration). Credit goes to thatgamecompany
 	for the original designs + idea of this API style.
@@ -29,7 +29,7 @@
 	3. tgLoadShader( &shader_instance, vertex_shader_string, pixel_shader_string )
 	4. tgMakeRenderable( &renderable_instance, &vertex_data_instance )
 	5. tgPushDrawCall( ctx, draw_call )
-	6. tgFlush( ctx, swap_buffer_func, use_post_fx ? &frame_buffer : 0 )
+	6. tgFlush( ctx, swap_buffer_func, use_post_fx ? &frame_buffer : 0, viewport_w, viewport_h )
 
 	DETAILS:
 	tinygl only renders triangles. Triangles can be fed to draw calls with static
@@ -57,6 +57,7 @@
 	Revision history:
 		1.0  (02/09/2017) initial release
 		1.01 (03/23/2017) memory leak fix and swap to realloc for tgLine stuff
+		1.02 (11/02/2017) change to GLES 3.0+, removed glu debug dependency
 */
 
 /*
@@ -70,7 +71,7 @@
 		* No index support. Adding indices would not be too hard and come down to a
 			matter of adding in some more triple buffer/single buffer code for
 			GL_STATIC_DRAW vs GL_DYNAMIC_DRAW.
-		* GL 3.0+ support only
+		* GLES 3.0+ support only
 		* Full support for array uniforms is not quite tested and hammered out.
 */
 
@@ -178,6 +179,7 @@ typedef struct
 	uint32_t rb_id;
 	uint32_t quad_id;
 	tgShader* shader;
+	int w, h;
 } tgFramebuffer;
 
 typedef struct
@@ -201,7 +203,7 @@ void tgLine( void* context, float ax, float ay, float az, float bx, float by, fl
 void tgLineWidth( float width );
 void tgLineDepthTest( void* context, int zero_for_off );
 
-void tgMakeFramebuffer( tgFramebuffer* tgFbo, tgShader* shader, int w, int h );
+void tgMakeFramebuffer( tgFramebuffer* tgFbo, tgShader* shader, int w, int h, int use_depth_test );
 void tgFreeFramebuffer( tgFramebuffer* tgFbo );
 
 void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t primitive, uint32_t vertex_stride, uint32_t usage );
@@ -222,12 +224,13 @@ void tgSendTexture( tgShader* s, char* uniform_name, uint32_t index );
 void tgPushDrawCall( void* ctx, tgDrawCall call );
 
 typedef void (*tgFunc)( );
-void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb );
+void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb, int w, int h );
 
 void tgOrtho2D( float w, float h, float x, float y, float* m );
 void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float f );
 void tgMul( float* a, float* b, float* out ); // perform a * b where a and b are 4x4 matrices, stores result in out
 void tgIdentity( float* m );
+void tgCopy( float* dst, float* src );
 
 #if TG_DEBUG_CHECKS
 
@@ -303,8 +306,8 @@ tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t set
 	tgAddAttribute( &vd, "in_pos", 3, TG_FLOAT, 0 );
 	tgAddAttribute( &vd, "in_col", 3, TG_FLOAT, TG_LINE_STRIDE / 2 );
 	tgMakeRenderable( &ctx->line_r, &vd );
-	const char* vs = "#version 410\nuniform mat4 u_mvp;in vec3 in_pos;in vec3 in_col;out vec3 v_col;void main( ){v_col = in_col;gl_Position = u_mvp * vec4( in_pos, 1 );}";
-	char* ps = "#version 410\nin vec3 v_col;out vec4 out_col;void main( ){out_col = vec4( v_col, 1 );}";
+	const char* vs = "#version 300 es\nuniform mat4 u_mvp;in vec3 in_pos;in vec3 in_col;out vec3 v_col;void main( ){v_col = in_col;gl_Position = u_mvp * vec4( in_pos, 1 );}";
+	const char* ps = "#version 300 es\nprecision mediump float;in vec3 v_col;out vec4 out_col;void main( ){out_col = vec4( v_col, 1 );}";
 	tgLoadShader( &ctx->line_s, vs, ps );
 	tgSetShader( &ctx->line_r, &ctx->line_s );
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
@@ -374,7 +377,7 @@ void tgLineWidth( float width ) { TG_UNUSED( width ); }
 void tgLineDepthTest( void* context, int zero_for_off ) { TG_UNUSED( context ); TG_UNUSED( zero_for_off ); }
 #endif
 
-void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
+void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h, int use_depth_test )
 {
 	// Generate the frame buffer
 	GLuint fb_id;
@@ -386,23 +389,26 @@ void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
 	glGenTextures( 1, &tex_id );
 	glBindTexture( GL_TEXTURE_2D, tex_id );
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
 	glBindTexture( GL_TEXTURE_2D, 0 );
 
 	// Attach color buffer to frame buffer
 	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_id, 0 );
 
 	// Generate depth and stencil attachments for the fbo using a RenderBuffer.
-	GLuint rb_id;
-	glGenRenderbuffers( 1, &rb_id );
-	glBindRenderbuffer( GL_RENDERBUFFER, rb_id );
-	glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h );
-	glBindRenderbuffer( GL_RENDERBUFFER, 0 );
-	glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rb_id );
+	GLuint rb_id = ~0;
+	if ( use_depth_test )
+	{
+		glGenRenderbuffers( 1, &rb_id );
+		glBindRenderbuffer( GL_RENDERBUFFER, rb_id );
+		glRenderbufferStorage( GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, w, h );
+		glBindRenderbuffer( GL_RENDERBUFFER, 0 );
+		glFramebufferRenderbuffer( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rb_id );
+	}
 
 	if ( glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
-		TG_WARN( "failed to generate framebuffer\n" );
+		TG_WARN( "WARNING tinygl: failed to generate framebuffer\n" );
 
 	glBindFramebuffer( GL_FRAMEBUFFER, 0 );
 
@@ -427,6 +433,8 @@ void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h )
 	fb->rb_id = rb_id;
 	fb->quad_id = quad_id;
 	fb->shader = shader;
+	fb->w = w;
+	fb->h = h;
 }
 
 void tgFreeFramebuffer( tgFramebuffer* fb )
@@ -484,7 +492,10 @@ static uint32_t tgGetGLType( uint32_t type )
 	case GL_BOOL_VEC4:
 		return TG_BOOL;
 
+// seems undefined for GLES
+#if GL_SAMPLER_1D
 	case GL_SAMPLER_1D:
+#endif
 	case GL_SAMPLER_2D:
 	case GL_SAMPLER_3D:
 		return TG_SAMPLER;
@@ -988,12 +999,16 @@ static void tgRender( tgContext* ctx, tgDrawCall* call )
 	glUseProgram( 0 );
 }
 
-void tgPresent( void* context, tgFramebuffer* fb )
+void tgPresent( void* context, tgFramebuffer* fb, int w, int h )
 {
 	tgContext* ctx = (tgContext*)context;
 	tgQSort( ctx->calls, ctx->count );
 
-	if ( fb ) glBindFramebuffer( GL_FRAMEBUFFER, fb->fb_id );
+	if ( fb )
+	{
+		glBindFramebuffer( GL_FRAMEBUFFER, fb->fb_id );
+		glViewport(0, 0, fb->w, fb->h);
+	}
 	if ( ctx->clear_bits ) glClear( ctx->clear_bits );
 	if ( ctx->settings_bits ) glEnable( ctx->settings_bits );
 
@@ -1022,6 +1037,7 @@ void tgPresent( void* context, tgFramebuffer* fb )
 	if ( fb )
 	{
 		glBindFramebuffer( GL_FRAMEBUFFER, 0 );
+		glViewport(0, 0, w, h);
 		glClear( GL_COLOR_BUFFER_BIT );
 		glDisable( GL_DEPTH_TEST );
 
@@ -1038,9 +1054,9 @@ void tgPresent( void* context, tgFramebuffer* fb )
 	}
 }
 
-void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb )
+void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb, int w, int h )
 {
-	tgPresent( ctx, fb );
+	tgPresent( ctx, fb, w, h );
 	tgContext* context = (tgContext*)ctx;
 	context->count = 0;
 
@@ -1096,6 +1112,12 @@ void tgOrtho2D( float w, float h, float x, float y, float* m )
 	m[ 13 ] = -y;
 }
 
+void tgCopy( float* dst, float* src )
+{
+	for (int i = 0; i < 16; ++i )
+		dst[ i ] = src[ i ];
+}
+
 void tgMul( float* a, float* b, float* out )
 {
 	float c[ 16 ];
@@ -1117,8 +1139,7 @@ void tgMul( float* a, float* b, float* out )
 	c[ 3 + 2 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 2 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 2 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 2 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 2 * 4 ];
 	c[ 3 + 3 * 4 ] = a[ 3 + 0 * 4 ] * b[ 0 + 3 * 4 ] + a[ 3 + 1 * 4 ] * b[ 1 + 3 * 4 ] + a[ 3 + 2 * 4 ] * b[ 2 + 3 * 4 ] + a[ 3 + 3 * 4 ] * b[ 3 + 3 * 4 ];
 
-	for ( int i = 0; i < 16; ++i )
-		out[ i ] = c[ i ];
+	tgCopy( out, c );
 }
 
 void tgMulv( float* a, float* b )
@@ -1146,14 +1167,34 @@ void tgIdentity( float* m )
 }
 
 #if TG_DEBUG_CHECKS
-#if defined(__APPLE__)
-	#include <OpenGL/gl.h>
-	#include <OpenGL/glu.h>
-#else
-	#include <GL/gl.h>
-	#include <GL/glu.h>
-#endif
-#pragma comment( lib, "glu32.lib" )
+const char* tgGetErrorString( GLenum error_code )
+{
+	switch ( error_code )
+	{
+	case GL_NO_ERROR: return "GL_NO_ERROR";
+	case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+	case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+	case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+	case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+	case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+	default: return "UNKNOWN_ERROR";
+	}
+}
+
+const char* tgGetErrorDescription( GLenum error_code )
+{
+	switch ( error_code )
+	{
+	case GL_NO_ERROR: return "No error detected.";
+	case GL_INVALID_ENUM: return "Enum argument out of range.";
+	case GL_INVALID_VALUE: return "Numeric argument out of range.";
+	case GL_INVALID_OPERATION: return "Operation illegal in current state.";
+	case GL_OUT_OF_MEMORY: return "Not enough memory left to execute command.";
+	case GL_INVALID_FRAMEBUFFER_OPERATION: return "Framebuffer object is not complete.";
+	default: return "No description available for UNKNOWN_ERROR.";
+	}
+}
+
 void tgPrintGLErrors_internal( char* file, uint32_t line )
 {
 	GLenum code = glGetError( );
@@ -1170,8 +1211,9 @@ void tgPrintGLErrors_internal( char* file, uint32_t line )
 			++file;
 		}
 
-		const char* str = (const char*)gluErrorString( code );
-		TG_WARN( "OpenGL Error %s ( %u ): %u, %s\n", last_slash, line, code, str );
+		const char* str = tgGetErrorString( code );
+		const char* des = tgGetErrorDescription( code );
+		TG_WARN( "OpenGL Error %s ( %u ): %u, %s: \n", last_slash, line, code, str, des );
 	}
 }
 #endif
