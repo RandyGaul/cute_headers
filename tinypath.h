@@ -199,7 +199,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 {
 	// return failure for empty strings and "." or ".."
 	if ( !*path || *path == '.' && TP_STRLEN( path ) < 3 ) return 0;
-	int len = tpPop( path, out );
+	int len = tpPop( path, out, NULL );
 	int has_slash = 0;
 	for ( int i = 0; out[ i ]; ++i )
 	{
@@ -212,7 +212,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 
 	if ( has_slash )
 	{
-		int n = tpPop( out, out ) + 1;
+		int n = tpPop( out, out, NULL ) + 1;
 		len -= n;
 		TP_STRNCPY( out, path + n, len );
 	}
@@ -234,59 +234,59 @@ int tpNameOfFolderImIn( const char* path, char* out )
 		char out[TP_MAX_PATH];
 
 		const char* path = "../root/file.ext";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root/file"));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root"));
 
 		path = "../root/file";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root/file"));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root"));
 
 		path = "../root/";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root/"));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, ".."));
 
 		path = "../root";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../root"));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, ".."));
 
 		path = "../";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "../"));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "."));
 
 		path = "..";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, ".."));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "."));
 
 		path = ".";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "."));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "."));
 
 		path = "";
-		tpPopExt(path, out);
+		tpPopExt(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, ""));
 
-		tpPop(path, out);
+		tpPop(path, out, NULL);
 		TF_EXPECT(!TP_STRCMP(out, "."));
 
 		path = "asdf/file.ext";
