@@ -249,12 +249,12 @@ int tpCompact( const char* path, char* out, int n )
 	const int seplen = strlen( sep );
 
 	int pathlen = strlen( path );
-	out[ 0 ] = '\0';
+	out[ 0 ] = 0;
 
 	if ( pathlen <= n )
 	{
 		strncpy( out, path, pathlen );
-		out[ pathlen ] = '\0';
+		out[ pathlen ] = 0;
 		return pathlen;
 	}
 
@@ -273,7 +273,7 @@ int tpCompact( const char* path, char* out, int n )
 	if ( pathlen == backlen )
 	{
 		strncpy( out, path, n - seplen );
-		out[ n - seplen ] = '\0';
+		out[ n - seplen ] = 0;
 		strncat( out, sep, seplen + 1 );
 		return n;
 	}
@@ -298,7 +298,7 @@ int tpCompact( const char* path, char* out, int n )
 	int remaining = n - backlen - seplen;
 
 	strncpy( out, path, remaining );
-	out[ remaining ] = '\0';
+	out[ remaining ] = 0;
 	strncat( out, sep, seplen );
 	strcat( out, back ); // TODO: use strncat
 
