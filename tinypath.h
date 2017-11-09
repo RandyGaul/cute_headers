@@ -62,7 +62,7 @@ void tpConcat( const char* path_a, const char* path_b, char* out, int max_buffer
 // Returns 0 for inputs of "", "." or ".." as the path, 1 otherwise (success).
 int tpNameOfFolderImIn( const char* path, char* out );
 
-int tpCompact( const char* path, char* out int length );
+int tpCompact( const char* path, char* out, int n );
 
 // Some useful (but not yet implemented) functions
 /*
@@ -246,7 +246,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 int tpCompact( const char* path, char* out, int n )
 {
 	const char* sep = "...";
-	const int seplen = strlen( separator );
+	const int seplen = strlen( sep );
 
 	int pathlen = strlen( path );
 	out[ 0 ] = '\0';
