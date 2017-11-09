@@ -21,7 +21,7 @@
 		1.0  (11/01/2017) initial release
 */
 
-#if !defined(TINYPATH_H)
+#if !defined( TINYPATH_H )
 
 #define TP_MAX_PATH 1024
 #define TP_MAX_EXT 32
@@ -69,12 +69,12 @@ int tpNameOfFolderImIn( const char* path, char* out );
 */
 
 #define TP_UNIT_TESTS 1
-int tpDoUnitTests();
+void tpDoUnitTests();
 
 #define TINYPATH_H
 #endif
 
-#if defined(TINYPATH_IMPL)
+#if defined( TINYPATH_IMPL )
 
 #ifdef _WIN32
 
@@ -90,7 +90,7 @@ int tpDoUnitTests();
 
 int tpIsSlash( char c )
 {
-	return (c == '/') | (c == '\\');
+	return ( c == '/' ) | ( c == '\\' );
 }
 
 int tpPopExt( const char* path, char* out, char* ext )
@@ -104,8 +104,8 @@ int tpPopExt( const char* path, char* out, char* ext )
 
 	const char* period = path;
 	char c;
-	while ( (c = *period++) ) if ( c == '.' ) break;
-	int len = (int)(period - path) - 1 + initial_skipped_periods;
+	while ( ( c = *period++ ) ) if ( c == '.' ) break;
+	int len = (int)( period - path ) - 1 + initial_skipped_periods;
 	if ( len > TP_MAX_PATH - 1 ) len = TP_MAX_PATH - 1;
 	if ( out )
 	{
@@ -137,20 +137,19 @@ int tpPop( const char* path, char* out, char* pop )
 	while ( !tpIsSlash( *--path ) && pop_len != total_len )
 		++pop_len;
 	int len = total_len - pop_len; // length to copy
-	len -= 1; // remove trailing slash
 
 	if ( len > 0 )
 	{
-		if (out)
+		if ( out )
 		{
 			TP_STRNCPY( out, original, len );
 			out[ len ] = 0;
 		}
 
-		if (pop)
+		if ( pop )
 		{
 			TP_STRNCPY( pop, path + 1, pop_len );
-			pop[pop_len] = 0;
+			pop[ pop_len ] = 0;
 		}
 
 		return len;
@@ -158,12 +157,12 @@ int tpPop( const char* path, char* out, char* pop )
 
 	else
 	{
-		if (out)
+		if ( out )
 		{
 			out[ 0 ] = '.';
 			out[ 1 ] = 0;
 		}
-		if (pop) *pop = 0;
+		if ( pop ) *pop = 0;
 		return 1;
 	}
 }
@@ -199,7 +198,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 {
 	// return failure for empty strings and "." or ".."
 	if ( !*path || *path == '.' && TP_STRLEN( path ) < 3 ) return 0;
-	int len = tpPop( path, out );
+	int len = tpPop( path, out, NULL );
 	int has_slash = 0;
 	for ( int i = 0; out[ i ]; ++i )
 	{
@@ -212,7 +211,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 
 	if ( has_slash )
 	{
-		int n = tpPop( out, out ) + 1;
+		int n = tpPop( out, out, NULL ) + 1;
 		len -= n;
 		TP_STRNCPY( out, path + n, len );
 	}
@@ -227,115 +226,142 @@ int tpNameOfFolderImIn( const char* path, char* out )
 	#include <stdio.h>
 
 	#define TP_STRCMP strcmp
-	#define TF_EXPECT(X) do { if ( !(X) ) printf( "Failed tinyfiles.h unit test at line %d of file %s.\n", __LINE__, __FILE__ ); } while ( 0 )
+	#define TP_EXPECT(X) do { if ( !(X) ) printf( "Failed tinyfiles.h unit test at line %d of file %s.\n", __LINE__, __FILE__ ); } while ( 0 )
 
-	void tfDoUnitTests()
+	void tpDoUnitTests()
 	{
-		char out[TP_MAX_PATH];
+		char out[ TP_MAX_PATH ];
+                char pop[ TP_MAX_PATH ];
+                char ext[ TP_MAX_PATH ];
 
 		const char* path = "../root/file.ext";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root/file"));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "../root/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "ext" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root"));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file.ext" ) );
 
 		path = "../root/file";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root/file"));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "../root/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root"));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file" ) );
 
 		path = "../root/";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root/"));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "../root/" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, ".."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "root" ) );
 
 		path = "../root";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../root"));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, ".."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "root" ) );
+
+		path = "/file";
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
+
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "/" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file" ) );
 
 		path = "../";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "../"));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "../" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "..";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, ".."));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = ".";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "";
-		tpPopExt(path, out);
-		TF_EXPECT(!TP_STRCMP(out, ""));
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "asdf/file.ext";
-		tpNameOfFolderImIn(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "asdf"));
+		tpNameOfFolderImIn( path, out );
+		TP_EXPECT( !TP_STRCMP( out, "asdf" ) );
 
 		path = "asdf/lkjh/file.ext";
 		tpNameOfFolderImIn( path, out );
-		TF_EXPECT(!TP_STRCMP(out, "lkjh"));
+		TP_EXPECT( !TP_STRCMP( out, "lkjh" ) );
 
 		path = "poiu/asdf/lkjh/file.ext";
-		tpNameOfFolderImIn(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "lkjh"));
+		tpNameOfFolderImIn( path, out );
+		TP_EXPECT( !TP_STRCMP( out, "lkjh" ) );
 
 		path = "poiu/asdf/lkjhqwer/file.ext";
-		tpNameOfFolderImIn(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "lkjhqwer"));
+		tpNameOfFolderImIn( path, out );
+		TP_EXPECT( !TP_STRCMP( out, "lkjhqwer" ) );
 
 		path = "../file.ext";
-		tpNameOfFolderImIn(path, out);
-		TF_EXPECT(!TP_STRCMP(out, ".."));
+		tpNameOfFolderImIn( path, out );
+		TP_EXPECT( !TP_STRCMP( out, ".." ) );
 
 		path = "./file.ext";
-		tpNameOfFolderImIn(path, out);
-		TF_EXPECT(!TP_STRCMP(out, "."));
+		tpNameOfFolderImIn( path, out );
+		TP_EXPECT( !TP_STRCMP( out, "." ) );
 
 		path = "..";
-		TF_EXPECT(!tpNameOfFolderImIn(path, out));
+		TP_EXPECT( !tpNameOfFolderImIn( path, out ) );
 
 		path = ".";
-		TF_EXPECT(!tpNameOfFolderImIn(path, out));
+		TP_EXPECT( !tpNameOfFolderImIn( path, out ) );
 
 		path = "";
-		TF_EXPECT(!tpNameOfFolderImIn(path, out));
+		TP_EXPECT( !tpNameOfFolderImIn( path, out ) );
 
 		const char* path_a = "asdf";
 		const char* path_b = "qwerzxcv";
-		tpConcat(path_a, path_b, out, TP_MAX_PATH);
-		TF_EXPECT(!TP_STRCMP(out, "asdf/qwerzxcv"));
+		tpConcat( path_a, path_b, out, TP_MAX_PATH );
+		TP_EXPECT( !TP_STRCMP( out, "asdf/qwerzxcv" ) );
 
 		path_a = "path/owoasf.as.f.q.e.a";
 		path_b = "..";
-		tpConcat(path_a, path_b, out, TP_MAX_PATH);
-		TF_EXPECT(!TP_STRCMP(out, "path/owoasf.as.f.q.e.a/.."));
+		tpConcat( path_a, path_b, out, TP_MAX_PATH );
+		TP_EXPECT( !TP_STRCMP( out, "path/owoasf.as.f.q.e.a/.." ) );
 
 		path_a = "a/b/c";
 		path_b = "d/e/f/g/h/i";
-		tpConcat(path_a, path_b, out, TP_MAX_PATH);
-		TF_EXPECT(!TP_STRCMP(out, "a/b/c/d/e/f/g/h/i"));
+		tpConcat( path_a, path_b, out, TP_MAX_PATH );
+		TP_EXPECT( !TP_STRCMP( out, "a/b/c/d/e/f/g/h/i" ) );
 	}
 
 #else
