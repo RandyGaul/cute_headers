@@ -62,7 +62,7 @@ void tpConcat( const char* path_a, const char* path_b, char* out, int max_buffer
 // Returns 0 for inputs of "", "." or ".." as the path, 1 otherwise (success).
 int tpNameOfFolderImIn( const char* path, char* out );
 
-int tpCompact( const char* path, int length, char* out );
+int tpCompact( const char* path, char* out int length );
 
 // Some useful (but not yet implemented) functions
 /*
@@ -243,19 +243,19 @@ int tpNameOfFolderImIn( const char* path, char* out )
 	return 1;
 }
 
-int tpCompact( const char* path, int length, char* out )
+int tpCompact( const char* path, char* out, int n )
 {
 	const char* sep = "...";
 	const int seplen = strlen( separator );
 
 	int pathlen = strlen( path );
-	out[0] = '\0';
+	out[ 0 ] = '\0';
 
-	if (pathlen <= length)
+	if ( pathlen <= n )
 	{
-		strncpy(out, path, length);
-		out[length] = '\0';
-		return 1;
+		strncpy( out, path, pathlen );
+		out[ pathlen ] = '\0';
+		return pathlen;
 	}
 
 	// Find last path separator
@@ -264,40 +264,43 @@ int tpCompact( const char* path, int length, char* out )
 	do
 	{
 		--i;
-	} while (!tpIsSlash(path[i]) && i > 0);
+	} while ( !tpIsSlash( path[ i ] ) && i > 0 );
 
-	int backlen = strlen(path + i);
+	const char* back = path + i;
+	int backlen = strlen( back );
 
 	// No path separator was found or the first character was one
-	if (pathlen == backlen)
+	if ( pathlen == backlen )
 	{
-		strncpy(out, path, l - seplen);
-		out[l - seplen] = '\0';
-		strncat(out, sep, seplen + 1);
-		return 1;
+		strncpy( out, path, n - seplen );
+		out[ n - seplen ] = '\0';
+		strncat( out, sep, seplen + 1 );
+		return n;
 	}
 
-	// Last path part with separators in front equals length
-	if (backlen == l - seplen) {
-		strncpy(out, sep, seplen + 1);
-		strcat(out, path + i); // TODO: use strncat
-		return 1;
+	// Last path part with separators in front equals n
+	if ( backlen == n - seplen )
+	{
+		strncpy( out, sep, seplen + 1 );
+		strcat( out, back ); // TODO: use strncat
+		return n;
 	}
 
 	// Last path part with separators in front is too long
-	if (backlen > l - seplen) {
-		strncpy(out, sep, seplen + 1);
-		strncat(out, path + i, l - (2 * seplen));
-		strncat(out, sep, seplen);
-		return 1;
+	if ( backlen > n - seplen )
+	{
+		strncpy( out, sep, seplen + 1 );
+		strncat( out, back, n - ( 2 * seplen ) );
+		strncat( out, sep, seplen );
+		return n;
 	}
 
-	int remaining = l - backlen - seplen;
+	int remaining = n - backlen - seplen;
 
-	strncpy(out, path, remaining);
-	out[remaining] = '\0';
-	strncat(out, sep, seplen);
-	strcat(out, path + i); // TODO: use strncat
+	strncpy( out, path, remaining );
+	out[ remaining ] = '\0';
+	strncat( out, sep, seplen );
+	strcat( out, back ); // TODO: use strncat
 
 	return 1;
 }
