@@ -231,62 +231,89 @@ int tpNameOfFolderImIn( const char* path, char* out )
 	void tpDoUnitTests()
 	{
 		char out[ TP_MAX_PATH ];
+                char pop[ TP_MAX_PATH ];
+                char ext[ TP_MAX_PATH ];
 
 		const char* path = "../root/file.ext";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "../root/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "ext" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file.ext" ) );
 
 		path = "../root/file";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "../root/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file" ) );
 
 		path = "../root/";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "../root/" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "root" ) );
 
 		path = "../root";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "../root" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "root" ) );
+
+		path = "/file";
+		tpPopExt( path, out, ext );
+		TP_EXPECT( !TP_STRCMP( out, "/file" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
+
+		tpPop( path, out, pop );
+		TP_EXPECT( !TP_STRCMP( out, "/" ) );
+		TP_EXPECT( !TP_STRCMP( pop, "file" ) );
 
 		path = "../";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "../" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "..";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, ".." ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = ".";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "";
-		tpPopExt( path, out, NULL );
+		tpPopExt( path, out, ext );
 		TP_EXPECT( !TP_STRCMP( out, "" ) );
+		TP_EXPECT( !TP_STRCMP( ext, "" ) );
 
-		tpPop( path, out, NULL );
+		tpPop( path, out, pop );
 		TP_EXPECT( !TP_STRCMP( out, "." ) );
+		TP_EXPECT( !TP_STRCMP( pop, "" ) );
 
 		path = "asdf/file.ext";
 		tpNameOfFolderImIn( path, out );
