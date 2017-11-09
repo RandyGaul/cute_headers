@@ -137,7 +137,6 @@ int tpPop( const char* path, char* out, char* pop )
 	while ( !tpIsSlash( *--path ) && pop_len != total_len )
 		++pop_len;
 	int len = total_len - pop_len; // length to copy
-	len -= 1; // remove trailing slash
 
 	if ( len > 0 )
 	{
