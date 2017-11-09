@@ -138,6 +138,12 @@ int tpPop( const char* path, char* out, char* pop )
 		++pop_len;
 	int len = total_len - pop_len; // length to copy
 
+        // don't ignore trailing slash if it is the first character
+        if (len > 1)
+        {
+                len -= 1;
+        }
+
 	if ( len > 0 )
 	{
 		if ( out )
