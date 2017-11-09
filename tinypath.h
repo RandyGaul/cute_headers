@@ -282,7 +282,7 @@ int tpCompact( const char* path, char* out, int n )
 	if ( backlen == n - seplen )
 	{
 		strncpy( out, sep, seplen + 1 );
-		strcat( out, back ); // TODO: use strncat
+		strncat( out, back, backlen );
 		return n;
 	}
 
@@ -300,7 +300,7 @@ int tpCompact( const char* path, char* out, int n )
 	strncpy( out, path, remaining );
 	out[ remaining ] = 0;
 	strncat( out, sep, seplen );
-	strcat( out, back ); // TODO: use strncat
+	strncat( out, back, backlen );
 
 	return 1;
 }
