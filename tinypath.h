@@ -105,14 +105,28 @@ int tpPopExt( const char* path, char* out, char* ext )
 	const char* period = path;
 	char c;
 	while ( ( c = *period++ ) ) if ( c == '.' ) break;
+
+	int has_period = c == '.';
 	int len = (int)( period - path ) - 1 + initial_skipped_periods;
 	if ( len > TP_MAX_PATH - 1 ) len = TP_MAX_PATH - 1;
+
 	if ( out )
 	{
 		TP_STRNCPY( out, path - initial_skipped_periods, len );
 		out[ len ] = 0;
 	}
-	if ( ext )TP_STRNCPY( ext, path - initial_skipped_periods + len + 1, TP_MAX_EXT );
+
+	if ( ext )
+	{
+		if ( has_period )
+		{
+			TP_STRNCPY( ext, path - initial_skipped_periods + len + 1, TP_MAX_EXT );
+		}
+		else
+		{
+			ext[ 0 ] = 0;
+		}
+	}
 	return len;
 }
 
