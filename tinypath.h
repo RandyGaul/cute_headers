@@ -309,7 +309,7 @@ int tpCompact( const char* path, char* out, int n )
 	TP_STRNCAT( out, sep, seplen );
 	TP_STRNCAT( out, back, backlen );
 
-	return 1;
+	return n;
 }
 
 #if TP_UNIT_TESTS
