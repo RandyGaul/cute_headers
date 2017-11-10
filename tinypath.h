@@ -86,8 +86,9 @@ void tpDoUnitTests();
 
 #endif
 
-#include <string.h> // strncpy, strlen
+#include <string.h> // strncpy, strncat, strlen
 #define TP_STRNCPY strncpy
+#define TP_STRNCAT strncat
 #define TP_STRLEN strlen
 
 int tpIsSlash( char c )
@@ -253,7 +254,7 @@ int tpCompact( const char* path, char* out, int n )
 
 	if ( pathlen <= n )
 	{
-		strncpy( out, path, pathlen );
+		TP_STRNCPY( out, path, pathlen );
 		out[ pathlen ] = 0;
 		return pathlen;
 	}
@@ -272,35 +273,35 @@ int tpCompact( const char* path, char* out, int n )
 	// No path separator was found or the first character was one
 	if ( pathlen == backlen )
 	{
-		strncpy( out, path, n - seplen );
+		TP_STRNCPY( out, path, n - seplen );
 		out[ n - seplen ] = 0;
-		strncat( out, sep, seplen + 1 );
+		TP_STRNCAT( out, sep, seplen + 1 );
 		return n;
 	}
 
 	// Last path part with separators in front equals n
 	if ( backlen == n - seplen )
 	{
-		strncpy( out, sep, seplen + 1 );
-		strncat( out, back, backlen );
+		TP_STRNCPY( out, sep, seplen + 1 );
+		TP_STRNCAT( out, back, backlen );
 		return n;
 	}
 
 	// Last path part with separators in front is too long
 	if ( backlen > n - seplen )
 	{
-		strncpy( out, sep, seplen + 1 );
-		strncat( out, back, n - ( 2 * seplen ) );
-		strncat( out, sep, seplen );
+		TP_STRNCPY( out, sep, seplen + 1 );
+		TP_STRNCAT( out, back, n - ( 2 * seplen ) );
+		TP_STRNCAT( out, sep, seplen );
 		return n;
 	}
 
 	int remaining = n - backlen - seplen;
 
-	strncpy( out, path, remaining );
+	TP_STRNCPY( out, path, remaining );
 	out[ remaining ] = 0;
-	strncat( out, sep, seplen );
-	strncat( out, back, backlen );
+	TP_STRNCAT( out, sep, seplen );
+	TP_STRNCAT( out, back, backlen );
 
 	return 1;
 }
