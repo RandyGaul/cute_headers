@@ -246,6 +246,8 @@ int tpNameOfFolderImIn( const char* path, char* out )
 
 int tpCompact( const char* path, char* out, int n )
 {
+	if (n <= 6) return 0;
+
 	const char* sep = "...";
 	const int seplen = strlen( sep );
 
