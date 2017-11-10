@@ -62,10 +62,10 @@ void tpConcat( const char* path_a, const char* path_b, char* out, int max_buffer
 // Returns 0 for inputs of "", "." or ".." as the path, 1 otherwise (success).
 int tpNameOfFolderImIn( const char* path, char* out );
 
-// Shrinks the path to the desired length n, the out buffer will never be bigger than n.
-// Places three '.' between the last part of the path and the first part that will be
-// shortened to fit. If the last part is too long to fit in a string of length n, the
-// last part will be shortened to fit and three '.' will be added in front & back.
+// Shrinks the path to the desired length n, the out buffer will never be bigger than
+// n + 1. Places three '.' between the last part of the path and the first part that
+// will be shortened to fit. If the last part is too long to fit in a string of length n,
+// the last part will be shortened to fit and three '.' will be added in front & back.
 int tpCompact( const char* path, char* out, int n );
 
 // Some useful (but not yet implemented) functions
