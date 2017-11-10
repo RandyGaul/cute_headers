@@ -324,6 +324,7 @@ int tpCompact( const char* path, char* out, int n )
 		char out[ TP_MAX_PATH ];
                 char pop[ TP_MAX_PATH ];
                 char ext[ TP_MAX_PATH ];
+                int n;
 
 		const char* path = "../root/file.ext";
 		tpPopExt( path, out, ext );
@@ -455,28 +456,34 @@ int tpCompact( const char* path, char* out, int n )
 		TP_EXPECT( !TP_STRCMP( out, "a/b/c/d/e/f/g/h/i" ) );
 
 		path = "/path/to/file.vim";
-		tpCompact( path, out, 17 );
+		n = tpCompact( path, out, 17 );
 		TP_EXPECT( !TP_STRCMP( out, "/path/to/file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 
 		path = "/path/to/file.vim";
-		tpCompact( path, out, 16 );
+		n = tpCompact( path, out, 16 );
 		TP_EXPECT( !TP_STRCMP( out, "/pat.../file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 
 		path = "/path/to/file.vim";
-		tpCompact( path, out, 12 );
+		n = tpCompact( path, out, 12 );
 		TP_EXPECT( !TP_STRCMP( out, ".../file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 
 		path = "/path/to/file.vim";
-		tpCompact( path, out, 11 );
+		n = tpCompact( path, out, 11 );
 		TP_EXPECT( !TP_STRCMP( out, ".../file..." ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 
 		path = "longfile.vim";
-		tpCompact( path, out, 12 );
+		n = tpCompact( path, out, 12 );
 		TP_EXPECT( !TP_STRCMP( out, "longfile.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 
 		path = "longfile.vim";
-		tpCompact( path, out, 11 );
+		n = tpCompact( path, out, 11 );
 		TP_EXPECT( !TP_STRCMP( out, "longfile..." ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 	}
 
 #else
