@@ -16,7 +16,7 @@
 	header quite a bit. As such the initial release went with pure scalar.
 
 	Note:
-	This header is basically a C++ port of the math from tinyc2.h:
+	This header is basically a C++ port of the math from tinc2.h:
 	https://github.com/RandyGaul/tinyheaders/blob/master/tinyc2.h
 
 	Revision history:
@@ -188,8 +188,6 @@ TM2D_INLINE float surface_area(aabb bb) { return 2.0f * width(bb) * height(bb); 
 TM2D_INLINE float area(aabb bb) { return width(bb) * height(bb); }
 TM2D_INLINE v2 clamp(aabb bb, v2 p) { return clamp(p, bb.min, bb.max); }
 TM2D_INLINE aabb clamp(aabb a, aabb b) { return make_aabb(clamp(a.min, b.min, b.max), clamp(a.max, b.min, b.max)); }
-TM2D_INLINE aabb mul(transform tx, aabb a) { aabb b; b.min = mul(tx, a.min); b.max = mul(tx, a.max); return b; }
-TM2D_INLINE aabb mulT(transform tx, aabb a) { aabb b; b.min = mulT(tx, a.min); b.max = mulT(tx, a.max); return b; }
 
 TM2D_INLINE int overlaps(aabb a, aabb b)
 {
