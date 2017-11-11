@@ -233,6 +233,11 @@ void tgMul( float* a, float* b, float* out ); // perform a * b, stores result in
 void tgIdentity( float* m );
 void tgCopy( float* dst, float* src );
 
+#if !defined( TG_MALLOC )
+	#define TG_MALLOC( size ) malloc(size)
+	#define TG_FREE( mem ) free(mem)
+#endif
+
 #if TG_DEBUG_CHECKS
 
 	#define TG_PRINT_GL_ERRORS( ) tgPrintGLErrors_internal( __FILE__, __LINE__ )
@@ -285,15 +290,15 @@ struct tgContext
 
 tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits )
 {
-	tgContext* ctx = (tgContext*)malloc( sizeof( tgContext ) );
+	tgContext* ctx = (tgContext*)TG_MALLOC( sizeof( tgContext ) );
 	ctx->clear_bits = clear_bits;
 	ctx->settings_bits = settings_bits;
 	ctx->max_draw_calls = max_draw_calls;
 	ctx->count = 0;
-	ctx->calls = (tgDrawCall*)malloc( sizeof( tgDrawCall ) * max_draw_calls );
+	ctx->calls = (tgDrawCall*)TG_MALLOC( sizeof( tgDrawCall ) * max_draw_calls );
 	if ( !ctx->calls )
 	{
-		free( ctx );
+		TG_FREE( ctx );
 		return 0;
 	}
 	GLuint vao;
@@ -314,7 +319,7 @@ tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t set
 	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
 	ctx->line_vert_count = 0;
 	ctx->line_vert_capacity = 1024 * 1024;
-	ctx->line_verts = (float*)malloc( TG_LINE_STRIDE * ctx->line_vert_capacity );
+	ctx->line_verts = (float*)TG_MALLOC( TG_LINE_STRIDE * ctx->line_vert_capacity );
 	ctx->line_depth_test = 0;
 #endif
 
@@ -324,11 +329,11 @@ tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t set
 void tgFreeCtx( void* ctx )
 {
 	tgContext* context = (tgContext*)ctx;
-	free( context->calls );
+	TG_FREE( context->calls );
 #if TG_LINE_RENDERER
-	free( context->line_verts );
+	TG_FREE( context->line_verts );
 #endif
-	free( context );
+	TG_FREE( context );
 }
 
 #if TG_LINE_RENDERER
@@ -350,7 +355,10 @@ void tgLine( void* context, float ax, float ay, float az, float bx, float by, fl
 	if ( ctx->line_vert_count + 2 > ctx->line_vert_capacity )
 	{
 		ctx->line_vert_capacity *= 2;
-		ctx->line_verts = (float*)realloc(ctx->line_verts, TG_LINE_STRIDE * ctx->line_vert_capacity);
+		void* old_verts = ctx->line_verts;
+		ctx->line_verts = (float*)TG_MALLOC( TG_LINE_STRIDE * ctx->line_vert_capacity );
+		memcpy( ctx->line_verts, old_verts, TG_LINE_STRIDE * ctx->line_vert_count );
+		TG_FREE( old_verts );
 	}
 	float verts[] = { ax, ay, az, ctx->r, ctx->g, ctx->b, bx, by, bz, ctx->r, ctx->g, ctx->b };
 	memcpy( ctx->line_verts + ctx->line_vert_count * (TG_LINE_STRIDE / sizeof( float )), verts, sizeof( verts ) );
