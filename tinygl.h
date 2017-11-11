@@ -233,11 +233,6 @@ void tgMul( float* a, float* b, float* out ); // perform a * b, stores result in
 void tgIdentity( float* m );
 void tgCopy( float* dst, float* src );
 
-#if !defined( TG_MALLOC )
-	#define TG_MALLOC( size ) malloc(size)
-	#define TG_FREE( mem ) free(mem)
-#endif
-
 #if TG_DEBUG_CHECKS
 
 	#define TG_PRINT_GL_ERRORS( ) tgPrintGLErrors_internal( __FILE__, __LINE__ )
@@ -285,7 +280,12 @@ struct tgContext
 #endif
 };
 
-#include <stdlib.h> // malloc, free, NULL
+#if !defined( TG_MALLOC )
+	#include <stdlib.h> // malloc, free, NULL
+	#define TG_MALLOC( size ) malloc(size)
+	#define TG_FREE( mem ) free(mem)
+#endif
+
 #include <string.h> // memset
 
 tgContext* tgMakeCtx( uint32_t max_draw_calls, uint32_t clear_bits, uint32_t settings_bits )

@@ -402,12 +402,14 @@ void tsStopAllSounds( tsContext* ctx );
 
 #if !defined _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS FUCK_YOU
-#endif // _CRT_SECURE_NO_WARNINGS
+#endif _CRT_SECURE_NO_WARNINGS
 
 // Change the allocator as necessary
-#include <stdlib.h>	// malloc, free
-#define TS_ALLOC(size) malloc(size)
-#define TS_FREE(mem) free(mem)
+#if !defined( TS_ALLOC )
+	#include <stdlib.h>	// malloc, free
+	#define TS_ALLOC(size) ALLOC(size)
+	#define TS_FREE(mem) FREE(mem)
+#endif
 
 #include <stdio.h>	// fopen, fclose
 #include <string.h>	// memcmp, memset, memcpy
@@ -416,9 +418,7 @@ void tsStopAllSounds( tsContext* ctx );
 
 #if TS_PLATFORM == TS_WINDOWS
 
-	// You may need to include mmreg or possibly Windows.h
-	// I'm actually uncertain how Windows decides which headers are required...
-	// #include <mmreg.h>
+	#include <mmreg.h>
 	#include <dsound.h>
 	#undef PlaySound
 	
