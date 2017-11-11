@@ -17,8 +17,8 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
 **[tinyhuff](tinyhuff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
 **[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++ | zlib
-**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.0 | C/C++ | public domain
-**[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.0 | C/C++ | public domain
+**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++ | public domain
+**[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++ | public domain
 **[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++ | public domain
 
 &ast; Not yet hit first release
