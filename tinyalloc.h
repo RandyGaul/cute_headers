@@ -51,11 +51,18 @@ taFrame* taFrameCreate(void* memory_chunk, size_t size);
 void* taFrameAlloc(taFrame* frame, size_t size);
 void taFrameFree(taFrame* frame);
 
+// define these to your own user definition as necessary
+#if !defined(TA_ALLOC)
+	#define TA_ALLOC(size) taLeakCheckAlloc((size), (char*)__FILE__, __LINE__)
+#endif
+
+#if !defined(TA_FREE)
+	#define TA_FREE(mem) taLeakCheckFree(mem)
+#endif
+
 // 1 - use the leak checker
 // 0 - use plain malloc/free
 #define TA_LEAK_CHECK 1
-#define TA_ALLOC(size) taLeakCheckAlloc((size), (char*)__FILE__, __LINE__)
-#define TA_FREE(mem) taLeakCheckFree(mem)
 void* taLeakCheckAlloc(size_t size, char* file, int line);
 void taLeakCheckFree(void* mem);
 int TA_CHECK_FOR_LEAKS();
@@ -63,14 +70,14 @@ int TA_CHECK_FOR_LEAKS();
 // define these to your own user definition as necessary
 #if !defined(TA_MALLOC_FUNC)
 	#define TA_MALLOC_NEED_HEADER
-	#define TA_MALLOC_FUNC(size, ...) malloc(size)
+	#define TA_MALLOC_FUNC(size) malloc(size)
 #endif
 
 #if !defined(TA_FREE_FUNC)
 	#if !defined(TA_MALLOC_NEED_HEADER)
 		#define TA_MALLOC_NEED_HEADER
 	#endif
-	#define TA_FREE_FUNC(mem, ...) free(free)
+	#define TA_FREE_FUNC(mem) free(mem)
 #endif
 
 #define TINYALLOC_H
@@ -192,7 +199,7 @@ static taAllocInfo* taAllocHead()
 
 void* taLeakCheckAlloc(size_t size, char* file, int line)
 {
-	taAllocInfo* mem = (taAllocInfo*)TA_MALLOC_FUNC(sizeof(taAllocInfo) + size, file, line);
+	taAllocInfo* mem = (taAllocInfo*)TA_MALLOC_FUNC(sizeof(taAllocInfo) + size);
 
 	if (!mem) return 0;
 
