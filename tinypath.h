@@ -1,5 +1,5 @@
 /*
-	tinypath.h - v1.00
+	tinypath.h - v1.01
 
 
 	To create implementation (the function definitions)
@@ -19,6 +19,12 @@
 
 	Revision history:
 		1.0  (11/01/2017) initial release
+		1.01 (11/10/2017) tpCompact, tpPop bugfixes
+*/
+
+/*
+	Contributors:
+		sro5h             1.01 - tpCompact, tpPop bugfixes
 */
 
 #if !defined( TINYPATH_H )
