@@ -401,8 +401,8 @@ void tsStopAllSounds( tsContext* ctx );
 #ifdef TS_IMPLEMENTATION
 
 #if !defined _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
-#endif _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 
 // Change the allocator as necessary
 #if !defined( TS_ALLOC )
