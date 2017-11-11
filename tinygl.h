@@ -96,7 +96,7 @@ enum
 typedef struct
 {
 	const char* name;
-	uint32_t hash;
+	uint64_t hash;
 	uint32_t size;
 	uint32_t type;
 	uint32_t offset;
@@ -159,7 +159,7 @@ typedef struct
 {
 	char name[ TG_UNIFORM_NAME_LENGTH ];
 	uint32_t id;
-	uint32_t hash;
+	uint64_t hash;
 	uint32_t size;
 	uint32_t type;
 	uint32_t location;
@@ -226,9 +226,10 @@ void tgPushDrawCall( void* ctx, tgDrawCall call );
 typedef void (*tgFunc)( );
 void tgFlush( void* ctx, tgFunc swap, tgFramebuffer* fb, int w, int h );
 
+// 4x4 matrix helper functions
 void tgOrtho2D( float w, float h, float x, float y, float* m );
 void tgPerspective( float* m, float y_fov_radians, float aspect, float n, float f );
-void tgMul( float* a, float* b, float* out ); // perform a * b where a and b are 4x4 matrices, stores result in out
+void tgMul( float* a, float* b, float* out ); // perform a * b, stores result in out
 void tgIdentity( float* m );
 void tgCopy( float* dst, float* src );
 
@@ -447,15 +448,19 @@ void tgFreeFramebuffer( tgFramebuffer* fb )
 	memset( fb, 0, sizeof( tgFramebuffer ) );
 }
 
-static uint32_t tg_djb2( unsigned char* str )
+
+uint64_t tgFNV1a(const char* str)
 {
-	uint32_t hash = 5381;
-	int c;
+	uint64_t h = (uint64_t)14695981039346656037;
+	char c;
 
-	while ( (c = *str++) )
-		hash = ((hash << 5) + hash) + c;
+	while (c = *str++)
+	{
+		h = h ^ (uint64_t)c;
+		h = h * (uint64_t)1099511628211;
+	}
 
-	return hash;
+	return h;
 }
 
 void tgMakeVertexData( tgVertexData* vd, uint32_t buffer_size, uint32_t primitive, uint32_t vertex_stride, uint32_t usage )
@@ -509,7 +514,7 @@ void tgAddAttribute( tgVertexData* vd, char* name, uint32_t size, uint32_t type,
 {
 	tgVertexAttribute va;
 	va.name = name;
-	va.hash = tg_djb2( (unsigned char*)name );
+	va.hash = tgFNV1a( name );
 	va.size = size;
 	va.type = type;
 	va.offset = offset;
@@ -613,13 +618,13 @@ void tgSetShader( tgRenderable* r, tgShader* program )
 	uint32_t size;
 	uint32_t type;
 	char buffer[ 256 ];
-	uint32_t hash;
+	uint64_t hash;
 
 	// Query and set all attribute locations as defined by the shader linking
 	for ( uint32_t i = 0; i < r->attribute_count; ++i )
 	{
 		glGetActiveAttrib( program->program, i, 256, 0, (GLint*)&size, (GLenum*)&type, buffer );
-		hash = tg_djb2( (unsigned char*)buffer );
+		hash = tgFNV1a( buffer );
 		type = tgGetGLType( type );
 
 #if TG_DEBUG_CHECKS
@@ -742,7 +747,7 @@ void tgLoadShader( tgShader* s, const char* vertex, const char* pixel )
 
 		u.location = glGetUniformLocation( program, u.name );
 		u.type = tgGetGLType( u.type );
-		u.hash = tg_djb2( (unsigned char*)u.name );
+		u.hash = tgFNV1a( u.name );
 		u.id = i;
 
 		// @TODO: Perhaps need to handle appended [0] to Uniform names?
@@ -768,7 +773,7 @@ tgUniform* tgFindUniform( tgShader* s, char* name )
 {
 	uint32_t uniform_count = s->uniform_count;
 	tgUniform* uniforms = s->uniforms;
-	uint32_t hash = tg_djb2( (unsigned char*)name );
+	uint64_t hash = tgFNV1a( name );
 
 	for ( uint32_t i = 0; i < uniform_count; ++i )
 	{

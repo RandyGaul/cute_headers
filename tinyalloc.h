@@ -185,10 +185,10 @@ void* taLeakCheckAlloc(size_t size, char* file, int line)
 	mem->line = line;
 	mem->size = size;
 	taAllocInfo* head = taAllocHead();
-	head->prev = mem;
-	head->next = mem->next;
-	mem->next->prev = head;
-	mem->next = head;
+	mem->prev = head;
+	mem->next = head->next;
+	head->next->prev = mem;
+	head->next = mem;
 
 	return mem + 1;
 }
