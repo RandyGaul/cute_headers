@@ -77,7 +77,6 @@ int tpCompact( const char* path, char* out, int n );
 // Some useful (but not yet implemented) functions
 /*
 	int tpRoot( const char* path, char* out );
-	int tpCompact( const char* path, char* out );
 */
 
 #define TP_UNIT_TESTS 1
