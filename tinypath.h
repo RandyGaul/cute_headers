@@ -62,6 +62,12 @@ void tpConcat( const char* path_a, const char* path_b, char* out, int max_buffer
 // Returns 0 for inputs of "", "." or ".." as the path, 1 otherwise (success).
 int tpNameOfFolderImIn( const char* path, char* out );
 
+// Shrinks the path to the desired length n, the out buffer will never be bigger than
+// n + 1. Places three '.' between the last part of the path and the first part that
+// will be shortened to fit. If the last part is too long to fit in a string of length n,
+// the last part will be shortened to fit and three '.' will be added in front & back.
+int tpCompact( const char* path, char* out, int n );
+
 // Some useful (but not yet implemented) functions
 /*
 	int tpRoot( const char* path, char* out );
@@ -84,8 +90,9 @@ void tpDoUnitTests();
 
 #endif
 
-#include <string.h> // strncpy, strlen
+#include <string.h> // strncpy, strncat, strlen
 #define TP_STRNCPY strncpy
+#define TP_STRNCAT strncat
 #define TP_STRLEN strlen
 
 int tpIsSlash( char c )
@@ -241,6 +248,70 @@ int tpNameOfFolderImIn( const char* path, char* out )
 	return 1;
 }
 
+int tpCompact( const char* path, char* out, int n )
+{
+	if (n <= 6) return 0;
+
+	const char* sep = "...";
+	const int seplen = strlen( sep );
+
+	int pathlen = strlen( path );
+	out[ 0 ] = 0;
+
+	if ( pathlen <= n )
+	{
+		TP_STRNCPY( out, path, pathlen );
+		out[ pathlen ] = 0;
+		return pathlen;
+	}
+
+	// Find last path separator
+	// Ignores the last character as it could be a path separator
+	int i = pathlen - 1;
+	do
+	{
+		--i;
+	} while ( !tpIsSlash( path[ i ] ) && i > 0 );
+
+	const char* back = path + i;
+	int backlen = strlen( back );
+
+	// No path separator was found or the first character was one
+	if ( pathlen == backlen )
+	{
+		TP_STRNCPY( out, path, n - seplen );
+		out[ n - seplen ] = 0;
+		TP_STRNCAT( out, sep, seplen + 1 );
+		return n;
+	}
+
+	// Last path part with separators in front equals n
+	if ( backlen == n - seplen )
+	{
+		TP_STRNCPY( out, sep, seplen + 1 );
+		TP_STRNCAT( out, back, backlen );
+		return n;
+	}
+
+	// Last path part with separators in front is too long
+	if ( backlen > n - seplen )
+	{
+		TP_STRNCPY( out, sep, seplen + 1 );
+		TP_STRNCAT( out, back, n - ( 2 * seplen ) );
+		TP_STRNCAT( out, sep, seplen );
+		return n;
+	}
+
+	int remaining = n - backlen - seplen;
+
+	TP_STRNCPY( out, path, remaining );
+	out[ remaining ] = 0;
+	TP_STRNCAT( out, sep, seplen );
+	TP_STRNCAT( out, back, backlen );
+
+	return n;
+}
+
 #if TP_UNIT_TESTS
 
 	#include <stdio.h>
@@ -253,6 +324,7 @@ int tpNameOfFolderImIn( const char* path, char* out )
 		char out[ TP_MAX_PATH ];
                 char pop[ TP_MAX_PATH ];
                 char ext[ TP_MAX_PATH ];
+                int n;
 
 		const char* path = "../root/file.ext";
 		tpPopExt( path, out, ext );
@@ -382,6 +454,36 @@ int tpNameOfFolderImIn( const char* path, char* out )
 		path_b = "d/e/f/g/h/i";
 		tpConcat( path_a, path_b, out, TP_MAX_PATH );
 		TP_EXPECT( !TP_STRCMP( out, "a/b/c/d/e/f/g/h/i" ) );
+
+		path = "/path/to/file.vim";
+		n = tpCompact( path, out, 17 );
+		TP_EXPECT( !TP_STRCMP( out, "/path/to/file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
+
+		path = "/path/to/file.vim";
+		n = tpCompact( path, out, 16 );
+		TP_EXPECT( !TP_STRCMP( out, "/pat.../file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
+
+		path = "/path/to/file.vim";
+		n = tpCompact( path, out, 12 );
+		TP_EXPECT( !TP_STRCMP( out, ".../file.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
+
+		path = "/path/to/file.vim";
+		n = tpCompact( path, out, 11 );
+		TP_EXPECT( !TP_STRCMP( out, ".../file..." ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
+
+		path = "longfile.vim";
+		n = tpCompact( path, out, 12 );
+		TP_EXPECT( !TP_STRCMP( out, "longfile.vim" ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
+
+		path = "longfile.vim";
+		n = tpCompact( path, out, 11 );
+		TP_EXPECT( !TP_STRCMP( out, "longfile..." ) );
+		TP_EXPECT( n == TP_STRLEN( out ) );
 	}
 
 #else
