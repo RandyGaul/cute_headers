@@ -16,7 +16,7 @@
 	header quite a bit. As such the initial release went with pure scalar.
 
 	Note:
-	This header is basically a C++ port of the math from tinc2.h:
+	This header is basically a C++ port of the math from tinyc2.h:
 	https://github.com/RandyGaul/tinyheaders/blob/master/tinyc2.h
 
 	Revision history:
