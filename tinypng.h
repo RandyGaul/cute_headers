@@ -3,7 +3,7 @@
 
 
 	To create implementation (the function definitions)
-		#define TINYPNG_IMPL
+		#define TINYPNG_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
 
@@ -15,9 +15,10 @@
 
 
 	Revision history:
-		1.0  (12/23/2016) initial release
+		1.00 (12/23/2016) initial release
 		1.01 (03/08/2017) tRNS chunk support for paletted images
 		1.02 (10/23/2017) support for explicitly loading paletted png images
+		1.03 (11/12/2017) construct atlas in memory
 
 
 	EXAMPLES:
@@ -39,13 +40,22 @@
 			// img is just a raw RGBA buffer, and can come from anywhere,
 			// not only from tpLoad*** functions
 
-		Creating a texture atlas
-			tpMakeAtlas( "atlas.png", "atlas.txt", 256, 256, imgs, imgs_count, image_names );
-			// just pass an array of pointers to images, and the array count
-			// outputs a png along with a txt file. The txt contains UV info in
-			// a very easy to parse format. The final parameter is optional.
+		Creating a texture atlas in memory
+			int w = 1024;
+			int h = 1024;
+			tpAtlasImage* imgs_out = (tpAtlasImage*)malloc( sizeof( tpAtlasImage ) * my_png_count );
+			tpImage atlas_img = tpMakeAtlas( w, int h, my_png_array, my_png_count, imgs_out );
+			// just pass an array of pointers to images along with the image count. Make sure to also
+			// provide an array of `tpAtlasImage` for `tpMakeAtlas` to output important UV info for the
+			// images that fit into the atlas.
 
-		Inflating a DEFLATE block
+		Using the default atlas saver
+			int errors = tpDefaultSaveAtlas( "atlas.png", "atlas.txt", atlas_img, atlas_imgs, img_count, names_of_all_images ? names_of_all_images : 0 );
+			if ( errors ) { ... }
+			// Atlas info (like uv coordinates) are in "atlas.txt", and the image was writen to "atlas.png".
+			// atlas_imgs was an array of `tpAtlasImage` from the `tpMakeAtlas` function.
+
+		Inflating a DEFLATE block (decompressing memory stored in DEFLATE format)
 			tpInflate( in, in_bytes, out, out_bytes );
 			// this function requires knowledge of the un-compressed size
 			// does *not* do any internal realloc! Will return errors if an
@@ -69,38 +79,31 @@
 
 #define TP_ATLAS_MUST_FIT           1 // returns error from tpMakeAtlas if *any* input image does not fit
 #define TP_ATLAS_FLIP_Y_AXIS_FOR_UV 1 // flips output uv coordinate's y. Can be useful to "flip image on load"
-#define TP_ATLAS_PREMULTIPLY        1 // premultiply atlases before saving
+#define TP_ATLAS_EMPTY_COLOR        0x000000FF
 
 #include <stdint.h>
 
-typedef struct
-{
-	uint8_t r;
-	uint8_t g;
-	uint8_t b;
-	uint8_t a;
-} tpPixel;
+typedef struct tpPixel tpPixel;
+typedef struct tpImage tpImage;
+typedef struct tpIndexedImage tpIndexedImage;
+typedef struct tpAtlasImage tpAtlasImage;
 
-typedef struct
-{
-	int w;
-	int h;
-	tpPixel* pix;
-} tpImage;
-
-typedef struct
-{
-	int w;
-	int h;
-	uint8_t* pix;
-	uint8_t palette_len;
-	tpPixel palette[ 256 ];
-} tpIndexedImage;
+// Read this in the event of errors from any function
+extern const char* g_tpErrorReason;
 
 // return 1 for success, 0 for failures
 int tpInflate( void* in, int in_bytes, void* out, int out_bytes );
-int tpSavePNG( const char* fileName, tpImage* img );
-int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tpImage* pngs, int png_count, const char** names );
+int tpSavePNG( const char* fileName, const tpImage* img );
+
+// Constructs an atlas image in-memory. The atlas pixels are stored in the returned image. free the pixels
+// when done with them. The user must provide an array of tpAtlasImage for the `imgs` param. `imgs` holds
+// information about uv coordinates for an associated image in the `pngs` array. Output image has NULL
+// pixels buffer in the event of errors.
+tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int png_count, tpAtlasImage* imgs_out );
+
+// A decent "default" function, ready to use out-of-the-box. Saves out an easy to parse text formatted info file
+// along with an atlas image. `names` param can be optionally NULL.
+int tpDefaultSaveAtlas( const char* out_path_image, const char* out_path_atlas_txt, const tpImage* atlas, const tpAtlasImage* imgs, int img_count, const char** names );
 
 // these two functions return tpImage::pix as 0 in event of errors
 // call free on tpImage::pix when done
@@ -121,13 +124,44 @@ tpImage tpDepaletteIndexedImage( tpIndexedImage* img );
 // Resource: http://www.essentialmath.com/GDC2015/VanVerth_Jim_DoingMathwRGB.pdf
 void tpPremultiply( tpImage* img );
 
-// Read this in the event of errors
-extern const char* g_tpErrorReason;
+struct tpPixel
+{
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t a;
+};
+
+struct tpImage
+{
+	int w;
+	int h;
+	tpPixel* pix;
+};
+
+struct tpIndexedImage
+{
+	int w;
+	int h;
+	uint8_t* pix;
+	uint8_t palette_len;
+	tpPixel palette[ 256 ];
+};
+
+struct tpAtlasImage
+{
+	int img_index;    // index into the `imgs` array
+	int w, h;         // pixel w/h of original image
+	float minx, miny; // u coordinate
+	float maxx, maxy; // v coordinate
+	int fit;          // non-zero if image fit and was placed into the atlas
+};
 
 #define TINYPNG_H
 #endif
 
-#ifdef TINYPNG_IMPL
+#ifdef TINYPNG_IMPLEMENTATION
+#undef TINYPNG_IMPLEMENTATION
 
 #ifdef _WIN32
 
@@ -704,7 +738,7 @@ static long tpSaveData( tpSavePngData* s, tpImage* img, long dataPos )
 	return dataSize;
 }
 
-int tpSavePNG( const char* fileName, tpImage* img )
+int tpSavePNG( const char* fileName, const tpImage* img )
 {
 	tpSavePngData s;
 	long dataPos, dataSize, err;
@@ -718,9 +752,9 @@ int tpSavePNG( const char* fileName, tpImage* img )
 	s.prev = 0xFFFF;
 	s.runlen = 0;
 
-	tpSaveHeader( &s, img );
+	tpSaveHeader( &s, (tpImage*)img );
 	dataPos = ftell( s.fp );
-	dataSize = tpSaveData( &s, img, dataPos );
+	dataSize = tpSaveData( &s, (tpImage*)img, dataPos );
 
 	// End chunk.
 	tpBeginChunk( &s, "IEND", 0 );
@@ -1146,6 +1180,15 @@ typedef struct
 	int y;
 } tpv2i;
 
+struct tpIntegerImage
+{
+	int img_index;
+	tpv2i size;
+	tpv2i min;
+	tpv2i max;
+	int fit;
+};
+
 static tpv2i tpV2I( int x, int y )
 {
 	tpv2i v;
@@ -1177,17 +1220,7 @@ typedef struct
 	tpv2i max;
 } tpAtlasNode;
 
-typedef struct
-{
-	const char* name;
-	tpImage* png;
-	tpv2i size;
-	tpv2i min;
-	tpv2i max;
-	int fit;
-} tpRawImage;
-
-static tpAtlasNode* tpBestFit( int sp, tpImage* png, tpAtlasNode* nodes )
+static tpAtlasNode* tpBestFit( int sp, const tpImage* png, tpAtlasNode* nodes )
 {
 	int bestVolume = INT_MAX;
 	tpAtlasNode *bestNode = 0;
@@ -1214,7 +1247,7 @@ static tpAtlasNode* tpBestFit( int sp, tpImage* png, tpAtlasNode* nodes )
 	return bestNode;
 }
 
-static int tpPerimeterPred( tpRawImage* a, tpRawImage* b )
+static int tpPerimeterPred( tpIntegerImage* a, tpIntegerImage* b )
 {
 	int perimeterA = 2 * (a->size.x + a->size.y);
 	int perimeterB = 2 * (b->size.x + b->size.y);
@@ -1243,17 +1276,17 @@ void tpPremultiply( tpImage* img )
 	}
 }
 
-static void tpQSort( tpRawImage* items, int count )
+static void tpQSort( tpIntegerImage* items, int count )
 {
 	if ( count <= 1 ) return;
 
-	tpRawImage pivot = items[ count - 1 ];
+	tpIntegerImage pivot = items[ count - 1 ];
 	int low = 0;
 	for ( int i = 0; i < count - 1; ++i )
 	{
 		if ( tpPerimeterPred( items + i, &pivot ) )
 		{
-			tpRawImage tmp = items[ i ];
+			tpIntegerImage tmp = items[ i ];
 			items[ i ] = items[ low ];
 			items[ low ] = tmp;
 			low++;
@@ -1266,25 +1299,31 @@ static void tpQSort( tpRawImage* items, int count )
 	tpQSort( items + low + 1, count - 1 - low );
 }
 
-#define TP_MAX_ATLAS_NODES 1024
-
-int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int atlasWidth, int atlasHeight, tpImage* pngs, int png_count, const char** names )
+tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int png_count, tpAtlasImage* imgs_out )
 {
 	float w0, h0, div, wTol, hTol;
-	int atlasImageSize, atlasStride, sp;
-	FILE* fp = fopen( out_path_atlas_txt, "wt" );
-	char* atlasPixels = 0;
-	tpRawImage* images = (tpRawImage*)TP_ALLOCA( sizeof( tpRawImage ) * png_count );
-	tpAtlasNode* nodes = (tpAtlasNode*)TP_ALLOC( sizeof( tpAtlasNode ) * TP_MAX_ATLAS_NODES );
+	int atlas_image_size, atlas_stride, sp;
+	void* atlas_pixels = 0;
+	int atlas_node_capacity = png_count * 2;
+	tpImage atlas_image = { 0 };
+	tpIntegerImage* images = 0;
+	tpAtlasNode* nodes = 0;
+
+	TP_CHECK( pngs, "pngs array was NULL" );
+	TP_CHECK( imgs_out, "imgs_out array was NULL" );
+
+	images = (tpIntegerImage*)TP_ALLOCA( sizeof( tpIntegerImage ) * png_count );
+	nodes = (tpAtlasNode*)TP_ALLOC( sizeof( tpAtlasNode ) * atlas_node_capacity );
+	TP_CHECK( images, "out of mem" );
+	TP_CHECK( nodes, "out of mem" );
 
 	for ( int i = 0; i < png_count; ++i )
 	{
-		tpImage* png = pngs + i;
-		tpRawImage* image = images + i;
-		image->png = png;
+		const tpImage* png = pngs + i;
+		tpIntegerImage* image = images + i;
 		image->fit = 0;
 		image->size = tpV2I( png->w, png->h );
-		image->name = out_path_image;
+		image->img_index = i;
 	}
 
 	// Sort PNGs from largest to smallest
@@ -1303,22 +1342,20 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 	// perfect fit is found, deleting the node).
 	for ( int i = 0; i < png_count; ++i )
 	{
-		tpRawImage* image = images + i;
-		tpImage* png = image->png;
+		tpIntegerImage* image = images + i;
+		const tpImage* png = pngs + image->img_index;
 		int width = png->w;
 		int height = png->h;
-		tpAtlasNode *bestFit = tpBestFit( sp, png, nodes );
+		tpAtlasNode *best_fit = tpBestFit( sp, png, nodes );
+		if ( TP_ATLAS_MUST_FIT ) TP_CHECK( best_fit, "Not enough room to place image in atlas." );
 
-		if ( TP_ATLAS_MUST_FIT )
-			TP_CHECK( bestFit, "Not enough room to place image in atlas." );
-
-		image->min = bestFit->min;
+		image->min = best_fit->min;
 		image->max = tpAdd( image->min, image->size );
 
-		if ( bestFit->size.x == width && bestFit->size.y == height )
+		if ( best_fit->size.x == width && best_fit->size.y == height )
 		{
-			tpAtlasNode* lastNode = nodes + --sp;
-			*bestFit = *lastNode;
+			tpAtlasNode* last_node = nodes + --sp;
+			*best_fit = *last_node;
 			image->fit = 1;
 
 			continue;
@@ -1326,49 +1363,60 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 
 		image->fit = 1;
 
-		TP_ASSERT( sp < TP_MAX_ATLAS_NODES ); // make TP_MAX_ATLAS_NODES bigger
-		tpAtlasNode* newNode = nodes + sp++;
-		newNode->min = bestFit->min;
+		if ( sp == atlas_node_capacity )
+		{
+			int new_capacity = atlas_node_capacity * 2;
+			tpAtlasNode* new_nodes = (tpAtlasNode*)TP_ALLOC( sizeof( tpAtlasNode ) * new_capacity );
+			TP_CHECK( new_nodes, "out of mem" );
+			memcpy( new_nodes, nodes, sizeof( tpAtlasNode ) * sp );
+			TP_FREE( nodes );
+			nodes = new_nodes;
+			atlas_node_capacity = new_capacity;
+		}
+
+		tpAtlasNode* new_node = nodes + sp++;
+		new_node->min = best_fit->min;
 
 		// Split bestFit along x or y, whichever minimizes
 		// fragmentation of empty space
-		tpv2i d = tpSub( bestFit->size, tpV2I( width, height ) );
+		tpv2i d = tpSub( best_fit->size, tpV2I( width, height ) );
 		if ( d.x < d.y )
 		{
-			newNode->size.x = d.x;
-			newNode->size.y = height;
-			newNode->min.x += width;
+			new_node->size.x = d.x;
+			new_node->size.y = height;
+			new_node->min.x += width;
 
-			bestFit->size.y = d.y;
-			bestFit->min.y += height;
+			best_fit->size.y = d.y;
+			best_fit->min.y += height;
 		}
 
 		else
 		{
-			newNode->size.x = width;
-			newNode->size.y = d.y;
-			newNode->min.y += height;
+			new_node->size.x = width;
+			new_node->size.y = d.y;
+			new_node->min.y += height;
 
-			bestFit->size.x = d.x;
-			bestFit->min.x += width;
+			best_fit->size.x = d.x;
+			best_fit->min.x += width;
 		}
 
-		newNode->max = tpAdd( newNode->min, newNode->size );
+		new_node->max = tpAdd( new_node->min, new_node->size );
 	}
 
-	// Write the final atlas image, empty space as white
-	atlasStride = atlasWidth * sizeof( tpPixel );
-	atlasImageSize = atlasWidth * atlasHeight * sizeof( tpPixel );
-	atlasPixels = (char*)TP_ALLOC( atlasImageSize );
-	memset( atlasPixels, 0xFFFFFFFF, atlasImageSize );
+	// Write the final atlas image, use TP_ATLAS_EMPTY_COLOR as base color
+	atlas_stride = atlasWidth * sizeof( tpPixel );
+	atlas_image_size = atlasWidth * atlasHeight * sizeof( tpPixel );
+	atlas_pixels = TP_ALLOC( atlas_image_size );
+	TP_CHECK( atlas_image_size, "out of mem" );
+	memset( atlas_pixels, TP_ATLAS_EMPTY_COLOR, atlas_image_size );
 
 	for ( int i = 0; i < png_count; ++i )
 	{
-		tpRawImage* image = images + i;
+		tpIntegerImage* image = images + i;
 
 		if ( image->fit )
 		{
-			tpImage* png = image->png;
+			const tpImage* png = pngs + image->img_index;
 			char* pixels = (char*)png->pix;
 			tpv2i min = image->min;
 			tpv2i max = image->max;
@@ -1377,19 +1425,14 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 
 			for ( int row = min.y, y = 0; row < max.y; ++row, ++y )
 			{
-				char* rowPtr = atlasPixels + (row * atlasStride + atlasOffset);
-				TP_MEMCPY( rowPtr, pixels + y * texStride, texStride );
+				void* row_ptr = (char*)atlas_pixels + (row * atlas_stride + atlasOffset);
+				TP_MEMCPY( row_ptr, pixels + y * texStride, texStride );
 			}
 		}
 	}
 
-	// Save atlas image PNG to disk
-	tpImage atlasImage;
-	atlasImage.w = atlasWidth;
-	atlasImage.h = atlasHeight;
-	atlasImage.pix = (tpPixel*)atlasPixels;
-	if ( TP_ATLAS_PREMULTIPLY ) tpPremultiply( &atlasImage );
-	tpSavePNG( out_path_image, &atlasImage );
+	atlas_image.pix = (tpPixel*)atlas_pixels;
+	memset( imgs_out, 0, sizeof( tpAtlasImage ) * png_count );
 
 	// squeeze UVs inward by 128th of a pixel
 	// this prevents atlas bleeding. tune as necessary for good results.
@@ -1399,12 +1442,16 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 	wTol = w0 * div;
 	hTol = h0 * div;
 
-	fprintf( fp, "%s\n%d\n\n", out_path_image, png_count );
-
 	for ( int i = 0; i < png_count; ++i )
 	{
-		tpRawImage* image = images + i;
-		tpImage* png = image->png;
+		tpIntegerImage* image = images + i;
+		const tpImage* png = pngs + image->img_index;
+		tpAtlasImage* img_out = imgs_out + i;
+
+		img_out->img_index = image->img_index;
+		img_out->w = image->size.x;
+		img_out->h = image->size.y;
+		img_out->fit = image->fit;
 
 		if ( image->fit )
 		{
@@ -1413,8 +1460,8 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 
 			int width = png->w;
 			int height = png->h;
-			float min_x = (float)min.x * w0;
-			float min_y = (float)min.y * h0;
+			float min_x = (float)min.x * w0 + wTol;
+			float min_y = (float)min.y * h0 + hTol;
 			float max_x = (float)max.x * w0 - wTol;
 			float max_y = (float)max.y * h0 - hTol;
 
@@ -1426,20 +1473,50 @@ int tpMakeAtlas( const char* out_path_image, const char* out_path_atlas_txt, int
 				max_y = tmp;
 			}
 
-			if ( names ) fprintf( fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[ i ], width, height, min_x, min_y, max_x, max_y );
+			img_out->minx = min_x;
+			img_out->miny = min_y;
+			img_out->maxx = max_x;
+			img_out->maxy = max_y;
+		}
+	}
+
+tp_err:
+	TP_FREE( atlas_pixels );
+	TP_FREE( nodes );
+	return atlas_image;
+}
+
+int tpDefaultSaveAtlas( const char* out_path_image, const char* out_path_atlas_txt, const tpImage* atlas, const tpAtlasImage* imgs, int img_count, const char** names )
+{
+	FILE* fp = fopen( out_path_atlas_txt, "wt" );
+	TP_CHECK( fp, "unable to open out_path_atlas_txt in tpDefaultSaveAtlas" );
+
+	fprintf( fp, "%s\n%d\n\n", out_path_image, img_count );
+
+	for ( int i = 0; i < img_count; ++i )
+	{
+		const tpAtlasImage* image = imgs + i;
+		const char* name = names ? names[ i ] : 0;
+
+		if ( image->fit )
+		{
+			int width = image->w;
+			int height = image->h;
+			float min_x = image->minx;
+			float min_y = image->miny;
+			float max_x = image->maxx;
+			float max_y = image->maxy;
+
+			if ( name ) fprintf( fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[ i ], width, height, min_x, min_y, max_x, max_y );
 			else fprintf( fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y );
 		}
 	}
 
-	fclose( fp );
-	TP_FREE( atlasPixels );
-	TP_FREE( nodes );
-	return 1;
+	// Save atlas image PNG to disk
+	TP_CHECK( tpSavePNG( out_path_image, atlas ), "failed to save atlas image to disk" );
 
 tp_err:
 	fclose( fp );
-	TP_FREE( atlasPixels );
-	TP_FREE( nodes );
 	return 0;
 }
 
