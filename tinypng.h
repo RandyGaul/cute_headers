@@ -336,11 +336,6 @@ static uint32_t tpRev16( uint32_t a )
 	return a;
 }
 
-static uint32_t tpRev( uint32_t a, uint32_t len )
-{
-	return tpRev16( a ) >> (16 - len);
-}
-
 // RFC 1951 section 3.2.2
 static int tpBuild( tpState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 {
@@ -448,8 +443,6 @@ static int tpDynamic( tpState* s )
 		lenlens[ g_tpPermutationOrder[ i ] ] = (uint8_t)tpReadBits( s, 3 );
 
 	// Build the tree for decoding code lengths
-	int lenlens2[ 19 ] = { 0 };
-	for ( int i = 0; i < 19; ++i ) lenlens2[ i ] = lenlens[ i ];
 	s->nlen = tpBuild( 0, s->len, lenlens, 19 );
 	uint8_t lens[ 288 + 32 ];
 
@@ -917,7 +910,6 @@ tpImage tpLoadPNGMem( const void* png_data, int png_length )
 	TP_CHECK( ihdr, "unable to find IHDR chunk" );
 	bit_depth = ihdr[ 8 ];
 	color_type = ihdr[ 9 ];
-	bpp; // bytes per pixel
 	TP_CHECK( bit_depth == 8, "only bit-depth of 8 is supported" );
 
 	switch ( color_type )
@@ -1180,14 +1172,14 @@ typedef struct
 	int y;
 } tpv2i;
 
-struct tpIntegerImage
+typedef struct
 {
 	int img_index;
 	tpv2i size;
 	tpv2i min;
 	tpv2i max;
 	int fit;
-};
+} tpIntegerImage;
 
 static tpv2i tpV2I( int x, int y )
 {
@@ -1299,15 +1291,19 @@ static void tpQSort( tpIntegerImage* items, int count )
 	tpQSort( items + low + 1, count - 1 - low );
 }
 
-tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int png_count, tpAtlasImage* imgs_out )
+tpImage tpMakeAtlas( int atlas_width, int atlas_height, const tpImage* pngs, int png_count, tpAtlasImage* imgs_out )
 {
 	float w0, h0, div, wTol, hTol;
 	int atlas_image_size, atlas_stride, sp;
 	void* atlas_pixels = 0;
 	int atlas_node_capacity = png_count * 2;
-	tpImage atlas_image = { 0 };
+	tpImage atlas_image;
 	tpIntegerImage* images = 0;
 	tpAtlasNode* nodes = 0;
+
+	atlas_image.w = atlas_width;
+	atlas_image.h = atlas_height;
+	atlas_image.pix = 0;
 
 	TP_CHECK( pngs, "pngs array was NULL" );
 	TP_CHECK( imgs_out, "imgs_out array was NULL" );
@@ -1334,8 +1330,8 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 	sp = 1;
 
 	nodes[ 0 ].min = tpV2I( 0, 0 );
-	nodes[ 0 ].max = tpV2I( atlasWidth, atlasHeight );
-	nodes[ 0 ].size = tpV2I( atlasWidth, atlasHeight );
+	nodes[ 0 ].max = tpV2I( atlas_width, atlas_height );
+	nodes[ 0 ].size = tpV2I( atlas_width, atlas_height );
 
 	// Nodes represent empty space in the atlas. Placing a texture into the
 	// atlas involves splitting a node into two smaller pieces (or, if a
@@ -1404,8 +1400,8 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 	}
 
 	// Write the final atlas image, use TP_ATLAS_EMPTY_COLOR as base color
-	atlas_stride = atlasWidth * sizeof( tpPixel );
-	atlas_image_size = atlasWidth * atlasHeight * sizeof( tpPixel );
+	atlas_stride = atlas_width * sizeof( tpPixel );
+	atlas_image_size = atlas_width * atlas_height * sizeof( tpPixel );
 	atlas_pixels = TP_ALLOC( atlas_image_size );
 	TP_CHECK( atlas_image_size, "out of mem" );
 	memset( atlas_pixels, TP_ATLAS_EMPTY_COLOR, atlas_image_size );
@@ -1420,24 +1416,23 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 			char* pixels = (char*)png->pix;
 			tpv2i min = image->min;
 			tpv2i max = image->max;
-			int atlasOffset = min.x * sizeof( tpPixel );
-			int texStride = png->w * sizeof( tpPixel );
+			int atlas_offset = min.x * sizeof( tpPixel );
+			int tex_stride = png->w * sizeof( tpPixel );
 
 			for ( int row = min.y, y = 0; row < max.y; ++row, ++y )
 			{
-				void* row_ptr = (char*)atlas_pixels + (row * atlas_stride + atlasOffset);
-				TP_MEMCPY( row_ptr, pixels + y * texStride, texStride );
+				void* row_ptr = (char*)atlas_pixels + (row * atlas_stride + atlas_offset);
+				TP_MEMCPY( row_ptr, pixels + y * tex_stride, tex_stride );
 			}
 		}
 	}
 
 	atlas_image.pix = (tpPixel*)atlas_pixels;
-	memset( imgs_out, 0, sizeof( tpAtlasImage ) * png_count );
 
 	// squeeze UVs inward by 128th of a pixel
 	// this prevents atlas bleeding. tune as necessary for good results.
-	w0 = 1.0f / (float)(atlasWidth);
-	h0 = 1.0f / (float)(atlasHeight);
+	w0 = 1.0f / (float)(atlas_width);
+	h0 = 1.0f / (float)(atlas_height);
 	div = 1.0f / 128.0f;
 	wTol = w0 * div;
 	hTol = h0 * div;
@@ -1445,7 +1440,6 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 	for ( int i = 0; i < png_count; ++i )
 	{
 		tpIntegerImage* image = images + i;
-		const tpImage* png = pngs + image->img_index;
 		tpAtlasImage* img_out = imgs_out + i;
 
 		img_out->img_index = image->img_index;
@@ -1458,8 +1452,6 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 			tpv2i min = image->min;
 			tpv2i max = image->max;
 
-			int width = png->w;
-			int height = png->h;
 			float min_x = (float)min.x * w0 + wTol;
 			float min_y = (float)min.y * h0 + hTol;
 			float max_x = (float)max.x * w0 - wTol;
@@ -1480,9 +1472,13 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 		}
 	}
 
+	TP_FREE( nodes );
+	return atlas_image;
+
 tp_err:
 	TP_FREE( atlas_pixels );
 	TP_FREE( nodes );
+	atlas_image.pix = 0;
 	return atlas_image;
 }
 
