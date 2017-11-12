@@ -1226,7 +1226,7 @@ void tgPrintGLErrors_internal( char* file, uint32_t line )
 
 		const char* str = tgGetErrorString( code );
 		const char* des = tgGetErrorDescription( code );
-		TG_WARN( "OpenGL Error %s ( %u ): %u, %s: \n", last_slash, line, code, str, des );
+		TG_WARN( "OpenGL Error %s ( %u ): %u, %s, %s: \n", last_slash, line, code, str, des );
 	}
 }
 #endif

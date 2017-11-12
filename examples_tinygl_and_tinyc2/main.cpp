@@ -116,7 +116,7 @@ void ResizeFramebuffer( int w, int h )
 	else tgFreeFramebuffer( &fb );
 	screen_w = (float)w;
 	screen_h = (float)h;
-	tgMakeFramebuffer( &fb, &post_fx, w, h );
+	tgMakeFramebuffer( &fb, &post_fx, w, h, 0 );
 }
 
 void Reshape( GLFWwindow* window, int width, int height )
@@ -1058,7 +1058,7 @@ int main( )
 
 		// flush all draw calls to screen
 		// optionally the fb can be NULL or 0 to signify no post-processing fx
-		tgFlush( ctx, SwapBuffers, use_post_fx ? &fb : 0 );
+		tgFlush( ctx, SwapBuffers, use_post_fx ? &fb : 0, width, height );
 		TG_PRINT_GL_ERRORS( );
 		verts.clear( );
 	}
