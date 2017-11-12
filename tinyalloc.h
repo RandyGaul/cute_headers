@@ -1,5 +1,9 @@
 /*
 	tinyalloc.h - v1.01
+	
+	To create implementation (the function definitions)
+		#define TINYALLOC_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
 
 	SUMMARY:
 	This header contains a collection of allocators. None of the allocators are
@@ -30,12 +34,6 @@
 	Revision history:
 		1.0  (11/01/2017) initial release
 		1.01 (11/11/2017) added leak checker for malloc/free
-*/
-
-/*
-	To create implementation (the function definitions)
-		#define TINYALLOC_IMPL
-	in *one* C/CPP file (translation unit) that includes this file
 */
 
 #if !defined(TINYALLOC_H)
@@ -83,7 +81,8 @@ int TA_CHECK_FOR_LEAKS();
 #define TINYALLOC_H
 #endif
 
-#if defined(TINYALLOC_IMPL)
+#if defined(TINYALLOC_IMPLEMENTATION)
+#undef TINYALLOC_IMPLEMENTATION
 
 struct taStack
 {
@@ -259,7 +258,7 @@ inline void taLeakCheckFree(void* mem)
 inline int TA_CHECK_FOR_LEAKS() {}
 #endif // TA_LEAK_CHECK
 
-#endif // TINYALLOC_IMPL
+#endif // TINYALLOC_IMPLEMENTATION
 
 /*
 	This is free and unencumbered software released into the public domain.

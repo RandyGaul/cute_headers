@@ -3,16 +3,16 @@
 /*
 	tinygl - v1.02
 
+	To create implementation (the function definitions)
+		#define TINYGL_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	Summary:
 	Wrapper for OpenGL ES 3.0+ for vertex attributes, shader creation, draw calls,
 	and post-processing fx. The API was carefully designed to facilitate trying out
 	one-off techqniques or experiments, of which are critical for certain kinds
 	of development styles (i.e. fast iteration). Credit goes to thatgamecompany
 	for the original designs + idea of this API style.
-
-	To create implementation (the function definitions)
-		#define TINYGL_IMPL
-	in *one* C/CPP file (translation unit) that includes this file
 */
 
 /*
@@ -243,7 +243,8 @@ void tgCopy( float* dst, float* src );
 #define TINYGL_H
 #endif
 
-#ifdef TINYGL_IMPL
+#ifdef TINYGL_IMPLEMENTATION
+#undef TINYGL_IMPLEMENTATION
 
 #define TG_OFFSET_OF( type, member ) ((uint32_t)((size_t)(&((type*)0)->member)))
 
@@ -1231,4 +1232,4 @@ void tgPrintGLErrors_internal( char* file, uint32_t line )
 }
 #endif
 
-#endif // TINYGL_IMPL
+#endif // TINYGL_IMPLEMENTATION

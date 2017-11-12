@@ -2,13 +2,13 @@
 #include "glfw/glfw_config.h"
 #include "glfw/glfw3.h"
 
-#define TINYGL_IMPL
+#define TINYGL_IMPLEMENTATION
 #include "../tinygl.h"
 
-#define TT_IMPLEMENTATION
+#define TINYTIME_IMPLEMENTATION
 #include "../tinytime.h"
 
-#define TINYC2_IMPL
+#define TINYC2_IMPLEMENTATION
 #include "../tinyc2.h"
 
 GLFWwindow* window;

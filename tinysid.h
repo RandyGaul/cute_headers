@@ -1,6 +1,10 @@
 /*
 	tinysid.h - v1.0
 
+	To create implementation (the function definitions)
+		#define TINYSID_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	SUMMARY:
 		Implements a compile-time string hasher via preprocessing.
 		Preprocesses an input file and turns all SID( "string" ) instances
@@ -36,7 +40,8 @@ uint64_t FNV1a(const void* buf, int len);
 #define TINYSID_H
 #endif
 
-#ifdef TINYSID_IMPL
+#ifdef TINYSID_IMPLEMENTATION
+#undef TINYSID_IMPLEMENTATION
 
 #include <stdlib.h>   // malloc, free
 #include <stdio.h>    // fopen, fseek, ftell, fclose, fwrite, fread
@@ -209,7 +214,7 @@ int tsPreprocess( const char* path, const char* out_path )
 
 		unsigned h = FNV1a_str_end( data, ptr ); // TODO: detect and report collisions
 		int bytes = ptr - data;
-		sprintf( out, "0x%.16" PRIx64 " /* \"%.*s\" */", h, bytes, data );
+		sprintf( out, "0x%.16" PRIx64 " /* \"%.*s\" */", (long long unsigned int)h, bytes, data );
 		out += 19 + bytes;
 
 		data = ptr + 1;
@@ -233,7 +238,7 @@ int tsPreprocess( const char* path, const char* out_path )
 	return fileWasModified;
 }
 
-#endif
+#endif // TINYSID_IMPLEMENTATION
 
 /*
 	zlib license:

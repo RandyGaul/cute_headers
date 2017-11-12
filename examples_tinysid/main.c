@@ -1,8 +1,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 
-#define TINYSID_IMPL
-#define TINYFILES_IMPL
+#define TINYSID_IMPLEMENTATION
 #include "../tinysid.h"
+
+#define TINYFILES_IMPLEMENTATION
 #include "../tinyfiles.h"
 
 #include <string.h>

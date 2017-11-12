@@ -1,3 +1,11 @@
+/*
+	tinytime.h - v1.00
+
+	To create implementation (the function definitions)
+		#define TINYTIME_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+*/
+
 #if !defined( TINYTIME_H )
 
 #include <stdint.h>
@@ -55,7 +63,7 @@ void ttRecord( ttTimer* timer );
 #define TINYTIME_H
 #endif
 
-#ifdef TT_IMPLEMENTATION
+#ifdef TINYTIME_IMPLEMENTATION
 
 
 // These functions are intended be called from a single thread only. In a
@@ -179,7 +187,7 @@ void ttRecord( ttTimer* timer );
 
 #endif
 
-#endif // TT_IMPLEMENTATION
+#endif // TINYTIME_IMPLEMENTATION
 
 /*
 	zlib license:

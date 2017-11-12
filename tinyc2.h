@@ -1,6 +1,10 @@
 /*
 	tinyc2.h - v1.03
 
+	To create implementation (the function definitions)
+		#define TINYC2_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	SUMMARY:
 	tinyc2 is a single-file header that implements 2D collision detection routines
 	that test for overlap, and optionally can find the collision manifold. The
@@ -26,12 +30,6 @@
 		seemk             1.02 - fix branching bug in c2Collide
 		sro5h             1.02 - bug reports for multiple manifold funcs
 		sro5h             1.03 - work involving quality of life fixes for manifolds
-*/
-
-/*
-	To create implementation (the function definitions)
-		#define TINYC2_IMPL
-	in *one* C/CPP file (translation unit) that includes this file
 */
 
 /*
@@ -408,7 +406,7 @@ C2_INLINE void c2BBVerts( c2v* out, c2AABB* bb )
 #define TINYC2_H
 #endif
 
-#ifdef TINYC2_IMPL
+#ifdef TINYC2_IMPLEMENTATION
 
 int c2Collided( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB )
 {
@@ -1671,7 +1669,7 @@ void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, 
 	if ( flip ) m->normal = c2Neg( m->normal );
 }
 
-#endif // TINYC2_IMPL
+#endif // TINYC2_IMPLEMENTATION
 
 /*
 	zlib license:

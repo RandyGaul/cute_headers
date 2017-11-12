@@ -1,6 +1,10 @@
 /*
 	tinyutf.h v1.0
-	
+
+	To create implementation (the function definitions)
+		#define TINYUTF_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	SUMMARY:
 	tinyutf is primarily for the use of utf8 encoding. There is a great website
 	called http://utf8everywhere.org/ that contains a lot of great info. The
@@ -58,7 +62,9 @@
 #if !defined( TINY_UTF_H )
 #define TINY_UTF_H
 
-#define _CRT_SECURE_NO_WARNINGS FUCK_YOU
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 #include <wchar.h>
 
 // reads text and will return text + 1..4 depending on the decoded code point
@@ -77,7 +83,7 @@ wchar_t* tuEncode16( wchar_t* text, int cp );
 
 #endif
 
-#if defined( TINY_UTF_IMPLEMENTATION )
+#if defined( TINYUTF_IMPLEMENTATION )
 
 // utf8 functions created from RFC-3629
 
@@ -158,7 +164,7 @@ void tuShorten( const wchar_t* utf16_text, int out_size, char* out_utf8_text )
 	}
 }
 
-#endif
+#endif // TINYUTF_IMPLEMENTATION
 
 /*
 	This is free and unencumbered software released into the public domain.

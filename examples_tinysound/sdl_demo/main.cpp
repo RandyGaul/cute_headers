@@ -1,7 +1,10 @@
+#include <Windows.h>
+
+#define _CRT_SECURE_NO_WARNINGS
 #include "SDL2/SDL.h"
 
-#define TS_IMPLEMENTATION
-#define TS_FORCE_SDL
+#define TINYSOUND_IMPLEMENTATION
+#define TINYSOUND_FORCE_SDL
 #include "../../tinysound.h"
 
 int main( int argc, char *args[] )

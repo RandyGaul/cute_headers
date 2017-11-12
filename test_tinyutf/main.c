@@ -1,4 +1,4 @@
-#define TINY_UTF_IMPLEMENTATION
+#define TINYUTF_IMPLEMENTATION
 #include "../tinyutf.h"
 
 #include <stdlib.h>

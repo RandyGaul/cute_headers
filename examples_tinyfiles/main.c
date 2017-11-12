@@ -1,6 +1,6 @@
 #include <Windows.h>
 
-#define TINYFILES_IMPL
+#define TINYFILES_IMPLEMENTATION
 #include "tinyfiles.h"
 
 #include <stdio.h>

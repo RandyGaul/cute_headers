@@ -3,7 +3,7 @@
 
 
 	To create implementation (the function definitions)
-		#define TINYPATH_IMPL
+		#define TINYPATH_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
 
@@ -85,7 +85,8 @@ void tpDoUnitTests();
 #define TINYPATH_H
 #endif
 
-#if defined( TINYPATH_IMPL )
+#if defined( TINYPATH_IMPLEMENTATION )
+#endif TINYPATH_IMPLEMENTATION
 
 #ifdef _WIN32
 
@@ -499,7 +500,7 @@ int tpCompact( const char* path, char* out, int n )
 
 #endif // TP_UNIT_TESTS
 
-#endif
+#endif // TINYPATH_IMPLEMENTATION
 
 /*
 	This is free and unencumbered software released into the public domain.

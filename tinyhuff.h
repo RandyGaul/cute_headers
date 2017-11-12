@@ -1,6 +1,10 @@
 /*
 	tinyhuff.h - v1.00
 
+	To create implementation (the function definitions)
+		#define TINYHUFF_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	SUMMARY:
 
 		This header contains functions to compress and decompress data streams via
@@ -76,7 +80,7 @@
 	you see fit. Compression keys can be used to store the compression keys themselves! This would
 	be effective since the keys usually contain many zero bytes and some repitition.
 
-		#define TINYHUFF_IMPL
+		#define TINYHUFF_IMPLEMENTATION
 		#include "../tinyhuff.h"
 
 		#include <stdio.h>
@@ -130,12 +134,6 @@
 			return 0;
 		}
 
-/*
-
-/*
-	To create implementation (the function definitions)
-		#define TINYHUFF_IMPL
-	in *one* C/CPP file (translation unit) that includes this file
 */
 
 #if !defined( TINYHUFF_H )
@@ -175,7 +173,8 @@ void thDecompress( const thKey* decompression_key, const void* in, int in_bits, 
 #define TINYHUFF_H
 #endif
 
-#if defined( TINYHUFF_IMPL )
+#if defined( TINYHUFF_IMPLEMENTATION )
+#undef TINYHUFF_IMPLEMENTATION
 
 const char* th_error_reason;
 
@@ -765,7 +764,7 @@ void thDecompress( const thKey* decompression_key, const void* in_buf, int in_bi
 
 #endif // TH_INTERNAL_TESTS
 
-#endif // TINYHUFF_IMPL
+#endif // TINYHUFF_IMPLEMENTATION
 
 /*
 	zlib license:

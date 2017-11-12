@@ -3,7 +3,7 @@
 #include "stb_vorbis.c"
 
 // create header + implementation
-#define TS_IMPLEMENTATION
+#define TINYSOUND_IMPLEMENTATION
 #include "tinysound.h"
 
 tsLoadedSound vorbis_loaded;

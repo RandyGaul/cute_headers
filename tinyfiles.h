@@ -2,7 +2,7 @@
 	tinyfiles.h - v1.0
 
 	To create implementation (the function definitions)
-		#define TINYFILES_IMPL
+		#define TINYFILES_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
 	Summary:
@@ -187,7 +187,8 @@ void tfDoUnitTests();
 #define TINYFILES_H
 #endif
 
-#ifdef TINYFILES_IMPL
+#ifdef TINYFILES_IMPLEMENTATION
+#undef TINYFILES_IMPLEMENTATION
 
 #define tfSafeStrCpy( dst, src, n, max ) tfSafeStrCopy_internal( dst, src, n, max, __FILE__, __LINE__ )
 static int tfSafeStrCopy_internal( char* dst, const char* src, int n, int max, const char* file, int line )

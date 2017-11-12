@@ -1,6 +1,10 @@
 /*
 	tinysound.h - v1.08
 
+	To create implementation (the function definitions)
+		#define TINYSOUND_IMPLEMENTATION
+	in *one* C/CPP file (translation unit) that includes this file
+
 	Summary:
 	tinysound is a C API for loading, playing, looping, panning and fading mono
 	and stero sounds. This means tinysound imparts no external DLLs or large
@@ -9,7 +13,7 @@
 	tinysound implements a custom SSE2 mixer by explicitly locking and unlocking
 	portions of an internal. tinysound uses CoreAudio for Apple machines (like
 	OSX and iOS). SDL is used for all other platforms. Define TS_FORCE_SDL
-	before placaing the TS_IMPLEMENTATION in order to force the use of SDL.
+	before placaing the TINYSOUND_IMPLEMENTATION in order to force the use of SDL.
 
 	Revision history:
 		1.0  (06/04/2016) initial release
@@ -49,10 +53,6 @@
 */
 
 /*
-	To create implementation (the function definitions)
-		#define TS_IMPLEMENTATION
-	in *one* C/CPP file (translation unit) that includes this file
-
 	DOCUMENTATION (very quick intro):
 	1. create context
 	2. load sounds from disk into memory
@@ -211,7 +211,7 @@
 
 // Use TS_FORCE_SDL to override the above macros and use
 // the SDL port.
-#ifdef TS_FORCE_SDL
+#ifdef TINYSOUND_FORCE_SDL
 
 	#undef TS_PLATFORM
 	#define TS_PLATFORM TS_SDL
@@ -398,7 +398,8 @@ void tsStopAllSounds( tsContext* ctx );
 #define TINYSOUND_H
 #endif
 
-#ifdef TS_IMPLEMENTATION
+#ifdef TINYSOUND_IMPLEMENTATION
+#undef TINYSOUND_IMPLEMENTATION
 
 #if !defined _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
@@ -407,8 +408,8 @@ void tsStopAllSounds( tsContext* ctx );
 // Change the allocator as necessary
 #if !defined( TS_ALLOC )
 	#include <stdlib.h>	// malloc, free
-	#define TS_ALLOC(size) ALLOC(size)
-	#define TS_FREE(mem) FREE(mem)
+	#define TS_ALLOC(size) malloc(size)
+	#define TS_FREE(mem) free(mem)
 #endif
 
 #include <stdio.h>	// fopen, fclose
@@ -418,10 +419,17 @@ void tsStopAllSounds( tsContext* ctx );
 
 #if TS_PLATFORM == TS_WINDOWS
 
-	#include <mmreg.h>
+	#ifndef _WINDOWS_
+		#include <Windows.h>
+	#endif
+
+	#ifndef _WAVEFORMATEX_
+		#include <mmreg.h>
+	#endif
+
 	#include <dsound.h>
 	#undef PlaySound
-	
+
 	#if defined( _MSC_VER )
 		#pragma comment( lib, "dsound.lib" )
 	#endif
@@ -2649,6 +2657,8 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 	}
 }
 
+#endif // TINYSOUND_IMPLEMENTATION
+
 /*
 	zlib license:
 
@@ -2669,5 +2679,3 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 	     be misrepresented as being the original software.
 	  3. This notice may not be removed or altered from any source distribution.
 */
-
-#endif

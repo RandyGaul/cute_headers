@@ -1,7 +1,6 @@
 ﻿/*
 	tinypng.h - v1.02
 
-
 	To create implementation (the function definitions)
 		#define TINYPNG_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
@@ -1516,7 +1515,7 @@ tp_err:
 	return 0;
 }
 
-#endif // TINYDEFLATE_IMPL
+#endif // TINYPNG_IMPLEMENTATION
 
 /*
 	This is free and unencumbered software released into the public domain.

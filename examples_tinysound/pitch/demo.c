@@ -1,4 +1,4 @@
-#define TS_IMPLEMENTATION
+#define TINYSOUND_IMPLEMENTATION
 #include "../../tinysound.h"
 
 // this file was originally written by Aaron Balint, see:

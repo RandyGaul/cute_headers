@@ -1,4 +1,4 @@
-#define TINYHUFF_IMPL
+#define TINYHUFF_IMPLEMENTATION
 #include "../tinyhuff.h"
 
 #include <stdio.h>

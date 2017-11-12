@@ -1,5 +1,5 @@
 // create header + implementation
-#define TS_IMPLEMENTATION
+#define TINYSOUND_IMPLEMENTATION
 #include "tinysound.h"
 
 #include <stdio.h>
