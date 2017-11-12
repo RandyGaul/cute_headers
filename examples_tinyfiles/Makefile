@@ -1,2 +1,2 @@
 example : main.c ../tinyfiles.h
-	gcc -I../ main.c -o $@
+	gcc -I../ -Wall -Werror -pedantic main.c -o $@
