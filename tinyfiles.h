@@ -152,11 +152,12 @@ void tfDoUnitTests();
 		FILETIME time;
 	};
 
-#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	#include <sys/stat.h>
 	#include <dirent.h>
 	#include <unistd.h>
+    #include <time.h>
 
 	struct tfFILE
 	{
@@ -363,7 +364,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 		return GetFileAttributesExA( path, GetFileExInfoStandard, &unused );
 	}
 
-#elif TF_PLATFORM == TF_MAC || TN_PLATFORM == TN_UNIX
+#elif TF_PLATFORM == TF_MAC || TF_PLATFORM == TF_UNIX
 
 	int tfReadFile( tfDIR* dir, tfFILE* file )
 	{
@@ -439,7 +440,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 		if ( stat( path_a, &info ) ) return 0;
 		time_a = info.st_mtime;
 		if ( stat( path_b, &info ) ) return 0;
-		time_a = info.st_mtime;
+		time_b = info.st_mtime;
 		return (int)difftime( time_a, time_b );
 	}
 
