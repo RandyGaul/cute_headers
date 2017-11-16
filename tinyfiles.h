@@ -440,7 +440,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 		if ( stat( path_a, &info ) ) return 0;
 		time_a = info.st_mtime;
 		if ( stat( path_b, &info ) ) return 0;
-		time_a = info.st_mtime;
+		time_b = info.st_mtime;
 		return (int)difftime( time_a, time_b );
 	}
 
