@@ -157,6 +157,7 @@ void tfDoUnitTests();
 	#include <sys/stat.h>
 	#include <dirent.h>
 	#include <unistd.h>
+    #include <time.h>
 
 	struct tfFILE
 	{
