@@ -407,7 +407,7 @@ void tgMakeFramebuffer( tgFramebuffer* fb, tgShader* shader, int w, int h, int u
 	glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex_id, 0 );
 
 	// Generate depth and stencil attachments for the fbo using a RenderBuffer.
-	GLuint rb_id = ~0;
+	GLuint rb_id = (GLuint)~0;
 	if ( use_depth_test )
 	{
 		glGenRenderbuffers( 1, &rb_id );
@@ -540,7 +540,7 @@ void tgMakeRenderable( tgRenderable* r, tgVertexData* vd )
 	r->buffer_number = 0;
 	r->need_new_sync = 0;
 	r->program = 0;
-	r->state.key = 0;;
+	r->state.key = 0;
 
 	if ( vd->usage == GL_STATIC_DRAW )
 	{
@@ -667,10 +667,10 @@ void tgSetShader( tgRenderable* r, tgShader* program )
 
 	for ( uint32_t i = 0; i < r->buffer_count; ++i )
 	{
-		GLuint* buffer = (GLuint*)r->buffers + i;
+		GLuint* data_buffer = (GLuint*)r->buffers + i;
 
-		glGenBuffers( 1, buffer );
-		glBindBuffer( GL_ARRAY_BUFFER, *buffer );
+		glGenBuffers( 1, data_buffer );
+		glBindBuffer( GL_ARRAY_BUFFER, *data_buffer );
 		glBufferData( GL_ARRAY_BUFFER, r->data.buffer_size * r->data.vertex_stride, NULL, usage );
 		r->fences[ i ] = glFenceSync( GL_SYNC_GPU_COMMANDS_COMPLETE, 0 );
 	}
@@ -930,7 +930,7 @@ uint32_t tgGetGLEnum( uint32_t type )
 
 	default:
 		TG_ASSERT( 0 );
-		return ~0;
+		return (uint32_t)~0;
 	}
 }
 
@@ -942,7 +942,7 @@ void tgDoMap( tgDrawCall* call, tgRenderable* render )
 	tgUnmap( );
 }
 
-static void tgRender( tgContext* ctx, tgDrawCall* call )
+static void tgRender( tgDrawCall* call )
 {
 	tgRenderable* render = call->r;
 	uint32_t texture_count = call->texture_count;
@@ -1030,7 +1030,7 @@ void tgPresent( void* context, tgFramebuffer* fb, int w, int h )
 	for ( uint32_t i = 0; i < ctx->count; ++i )
 	{
 		tgDrawCall* call = ctx->calls + i;
-		tgRender( ctx, call );
+		tgRender( call );
 	}
 
 #if TG_LINE_RENDERER
@@ -1043,7 +1043,7 @@ void tgPresent( void* context, tgFramebuffer* fb, int w, int h )
 		call.verts = ctx->line_verts;
 		call.r = &ctx->line_r;
 		call.texture_count = 0;
-		tgRender( ctx, &call );
+		tgRender( &call );
 		ctx->line_vert_count = 0;
 	}
 #endif

@@ -387,8 +387,8 @@ static int tpStored( tpState* s )
 
 	// 3.2.4
 	// read LEN and NLEN, should complement each other
-	uint16_t LEN = tpReadBits( s, 16 );
-	uint16_t NLEN = tpReadBits( s, 16 );
+	uint16_t LEN = (uint16_t)tpReadBits( s, 16 );
+	uint16_t NLEN = (uint16_t)tpReadBits( s, 16 );
 	TP_CHECK( LEN == (uint16_t)(~NLEN), "Failed to find LEN and NLEN as complements within stored (uncompressed) stream." );
 	TP_CHECK( s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream." );
 	char* p = tpPtr( s );
@@ -1129,7 +1129,7 @@ tpIndexedImage tpLoadIndexedPNGMem( const void *png_data, int png_length )
 
 	int plte_len = tpGetChunkByteLength( plte ) / 3;
 	tpUnpackPalette( img.palette, plte, plte_len, trns, tpGetChunkByteLength( trns ) );
-	img.palette_len = plte_len;
+	img.palette_len = (uint8_t)plte_len;
 
 	TP_FREE( data );
 	return img;
