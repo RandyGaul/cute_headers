@@ -20,6 +20,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++ | public domain
 **[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++ | public domain
 **[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++ | public domain
+**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 0.01 | C/C++ | public domain
 
 &ast; Not yet hit first release
 
