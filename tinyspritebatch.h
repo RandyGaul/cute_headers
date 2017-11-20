@@ -173,7 +173,7 @@ typedef void (*submit_batch_t)(spritebatch_sprite_t* sprites, int count);
 
 // tinyspritebatch.h needs to know how to get the pixels of an image, generate textures handles (for
 // example glGenTextures for OpenGL), and destroy texture handles. These functions are all called
-// from within the `spritebatch_defrag` function.
+// from within the `spritebatch_defrag` function, and sometimes from `spritebatch_flush`.
 typedef void* (*get_pixels_t)(SPRITEBATCH_U64 image_id);
 typedef SPRITEBATCH_U64 (*generate_texture_handle_t)(void* pixels, int w, int h);
 typedef void (*destroy_texture_handle_t)(SPRITEBATCH_U64 texture_id);
