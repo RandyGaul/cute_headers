@@ -101,6 +101,7 @@
 					sprites[i].sin_rotation_angle
 					);
 
+			spritebatch_tick(&batcher);
 			spritebatch_defrag(&batcher);
 			spritebatch_flush(&batcher);
 		}
@@ -725,6 +726,10 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config)
 	if (sb->ticks_to_decay_texture < 1) return 1;
 	if (sb->ratio_to_decay_atlas < 0 || sb->ratio_to_decay_atlas > 1.0f) return 1;
 	if (sb->ratio_to_merge_atlases < 0 || sb->ratio_to_merge_atlases > 0.5f) return 1;
+	if (!sb->batch_callback) return 1;
+	if (!sb->get_pixels_callback) return 1;
+	if (!sb->generate_texture_callback) return 1;
+	if (!sb->delete_texture_callback) return 1;
 
 	// initialize input buffer
 	sb->input_count = 0;
@@ -756,6 +761,7 @@ void spritebatch_term(spritebatch_t* sb)
 {
 	SPRITEBATCH_FREE(sb->mem_ctx, sb->input_buffer);
 	SPRITEBATCH_FREE(sb->mem_ctx, sb->sprites);
+	SPRITEBATCH_FREE(sb->mem_ctx, sb->key_buffer);
 	hashtable_term(&sb->sprites_to_lonely_textures);
 	hashtable_term(&sb->sprites_to_atlases);
 
