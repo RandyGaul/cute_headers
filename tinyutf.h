@@ -81,6 +81,25 @@ const wchar_t* tuDecode16( const wchar_t* text, int* cp );
 // reads text and will return text + 1..2 depending on code point
 wchar_t* tuEncode16( wchar_t* text, int cp );
 
+// converts utf8 `in` to "wide" format utf16 `out`
+void tuWiden( const char* in, wchar_t* out );
+
+// converts utf16 `in` to "wide" format utf8 `out`
+void tuShorten( const wchar_t* in, char* out );
+
+// additional overloads
+#ifdef __cplusplus
+void tuWiden( const char* in, int in_len, wchar_t* out );
+void tuWiden( const char* in, wchar_t* out, int out_len );
+void tuWiden( const char* in, int in_len, wchar_t* out, int out_len );
+#endif
+
+#ifdef __cplusplus
+void tuShorten( const wchar_t* in, int in_len, char* out );
+void tuShorten( const wchar_t* in, char* out, int out_len );
+void tuShorten( const wchar_t* in, int in_len, char* out, int out_len );
+#endif
+
 #endif
 
 #if defined( TINYUTF_IMPLEMENTATION )
@@ -142,27 +161,97 @@ wchar_t* tuEncode16( wchar_t* text, int cp )
 	return text;
 }
 
-void tuWiden( const char* utf8_text, int in_size, wchar_t* out_utf16_text )
+void tuWiden( const char* in, wchar_t* out )
 {
-	const char* original = utf8_text;
-	while ( utf8_text < original + in_size )
+	int cp;
+	while ( *in )
 	{
-		int cp;
-		utf8_text = tuDecode8( utf8_text, &cp );
-		out_utf16_text = tuEncode16( out_utf16_text, cp );
+		in = tuDecode8( in, &cp );
+		out = tuEncode16( out, cp );
 	}
 }
 
-void tuShorten( const wchar_t* utf16_text, int out_size, char* out_utf8_text )
+#ifdef __cplusplus
+void tuWiden( const char* in, int in_len, wchar_t* out )
 {
-	const char* original = out_utf8_text;
-	while ( out_utf8_text < original + out_size )
+	const char* original = in;
+	int cp;
+	while ( in < original + in_len )
 	{
-		int cp;
-		utf16_text = tuDecode16( utf16_text, &cp );
-		out_utf8_text = tuEncode8( out_utf8_text, cp );
+		in = tuDecode8( in, &cp );
+		out = tuEncode16( out, cp );
 	}
 }
+
+void tuWiden( const char* in, wchar_t* out, int out_len )
+{
+	wchar_t* original = out;
+	int cp;
+	while ( *in && (out < original + out_len) )
+	{
+		in = tuDecode8( in, &cp );
+		out = tuEncode16( out, cp );
+	}
+}
+
+void tuWiden( const char* in, int in_len, wchar_t* out, int out_len )
+{
+	const char* original_in = in;
+	wchar_t* original_out = out;
+	int cp;
+	while ( (in < original_in + in_len) && (out < original_out + out_len) )
+	{
+		in = tuDecode8( in, &cp );
+		out = tuEncode16( out, cp );
+	}
+}
+#endif
+
+void tuShorten( const wchar_t* in, char* out )
+{
+	int cp;
+	while ( *in )
+	{
+		in = tuDecode16( in, &cp );
+		out = tuEncode8( out, cp );
+	}
+}
+
+#ifdef __cplusplus
+void tuShorten( const wchar_t* in, int in_len, char* out )
+{
+	const wchar_t* original = in;
+	int cp;
+	while ( in < original + in_len )
+	{
+		in = tuDecode16( in, &cp );
+		out = tuEncode8( out, cp );
+	}
+}
+
+void tuShorten( const wchar_t* in, char* out, int out_len )
+{
+	char* original = out;
+	int cp;
+	while ( *in && (out < original + out_len) )
+	{
+		in = tuDecode16( in, &cp );
+		out = tuEncode8( out, cp );
+	}
+}
+
+void tuShorten( const wchar_t* in, int in_len, char* out, int out_len )
+{
+	const wchar_t* original_in = in;
+	char* original_out = out;
+	int cp;
+	while ( (in < original_in + in_len) && (out < original_out + out_len) )
+	{
+		in = tuDecode16( in, &cp );
+		out = tuEncode8( out, cp );
+	}
+}
+#endif
 
 #endif // TINYUTF_IMPLEMENTATION
 

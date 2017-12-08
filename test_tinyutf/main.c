@@ -79,8 +79,8 @@ int main( )
 	utf8_processed = (char*)original;
 	utf16_text = original_wide;
 
-	tuWiden( utf8_text, size, utf16_text );
-	tuShorten( utf16_text, size, utf8_processed );
+	tuWiden( utf8_text, utf16_text );
+	tuShorten( utf16_text, utf8_processed );
 	CHECK( !memcmp( utf8_text, utf8_processed, size ) );
 
 	return 0;
