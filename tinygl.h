@@ -9,8 +9,8 @@
 
 	Summary:
 	Wrapper for OpenGL ES 3.0+ for vertex attributes, shader creation, draw calls,
-	and post-processing fx. The API was carefully designed to facilitate trying out
-	one-off techqniques or experiments, of which are critical for certain kinds
+	and post-processing FX. The API was carefully designed to facilitate trying out
+	one-off techniques or experiments, of which are critical for certain kinds
 	of development styles (i.e. fast iteration). Credit goes to thatgamecompany
 	for the original designs + idea of this API style.
 */
