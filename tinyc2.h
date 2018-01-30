@@ -267,12 +267,12 @@ int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out );
 void c2CircletoCircleManifold( c2Circle A, const c2x* ax, c2Circle B, const c2x* bx, c2Manifold* m );
 void c2CircletoAABBManifold( c2Circle A, const c2x* ax, c2AABB B, const c2x* bx, c2Manifold* m );
 void c2CircletoCapsuleManifold( c2Circle A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m );
-void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m );
-void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m );
-void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m );
+void c2AABBtoAABBManifold( c2AABB A, const c2x* ax, c2AABB B, const c2x* bx, c2Manifold* m );
+void c2AABBtoCapsuleManifold( c2AABB A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m );
+void c2CapsuletoCapsuleManifold( c2Capsule A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m );
 void c2CircletoPolyManifold( c2Circle A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
-void c2AABBtoPolyManifold( c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m );
-void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2AABBtoPolyManifold( c2AABB A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2CapsuletoPolyManifold( c2Capsule A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
 void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
 
 typedef enum
@@ -481,9 +481,9 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		switch ( typeB )
 		{
 		case C2_CIRCLE:  c2CircletoAABBManifold( *(c2Circle*)B, bx, *(c2AABB*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_AABB:    return c2AABBtoAABBManifold( *(c2AABB*)A, *(c2AABB*)B, m );
-		case C2_CAPSULE: return c2AABBtoCapsuleManifold( *(c2AABB*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    return c2AABBtoPolyManifold( *(c2AABB*)A, (const c2Poly*)B, bx, m );
+		case C2_AABB:    return c2AABBtoAABBManifold( *(c2AABB*)A, ax, *(c2AABB*)B, bx, m );
+		case C2_CAPSULE: return c2AABBtoCapsuleManifold( *(c2AABB*)A, ax, *(c2Capsule*)B, bx, m );
+		case C2_POLY:    return c2AABBtoPolyManifold( *(c2AABB*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
 
@@ -491,9 +491,9 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		switch ( typeB )
 		{
 		case C2_CIRCLE:  c2CircletoCapsuleManifold( *(c2Circle*)B, bx, *(c2Capsule*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_AABB:    c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_CAPSULE: return c2CapsuletoCapsuleManifold( *(c2Capsule*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)B, bx, m );
+		case C2_AABB:    c2AABBtoCapsuleManifold( *(c2AABB*)B, bx, *(c2Capsule*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CAPSULE: return c2CapsuletoCapsuleManifold( *(c2Capsule*)A, ax, *(c2Capsule*)B, bx, m );
+		case C2_POLY:    return c2CapsuletoPolyManifold( *(c2Capsule*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
 
@@ -501,8 +501,8 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 		switch ( typeB )
 		{
 		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, bx, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
-		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, bx, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)B, bx, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_POLY:    return c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
@@ -1308,13 +1308,28 @@ void c2CircletoCapsuleManifold( c2Circle A, const c2x* ax, c2Capsule B, const c2
 	}
 }
 
-void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
+void c2AABBtoAABBManifold( c2AABB A, const c2x* ax, c2AABB B, const c2x* bx, c2Manifold* m )
 {
+	c2v amin = A.min;
+	c2v amax = A.max;
+	c2v bmin = B.min;
+	c2v bmax = B.max;
+	if ( ax )
+	{
+		amin = c2Add( amin, ax->p );
+		amax = c2Add( amax, ax->p );
+	}
+	if ( bx )
+	{
+		bmin = c2Add( bmin, bx->p );
+		bmax = c2Add( bmax, bx->p );
+	}
+
 	m->count = 0;
-	c2v mid_a = c2Mulvs( c2Add( A.min, A.max ), 0.5f );
-	c2v mid_b = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
-	c2v eA = c2Absv( c2Mulvs( c2Sub( A.max, A.min ), 0.5f ) );
-	c2v eB = c2Absv( c2Mulvs( c2Sub( B.max, B.min ), 0.5f ) );
+	c2v mid_a = c2Mulvs( c2Add( amin, amax ), 0.5f );
+	c2v mid_b = c2Mulvs( c2Add( bmin, bmax ), 0.5f );
+	c2v eA = c2Absv( c2Mulvs( c2Sub( amax, amin ), 0.5f ) );
+	c2v eB = c2Absv( c2Mulvs( c2Sub( bmax, bmin ), 0.5f ) );
 	c2v d = c2Sub( mid_b, mid_a );
 
 	// calc overlap on x and y axes
@@ -1365,26 +1380,34 @@ void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m )
 	m->normal = n;
 }
 
-void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m )
+void c2AABBtoCapsuleManifold( c2AABB A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m )
 {
 	m->count = 0;
 	c2Poly p;
 	c2BBVerts( p.verts, &A );
 	p.count = 4;
 	c2Norms( p.verts, p.norms, 4 );
-	c2CapsuletoPolyManifold( B, &p, 0, m );
+	c2CapsuletoPolyManifold( B, bx, &p, ax, m );
 }
 
-void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m )
+void c2CapsuletoCapsuleManifold( c2Capsule A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m )
 {
+	c2v aa = A.a;
+	c2v ab = A.b;
+	if (ax)
+	{
+		aa = c2Add(aa, ax->p);
+		ab = c2Add(ab, ax->p);
+	}
+
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK( &A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
+	float d = c2GJK( &A, C2_CAPSULE, ax, &B, C2_CAPSULE, bx, &a, &b, 0 );
 	if ( d < r )
 	{
 		c2v n;
-		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( A.b, A.a ) ) );
+		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( ab, aa ) ) );
 		else n = c2Norm( c2Sub( b, a ) );
 
 		m->count = 1;
@@ -1458,14 +1481,14 @@ void c2CircletoPolyManifold( c2Circle A, const c2x* ax, const c2Poly* B, const c
 }
 
 // Forms a c2Poly and uses c2PolytoPolyManifold
-void c2AABBtoPolyManifold( c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m )
+void c2AABBtoPolyManifold( c2AABB A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m )
 {
 	m->count = 0;
 	c2Poly p;
 	c2BBVerts( p.verts, &A );
 	p.count = 4;
 	c2Norms( p.verts, p.norms, 4 );
-	c2PolytoPolyManifold( &p, 0, B, bx, m );
+	c2PolytoPolyManifold( &p, ax, B, bx, m );
 }
 
 // clip a segment to a plane
@@ -1548,35 +1571,42 @@ static void c2AntinormalFace( c2Capsule cap, const c2Poly* p, c2x x, int* face_o
 	*n_out = n;
 }
 
-void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2Manifold* m )
+void c2CapsuletoPolyManifold( c2Capsule A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m )
 {
+	c2x bxVal = bx ? *bx : c2xIdentity( );
+	c2v aa = A.a;
+	c2v ab = A.b;
+	if ( ax )
+	{
+		aa = c2Add( aa, ax->p );
+		ab = c2Add( ab, ax->p );
+	}
+
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK( &A, C2_CAPSULE, 0, B, C2_POLY, bx_ptr, &a, &b, 0 );
+	float d = c2GJK( &A, C2_CAPSULE, ax, B, C2_POLY, bx, &a, &b, 0 );
 
 	// deep, treat as segment to poly collision
 	if ( d == 0 )
 	{
-		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
 		c2v n;
 		int index;
-		c2AntinormalFace( A, B, bx, &index, &n );
-		c2v seg[ 2 ] = { c2Add( A.a, c2Mulvs( n, A.r ) ), c2Add( A.b, c2Mulvs( n, A.r ) ) };
+		c2AntinormalFace( A, B, bxVal, &index, &n );
+		c2v seg[ 2 ] = { c2Add( aa, c2Mulvs( n, A.r ) ), c2Add( ab, c2Mulvs( n, A.r ) ) };
 		c2h h;
-		if ( !c2SidePlanes( seg, bx, B, index, &h ) ) return;
+		if ( !c2SidePlanes( seg, bxVal, B, index, &h ) ) return;
 		c2KeepDeep( seg, h, m );
 	}
 
 	// shallow, use GJK results a and b to define manifold
 	else if ( d < A.r )
 	{
-		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity( );
 		c2v ab = c2Sub( b, a );
 		int face_case = 0;
 
 		for ( int i = 0; i < B->count; ++i )
 		{
-			c2v n = c2Mulrv( bx.r, B->norms[ i ] );
+			c2v n = c2Mulrv( bxVal.r, B->norms[ i ] );
 			if ( c2Parallel( ab, n, 5.0e-3f ) )
 			{
 				face_case = 1;
@@ -1598,10 +1628,10 @@ void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c
 		{
 			c2v n;
 			int index;
-			c2AntinormalFace( A, B, bx, &index, &n );
-			c2v seg[ 2 ] = { c2Add( A.a, c2Mulvs( n, A.r ) ), c2Add( A.b, c2Mulvs( n, A.r ) ) };
+			c2AntinormalFace( A, B, bxVal, &index, &n );
+			c2v seg[ 2 ] = { c2Add( aa, c2Mulvs( n, A.r ) ), c2Add( ab, c2Mulvs( n, A.r ) ) };
 			c2h h;
-			if ( !c2SidePlanes( seg, bx, B, index, &h ) ) return;
+			if ( !c2SidePlanes( seg, bxVal, B, index, &h ) ) return;
 			c2KeepDeep( seg, h, m );
 		}
 	}
