@@ -264,13 +264,13 @@ int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out );
 // or two points that represent the plane of contact. This information is
 // is usually needed to resolve and prevent shapes from colliding. If no coll
 // ision occured the count member of the manifold struct is set to 0.
-void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m );
-void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m );
-void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m );
+void c2CircletoCircleManifold( c2Circle A, const c2x* ax, c2Circle B, const c2x* bx, c2Manifold* m );
+void c2CircletoAABBManifold( c2Circle A, const c2x* ax, c2AABB B, const c2x* bx, c2Manifold* m );
+void c2CircletoCapsuleManifold( c2Circle A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m );
 void c2AABBtoAABBManifold( c2AABB A, c2AABB B, c2Manifold* m );
 void c2AABBtoCapsuleManifold( c2AABB A, c2Capsule B, c2Manifold* m );
 void c2CapsuletoCapsuleManifold( c2Capsule A, c2Capsule B, c2Manifold* m );
-void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m );
+void c2CircletoPolyManifold( c2Circle A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
 void c2AABBtoPolyManifold( c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m );
 void c2CapsuletoPolyManifold( c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m );
 void c2PolytoPolyManifold( const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m );
@@ -470,17 +470,17 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_CIRCLE:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  return c2CircletoCircleManifold( *(c2Circle*)A, *(c2Circle*)B, m );
-		case C2_AABB:    return c2CircletoAABBManifold( *(c2Circle*)A, *(c2AABB*)B, m );
-		case C2_CAPSULE: return c2CircletoCapsuleManifold( *(c2Circle*)A, *(c2Capsule*)B, m );
-		case C2_POLY:    return c2CircletoPolyManifold( *(c2Circle*)A, (const c2Poly*)B, bx, m );
+		case C2_CIRCLE:  return c2CircletoCircleManifold( *(c2Circle*)A, ax, *(c2Circle*)B, bx, m );
+		case C2_AABB:    return c2CircletoAABBManifold( *(c2Circle*)A, ax, *(c2AABB*)B, bx, m );
+		case C2_CAPSULE: return c2CircletoCapsuleManifold( *(c2Circle*)A, ax, *(c2Capsule*)B, bx, m );
+		case C2_POLY:    return c2CircletoPolyManifold( *(c2Circle*)A, ax, (const c2Poly*)B, bx, m );
 		}
 		break;
 
 	case C2_AABB:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoAABBManifold( *(c2Circle*)B, *(c2AABB*)A, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CIRCLE:  c2CircletoAABBManifold( *(c2Circle*)B, bx, *(c2AABB*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_AABB:    return c2AABBtoAABBManifold( *(c2AABB*)A, *(c2AABB*)B, m );
 		case C2_CAPSULE: return c2AABBtoCapsuleManifold( *(c2AABB*)A, *(c2Capsule*)B, m );
 		case C2_POLY:    return c2AABBtoPolyManifold( *(c2AABB*)A, (const c2Poly*)B, bx, m );
@@ -490,7 +490,7 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_CAPSULE:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoCapsuleManifold( *(c2Circle*)B, *(c2Capsule*)A, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CIRCLE:  c2CircletoCapsuleManifold( *(c2Circle*)B, bx, *(c2Capsule*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_AABB:    c2AABBtoCapsuleManifold( *(c2AABB*)B, *(c2Capsule*)A, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_CAPSULE: return c2CapsuletoCapsuleManifold( *(c2Capsule*)A, *(c2Capsule*)B, m );
 		case C2_POLY:    return c2CapsuletoPolyManifold( *(c2Capsule*)A, (const c2Poly*)B, bx, m );
@@ -500,7 +500,7 @@ void c2Collide( const void* A, const c2x* ax, C2_TYPE typeA, const void* B, cons
 	case C2_POLY:
 		switch ( typeB )
 		{
-		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
+		case C2_CIRCLE:  c2CircletoPolyManifold( *(c2Circle*)B, bx, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_AABB:    c2AABBtoPolyManifold( *(c2AABB*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_CAPSULE: c2CapsuletoPolyManifold( *(c2Capsule*)B, (const c2Poly*)A, ax, m ); m->normal = c2Neg( m->normal ); return;
 		case C2_POLY:    return c2PolytoPolyManifold( (const c2Poly*)A, ax, (const c2Poly*)B, bx, m );
@@ -766,9 +766,9 @@ float c2GJK( const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_
 {
 	c2x ax;
 	c2x bx;
-	if ( typeA != C2_POLY || !ax_ptr ) ax = c2xIdentity( );
+	if ( !ax_ptr ) ax = c2xIdentity( );
 	else ax = *ax_ptr;
-	if ( typeB != C2_POLY || !bx_ptr ) bx = c2xIdentity( );
+	if ( !bx_ptr ) bx = c2xIdentity( );
 	else bx = *bx_ptr;
 
 	c2Proxy pA;
@@ -1180,10 +1180,15 @@ int c2RaytoPoly( c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out )
 	return 0;
 }
 
-void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
+void c2CircletoCircleManifold( c2Circle A, const c2x* ax, c2Circle B, const c2x* bx, c2Manifold* m )
 {
+	c2v ap = A.p;
+	c2v bp = B.p;
+	if ( ax ) ap = c2Add( ap, ax->p );
+	if ( bx ) bp = c2Add( bp, bx->p );
+
 	m->count = 0;
-	c2v d = c2Sub( B.p, A.p );
+	c2v d = c2Sub( bp, ap );
 	float d2 = c2Dot( d, d );
 	float r = A.r + B.r;
 	if ( d2 < r * r )
@@ -1192,16 +1197,26 @@ void c2CircletoCircleManifold( c2Circle A, c2Circle B, c2Manifold* m )
 		c2v n = l != 0 ? c2Mulvs( d, 1.0f / l ) : c2V( 0, 1.0f );
 		m->count = 1;
 		m->depths[ 0 ] = r - l;
-		m->contact_points[ 0 ] = c2Sub( B.p, c2Mulvs( n, B.r ) );
+		m->contact_points[ 0 ] = c2Sub( bp, c2Mulvs( n, B.r ) );
 		m->normal = n;
 	}
 }
 
-void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
+void c2CircletoAABBManifold( c2Circle A, const c2x* ax, c2AABB B, const c2x* bx, c2Manifold* m )
 {
+	c2v ap = A.p;
+	c2v bmin = B.min;
+	c2v bmax = B.max;
+	if ( ax ) ap = c2Add( ap, ax->p );
+	if ( bx )
+	{
+		bmin = c2Add( bmin, bx->p );
+		bmax = c2Add( bmax, bx->p );
+	}
+
 	m->count = 0;
-	c2v L = c2Clampv( A.p, B.min, B.max );
-	c2v ab = c2Sub( L, A.p );
+	c2v L = c2Clampv( ap, bmin, bmax );
+	c2v ab = c2Sub( L, ap );
 	float d2 = c2Dot( ab, ab );
 	float r2 = A.r * A.r;
 	if ( d2 < r2 )
@@ -1213,7 +1228,7 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			c2v n = c2Norm( ab );
 			m->count = 1;
 			m->depths[ 0 ] = A.r - d;
-			m->contact_points[ 0 ] = c2Add( A.p, c2Mulvs( n, d ) );
+			m->contact_points[ 0 ] = c2Add( ap, c2Mulvs( n, d ) );
 			m->normal = n;
 		}
 
@@ -1221,12 +1236,12 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 		// clamp circle's center to edge of AABB, then form the manifold
 		else
 		{
-			c2v mid = c2Mulvs( c2Add( B.min, B.max ), 0.5f );
-			c2v e = c2Mulvs( c2Sub( B.max, B.min ), 0.5f );
-			c2v d = c2Sub( A.p, mid );
+			c2v mid = c2Mulvs( c2Add( bmin, bmax ), 0.5f );
+			c2v e = c2Mulvs( c2Sub( bmax, bmin ), 0.5f );
+			c2v d = c2Sub( ap, mid );
 			c2v abs_d = c2Absv( d );
 			c2v n;
-			c2v p = A.p;
+			c2v p = ap;
 			float depth;
 			if ( abs_d.x > abs_d.y )
 			{
@@ -1266,16 +1281,24 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 	}
 }
 
-void c2CircletoCapsuleManifold( c2Circle A, c2Capsule B, c2Manifold* m )
+void c2CircletoCapsuleManifold( c2Circle A, const c2x* ax, c2Capsule B, const c2x* bx, c2Manifold* m )
 {
+	c2v ba = B.a;
+	c2v bb = B.b;
+	if ( bx )
+	{
+		ba = c2Add( ba, bx->p );
+		bb = c2Add( bb, bx->p );
+	}
+
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK( &A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 0 );
+	float d = c2GJK( &A, C2_CIRCLE, ax, &B, C2_CAPSULE, bx, &a, &b, 0 );
 	if ( d < r )
 	{
 		c2v n;
-		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( B.b, B.a ) ) );
+		if ( d == 0 ) n = c2Norm( c2Skew( c2Sub( bb, ba ) ) );
 		else n = c2Norm( c2Sub( b, a ) );
 
 		m->count = 1;
@@ -1379,11 +1402,14 @@ static C2_INLINE c2h C2_PLANE_AT( const c2Poly* p, const int i )
 	return h;
 }
 
-void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Manifold* m )
+void c2CircletoPolyManifold( c2Circle A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m )
 {
+	c2v ap = A.p;
+	if ( ax ) ap = c2Add( ap, ax->p );
+
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK( &A, C2_CIRCLE, 0, B, C2_POLY, bx_tr, &a, &b, 0 );
+	float d = c2GJK( &A, C2_CIRCLE, ax, B, C2_POLY, bx, &a, &b, 0 );
 
 	// shallow, the circle center did not hit the polygon
 	// just use a and b from GJK to define the collision
@@ -1405,10 +1431,10 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 	// find the face closest to circle center to form manifold
 	else
 	{
-		c2x bx = bx_tr ? *bx_tr : c2xIdentity( );
+		c2x bxVal = bx ? *bx : c2xIdentity( );
 		float sep = -FLT_MAX;
 		int index = ~0;
-		c2v local = c2MulxvT( bx, A.p );
+		c2v local = c2MulxvT( bxVal, ap );
 
 		for ( int i = 0; i < B->count; ++i )
 		{
@@ -1425,9 +1451,9 @@ void c2CircletoPolyManifold( c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Ma
 		c2h h = C2_PLANE_AT( B, index );
 		c2v p = c2Project( h, local );
 		m->count = 1;
-		m->contact_points[ 0 ] = c2Mulxv( bx, p );
+		m->contact_points[ 0 ] = c2Mulxv( bxVal, p );
 		m->depths[ 0 ] = A.r - sep;
-		m->normal = c2Neg( c2Mulrv( bx.r, B->norms[ index ] ) );
+		m->normal = c2Neg( c2Mulrv( bxVal.r, B->norms[ index ] ) );
 	}
 }
 
