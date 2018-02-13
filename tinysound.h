@@ -2101,29 +2101,23 @@ static void tsFFT( float* x, float* y, int count, float sign )
 
 	#define TS_ALIGN16_0 __declspec( align( 16 ) )
 	#define TS_ALIGN16_1
-	#define TS_SELECTANY extern const __declspec( selectany )
 
 #else
 
 	#define TS_ALIGN16_0
-	#define TS_ALIGN16_1 __attribute__( (aligned( 16 )) )
-	#if defined(__unix__)
-		#define TS_SELECTANY const __attribute__( (weak) )
-	#else
-		#define TS_SELECTANY const __attribute__( (selectany) )
-	#endif
+	#define TS_ALIGN16_1 __attribute__((aligned(16)))
 
 #endif
 
 // SSE2 trig funcs from https://github.com/to-miz/sse_mathfun_extension/
 #define _PS_CONST( Name, Val ) \
-	TS_SELECTANY TS_ALIGN16_0 float _ps_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
+	TS_ALIGN16_0 float _ps_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
 
 #define _PS_CONST_TYPE( Name, Type, Val ) \
-	TS_SELECTANY TS_ALIGN16_0 Type _ps_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
+	TS_ALIGN16_0 Type _ps_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
 
 #define _PI32_CONST( Name, Val ) \
-	TS_SELECTANY TS_ALIGN16_0 int _pi32_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
+	TS_ALIGN16_0 int _pi32_##Name[ 4 ] TS_ALIGN16_1 = { Val, Val, Val, Val }
 
 _PS_CONST_TYPE( sign_mask, int, (int)0x80000000 );
 _PS_CONST_TYPE( inv_sign_mask, int, (int)~0x80000000 );
