@@ -1,5 +1,3 @@
-#if !defined( TINYGL_H )
-
 /*
 	tinygl - v1.02
 
@@ -74,6 +72,8 @@
 		* GLES 3.0+ support only
 		* Full support for array uniforms is not quite tested and hammered out.
 */
+
+#if !defined( TINYGL_H )
 
 #include <stdint.h>
 
