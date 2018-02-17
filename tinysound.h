@@ -1795,6 +1795,11 @@ void tsMix( tsContext* ctx )
 	while ( *ptr )
 	{
 		tsPlayingSound* playing = *ptr;
+
+		// immediately remove any inactive elements
+		if ( !playing->active || !ctx->running )
+			goto remove;
+
 		tsLoadedSound* loaded = playing->loaded_sound;
 		__m128* cA = (__m128*)loaded->channels[ 0 ];
 		__m128* cB = (__m128*)loaded->channels[ 1 ];
@@ -1837,10 +1842,6 @@ void tsMix( tsContext* ctx )
 			}
 		}
 		TS_ASSERT( !(delay_offset & 3) );
-
-		// immediately remove any inactive elements
-		if ( !playing->active || !ctx->running )
-			goto remove;
 
 		// skip all paused sounds
 		if ( playing->paused )
