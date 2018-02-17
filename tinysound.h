@@ -75,6 +75,9 @@
 	API. The low-level API does not manage any memory for tsPlayingSounds. The
 	high level api holds a memory pool of playing sounds.
 
+	To actually mix sounds together and send audio to the sound card, be sure
+	to call either tsMix periodically or call tsSpawnMixThread once.
+
 	High-level API:
 		First create a context and pass in non-zero to the final parameter. This
 		final parameter controls how large of a memory pool to use for tsPlayingSounds.
