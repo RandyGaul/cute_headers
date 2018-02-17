@@ -10,10 +10,10 @@
 	and stero sounds. This means tinysound imparts no external DLLs or large
 	libraries that adversely effect shipping size. tinysound can also run on
 	Windows XP since DirectSound ships with all recent versions of Windows.
-	tinysound implements a custom SSE2 mixer by explicitly locking and unlocking
-	portions of an internal. tinysound uses CoreAudio for Apple machines (like
-	OSX and iOS). SDL is used for all other platforms. Define TS_FORCE_SDL
-	before placaing the TINYSOUND_IMPLEMENTATION in order to force the use of SDL.
+	tinysound implements a custom SSE2 mixer. tinysound uses CoreAudio for Apple
+	machines (like OSX and iOS). SDL is used for all other platforms. Define
+	TS_FORCE_SDL before placaing the TINYSOUND_IMPLEMENTATION in order to force
+	the use of SDL.
 
 	Revision history:
 		1.0  (06/04/2016) initial release
