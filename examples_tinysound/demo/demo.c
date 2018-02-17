@@ -11,8 +11,7 @@ tsPlayingSound vorbis_sound;
 
 void Vorbis( tsContext* ctx )
 {
-	int sample_rate;
-	vorbis_loaded = tsLoadOGG( "thingy.ogg", &sample_rate );
+	vorbis_loaded = tsLoadOGG( "thingy.ogg" );
 	vorbis_sound = tsMakePlayingSound( &vorbis_loaded );
 	tsSetVolume( &vorbis_sound, 0.3f, 0.3f );
 	tsInsertSound( ctx, &vorbis_sound );

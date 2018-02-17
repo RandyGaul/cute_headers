@@ -200,10 +200,19 @@
 #define TS_SDL		4
 
 #if defined( _WIN32 )
+
 	#define TS_PLATFORM TS_WINDOWS
+
+	#if !defined _CRT_SECURE_NO_WARNINGS
+	#define _CRT_SECURE_NO_WARNINGS
+	#endif
+
 #elif defined( __APPLE__ )
+
 	#define TS_PLATFORM TS_MAC
+
 #else
+
 	#define TS_PLATFORM TS_SDL
 
 	// please note TS_UNIX is not directly support
@@ -236,6 +245,7 @@ extern const char* g_tsErrorReason;
 // stores a loaded sound in memory
 typedef struct
 {
+	int sample_rate;
 	int sample_count;
 	int channel_count;
 	void* channels[ 2 ];
@@ -279,8 +289,8 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound );
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 
-	void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound );
-	tsLoadedSound tsLoadOGG( const char* path, int* sample_rate );
+	void tsReadMemOGG( const void* memory, int length, tsLoadedSound* sound );
+	tsLoadedSound tsLoadOGG( const char* path );
 
 #endif
 
@@ -392,7 +402,7 @@ void tsStopAllSounds( tsContext* ctx );
 	#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 
 		// Provides the ability to use tsLoadOGG with an SDL_RWops object.
-		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate );
+		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw );
 
 	#endif
 
@@ -403,10 +413,6 @@ void tsStopAllSounds( tsContext* ctx );
 
 #ifdef TINYSOUND_IMPLEMENTATION
 #undef TINYSOUND_IMPLEMENTATION
-
-#if !defined _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
-#endif
 
 // Change the allocator as necessary
 #if !defined( TS_ALLOC )
@@ -565,6 +571,8 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 	TS_CHECK( fmt.wBitsPerSample == 16, "Only 16 bits per sample supported." );
 	TS_CHECK( fmt.nBlockAlign == fmt.nChannels * 2, "implementation error" );
 
+	sound->sample_rate = (int)fmt.nSamplesPerSec;
+
 	data = tsNext( data );
 	TS_CHECK( tsFourCC( "data", data ), "data chunk not found." );
 	int sample_size = *((uint32_t*)(data + 4));
@@ -689,11 +697,11 @@ tsLoadedSound tsLoadWAV( const char* path )
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 
-	void tsReadMemOGG( const void* memory, int length, int* sample_rate, tsLoadedSound* sound )
+	void tsReadMemOGG( const void* memory, int length, tsLoadedSound* sound )
 	{
 		int16_t* samples = 0;
 		int channel_count;
-		int sample_count = stb_vorbis_decode_memory( (const unsigned char*)memory, length, &channel_count, sample_rate, &samples );
+		int sample_count = stb_vorbis_decode_memory( (const unsigned char*)memory, length, &channel_count, &sound->sample_rate, &samples );
 
 		TS_CHECK( sample_count > 0, "stb_vorbis_decode_memory failed. Make sure your file exists and is a valid OGG file." );
 
@@ -762,12 +770,12 @@ tsLoadedSound tsLoadWAV( const char* path )
 		memset( sound, 0, sizeof( tsLoadedSound ) );
 	}
 
-	tsLoadedSound tsLoadOGG( const char* path, int* sample_rate )
+	tsLoadedSound tsLoadOGG( const char* path )
 	{
 		int length;
 		void* memory = tsReadFileToMemory( path, &length );
 		tsLoadedSound sound;
-		tsReadMemOGG( memory, length, sample_rate, &sound );
+		tsReadMemOGG( memory, length, &sound );
 		TS_FREE( memory );
 
 		return sound;
@@ -775,12 +783,12 @@ tsLoadedSound tsLoadWAV( const char* path )
 
 	#if TS_PLATFORM == TS_SDL
 
-		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw, int* sample_rate )
+		tsLoadedSound tsLoadOGGRW( SDL_RWops* rw )
 		{
 			int length;
 			void* memory = tsReadRWToMemory( rw, &length );
 			tsLoadedSound sound;
-			tsReadMemOGG( memory, length, sample_rate, &sound );
+			tsReadMemOGG( memory, length, &sound );
 			TS_FREE( memory );
 
 			return sound;
