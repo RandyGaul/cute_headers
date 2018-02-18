@@ -128,7 +128,7 @@
 
 	Here is the Low-Level API:
 		tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
-		void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
+		int tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
 
 	Here is the High-Level API:
 		tsPlayingSound* tsPlaySound( tsContext* ctx, tsPlaySoundDef def );
@@ -374,7 +374,7 @@ void tsSleep( int milliseconds );
 
 // LOW-LEVEL API
 tsPlayingSound tsMakePlayingSound( tsLoadedSound* loaded );
-void tsInsertSound( tsContext* ctx, tsPlayingSound* sound );
+int tsInsertSound( tsContext* ctx, tsPlayingSound* sound ); // returns 1 if sound was successfully inserted, 0 otherwise
 
 // HIGH-LEVEL API
 typedef struct
@@ -573,7 +573,9 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 
 	sound->sample_rate = (int)fmt.nSamplesPerSec;
 
-	data = tsNext( data );
+	data = tsNext( data ); // skip fmt chunk
+	if ( tsFourCC( "fact", data ) ) data = tsNext( data ); // skip possible fact chunk
+	
 	TS_CHECK( tsFourCC( "data", data ), "data chunk not found." );
 	int sample_size = *((uint32_t*)(data + 4));
 	int sample_count = sample_size / (fmt.nChannels * sizeof( uint16_t ));
@@ -1513,7 +1515,7 @@ void tsThreadSleepDelay( tsContext* ctx, int milliseconds )
 	ctx->sleep_milliseconds = milliseconds;
 }
 
-void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
+int tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 {
 	// Cannot use tsPlayingSound if tsMakeContext was passed non-zero for playing_pool_count
 	// since non-zero playing_pool_count means the context is doing some memory-management
@@ -1521,12 +1523,13 @@ void tsInsertSound( tsContext* ctx, tsPlayingSound* sound )
 	// of the lower-level API (see top of this header for documentation details).
 	TS_ASSERT( ctx->playing_pool == 0 );
 
-	if ( sound->active ) return;
+	if ( sound->active ) return 0;
 	tsLock( ctx );
 	sound->next = ctx->playing;
 	ctx->playing = sound;
 	sound->active = 1;
 	tsUnlock( ctx );
+	return 1;
 }
 
 // NOTE: does not allow delay_in_seconds to be negative (clamps at 0)
