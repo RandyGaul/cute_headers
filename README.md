@@ -65,3 +65,7 @@ I am a younger engineer early in my career. The zlib license is a nice way to ge
 > - *Why are only a few libraries public domain?*
 
 The public domain libraries in this repository contain code I myself didn't write, and isntead extracted from other open source libraries. Usually the inside of each header will document where the code came from.
+
+> - *What is the license?*
+
+Each lib contains license info at the end of the file. There is a choice between public domain, and zlib.
