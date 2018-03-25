@@ -932,6 +932,28 @@ void sro5hRayBug( )
 	//tgLine( ctx, ray.p.x, ray.p.y, 0, end.x, end.y, 0 );
 }
 
+void circle_to_aabb_bug()
+{
+	c2Circle a;
+	a.p = mp;
+	a.r = 10.0f;
+
+	c2AABB b;
+	b.min = c2V(-100, -50);
+	b.max = c2V(100, 50);
+
+	DrawCircle(a.p, a.r);
+	DrawAABB(b.min, b.max);
+
+	c2Manifold m;
+	c2CircletoAABBManifold(a, b, &m);
+
+	if (m.count)
+	{
+		DrawManifold(m);
+	}
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -1027,7 +1049,7 @@ int main( )
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
 		static int code = 11;
-		if ( arrow_pressed ) code = (code + 1) % 12;
+		if ( arrow_pressed ) code = (code + 1) % 13;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -1042,6 +1064,7 @@ int main( )
 		case 9: TestManifold2( ); break;
 		case 10: PlastburkRayBug( ); break;
 		case 11: sro5hRayBug( ); break;
+		case 12: circle_to_aabb_bug(); break;
 		}
 
 		// push a draw call to tinygl

@@ -1,5 +1,5 @@
 /*
-	tinyc2.h - v1.03
+	tinyc2.h - v1.04
 
 	To create implementation (the function definitions)
 		#define TINYC2_IMPLEMENTATION
@@ -20,6 +20,7 @@
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
 		1.02 (03/21/2017) compile fixes for c on more compilers
 		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
+		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 */
 
 /*
@@ -1225,42 +1226,30 @@ void c2CircletoAABBManifold( c2Circle A, c2AABB B, c2Manifold* m )
 			c2v e = c2Mulvs( c2Sub( B.max, B.min ), 0.5f );
 			c2v d = c2Sub( A.p, mid );
 			c2v abs_d = c2Absv( d );
-			c2v n;
-			c2v p = A.p;
-			float depth;
-			if ( abs_d.x > abs_d.y )
-			{
-				if ( d.x < 0 )
-				{
-					n = c2V( 1.0f, 0 );
-					p.x = mid.x - e.x;
-				}
 
-				else
-				{
-					n = c2V( -1.0f, 0 );
-					p.x = mid.x + e.x;
-				}
-				depth = e.x - abs_d.x;
+			float x_overlap = e.x - abs_d.x;
+			float y_overlap = e.y - abs_d.y;
+
+			float depth;
+			c2v n;
+
+			if (x_overlap < y_overlap)
+			{
+				depth = x_overlap;
+				n = c2V(1.0f, 0);
+				n = c2Mulvs(n, d.x < 0 ? 1.0f : -1.0f);
 			}
+
 			else
 			{
-				if ( d.y < 0 )
-				{
-					n = c2V( 0, 1.0f );
-					p.y = mid.y - e.y;
-				}
-
-				else
-				{
-					n = c2V( 0, -1.0f );
-					p.y = mid.y + e.y;
-				}
-				depth = e.y - abs_d.y;
+				depth = y_overlap;
+				n = c2V(0, 1.0f);
+				n = c2Mulvs(n, d.y < 0 ? 1.0f : -1.0f);
 			}
+
 			m->count = 1;
 			m->depths[ 0 ] = A.r + depth;
-			m->contact_points[ 0 ] = p;
+			m->contact_points[ 0 ] = c2Sub( A.p, c2Mulvs( n, depth ) );
 			m->normal = n;
 		}
 	}
