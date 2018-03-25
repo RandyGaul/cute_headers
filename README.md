@@ -58,14 +58,6 @@ I personally don't really know if it's a fad or not, but these files aren't real
 
 Unfortunately writing a good header library is pretty hard, so just any random header lib out there in the wild is probably not a good one. The [STB](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&cad=rja&uact=8&ved=0ahUKEwihsabx0qHSAhVX0WMKHVnyAZ0QFggaMAA&url=https%3A%2F%2Fgithub.com%2Fnothings%2Fstb&usg=AFQjCNHkcM-rQ-cn3VbNhQZ3lnwpnSrCWQ&sig2=bg0yIt7IhNkQy6_nMcuYZw&bvm=bv.147448319,d.cGc) and [RJM](https://github.com/rmitton/rjm) are my favorite header libs, and are a good reference to get an idea at what a good header lib looks like. [Mattias Gustavsson](https://github.com/mattiasgustavsson/libs) also has some nice libraries. [miniz](https://github.com/richgel999/miniz) is a little odd in the repository, but the releases are packed into a nice .c and .h combo -- a very useful library for creating wrapper libs!
 
-> - *Why do many of these libraries use zlib license, instead of public domain?*
-
-I am a younger engineer early in my career. The zlib license is a nice way to get my name out there a little more. It is very permissive. Basically nobody can claim they wrote the original code, or say I wrote modified versions. The difference between zlib and public domain is very minimal. If anyone needs a public domain version I would be happy to create a copy with a public domain license -- just contact me and ask.
-
-> - *Why are only a few libraries public domain?*
-
-The public domain libraries in this repository contain code I myself didn't write, and isntead extracted from other open source libraries. Usually the inside of each header will document where the code came from.
-
 > - *What is the license?*
 
 Each lib contains license info at the end of the file. There is a choice between public domain, and zlib.
