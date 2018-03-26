@@ -2,25 +2,25 @@
 
 Various single-file cross-platform C/C++ headers implementing self-contianed libraries.
 
-| library | description | latest version| language(s) | license
-|---------|-------------|---------------|-------------|--------
-**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.04 |C/C++ | zlib
-**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.08 | C/C++ | zlib
-**[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++ | zlib
-**[tinytime](tinytime.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++ | zlib
-**[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++ | zlib
-**[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++ | public domain
-**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++ | zlib
-**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.1 | C++ | zlib
-**[tinypng](tinypng.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++ | public domain
-**[tinygl](tinygl.h)** | OpenGL ES 3.0+ wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++ | zlib
+| library | description | latest version| language(s) 
+|---------|-------------|---------------|-------------
+**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.04 | C/C++
+**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.08 | C/C++
+**[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++
+**[tinytime](tinytime.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
+**[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
+**[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
+**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
+**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.1 | C++
+**[tinypng](tinypng.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++
+**[tinygl](tinygl.h)** | OpenGL ES 3.0+ wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++
 **[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
 **[tinyhuff](tinyhuff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
-**[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++ | zlib
-**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++ | public domain
-**[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++ | public domain
-**[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++ | public domain
-**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 0.01 | C/C++ | public domain
+**[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++
+**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++
+**[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
+**[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++
+**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 0.01 | C/C++
 
 &ast; Not yet hit first release
 
@@ -58,10 +58,6 @@ I personally don't really know if it's a fad or not, but these files aren't real
 
 Unfortunately writing a good header library is pretty hard, so just any random header lib out there in the wild is probably not a good one. The [STB](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&cad=rja&uact=8&ved=0ahUKEwihsabx0qHSAhVX0WMKHVnyAZ0QFggaMAA&url=https%3A%2F%2Fgithub.com%2Fnothings%2Fstb&usg=AFQjCNHkcM-rQ-cn3VbNhQZ3lnwpnSrCWQ&sig2=bg0yIt7IhNkQy6_nMcuYZw&bvm=bv.147448319,d.cGc) and [RJM](https://github.com/rmitton/rjm) are my favorite header libs, and are a good reference to get an idea at what a good header lib looks like. [Mattias Gustavsson](https://github.com/mattiasgustavsson/libs) also has some nice libraries. [miniz](https://github.com/richgel999/miniz) is a little odd in the repository, but the releases are packed into a nice .c and .h combo -- a very useful library for creating wrapper libs!
 
-> - *Why do many of these libraries use zlib license, instead of public domain?*
+> - *What is the license?*
 
-I am a younger engineer early in my career. The zlib license is a nice way to get my name out there a little more. It is very permissive. Basically nobody can claim they wrote the original code, or say I wrote modified versions. The difference between zlib and public domain is very minimal. If anyone needs a public domain version I would be happy to create a copy with a public domain license -- just contact me and ask.
-
-> - *Why are only a few libraries public domain?*
-
-The public domain libraries in this repository contain code I myself didn't write, and isntead extracted from other open source libraries. Usually the inside of each header will document where the code came from.
+Each lib contains license info at the end of the file. There is a choice between public domain, and zlib.
