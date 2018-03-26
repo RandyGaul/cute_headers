@@ -2300,6 +2300,21 @@ static void tinytiled_patch_interned_strings(tinytiled_map_internal_t* m)
 	tinytiled_deintern_layer(m, layer);
 }
 
+static void tinytiled_free_map_internal(tinytiled_map_internal_t* m)
+{
+	strpool_term(&m->strpool);
+
+	tinytiled_page_t* page = m->pages;
+	while (page)
+	{
+		tinytiled_page_t* next = page->next;
+		TINYTILED_FREE(page, m->mem_ctx);
+		page = next;
+	}
+
+	TINYTILED_FREE(m, m->mem_ctx);
+}
+
 tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
 	tinytiled_map_internal_t* m = (tinytiled_map_internal_t*)TINYTILED_MALLOC(sizeof(tinytiled_map_internal_t), mem_ctx);
@@ -2330,24 +2345,14 @@ tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_
 	return &m->map;
 
 tinytiled_err:
-	TINYTILED_FREE(m, mem_ctx);
+	tinytiled_free_map_internal(m);
 	return 0;
 }
 
 void tinytiled_free_map(tinytiled_map_t* map)
 {
 	tinytiled_map_internal_t* m = (tinytiled_map_internal_t*)(((char*)map) - (size_t)(&((tinytiled_map_internal_t*)0)->map));
-	strpool_term(&m->strpool);
-
-	tinytiled_page_t* page = m->pages;
-	while (page)
-	{
-		tinytiled_page_t* next = page->next;
-		TINYTILED_FREE(page, m->mem_ctx);
-		page = next;
-	}
-
-	TINYTILED_FREE(m, m->mem_ctx);
+	tinytiled_free_map_internal(m);
 }
 
 #undef TINYTILED_IMPLEMENTATION
