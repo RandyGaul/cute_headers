@@ -54,12 +54,6 @@
 
 	LIMITATIONS
 
-		Key value pairs are limited to {string, string} type for simplicity. The
-		user is expected to know a-priori what sort of type the value is and do
-		the appropriate conversion them-self. To support arrays of dynamically
-		typed objects in C would otherwise require great complexity to ends of
-		which users would no longer appreciate tinytiled's API design.
-
 		More uncommon fields are not supported, and are annotated in this header.
 		Search for "Not currently supported." without quotes to find them. tinytiled
 		logs a warning whenever a known unsupported field is encountered, and will
