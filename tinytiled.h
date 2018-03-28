@@ -32,8 +32,8 @@
 		Then simply access the map's fields like so:
 
 			// get map width and height
-			int w = map->w;
-			int h = map->h;
+			int w = map->width;
+			int h = map->height;
 
 			// loop over the map's layers
 			tinytiled_layer_t* layer = map->layers;
