@@ -30,13 +30,13 @@
 			tpImage img = tpLoadPNG( "images/pic.png" );
 			...
 			free( img.pix );
-			memset( &img, 0, sizeof( img ) );
+			TP_MEMSET( &img, 0, sizeof( img ) );
 
 		Loading a PNG from memory, then freeing it
 			tpImage img = tpLoadPNGMem( memory, sizeof( memory ) );
 			...
 			free( img.pix );
-			memset( &img, 0, sizeof( img ) );
+			TP_MEMSET( &img, 0, sizeof( img ) );
 
 		Saving a PNG to disk
 			tpSavePNG( "images/example.png", &img );
@@ -109,15 +109,17 @@ tpImage tpMakeAtlas( int atlasWidth, int atlasHeight, const tpImage* pngs, int p
 int tpDefaultSaveAtlas( const char* out_path_image, const char* out_path_atlas_txt, const tpImage* atlas, const tpAtlasImage* imgs, int img_count, const char** names );
 
 // these two functions return tpImage::pix as 0 in event of errors
-// call free on tpImage::pix when done
+// call free on tpImage::pix when done, or call tpFreePNG
 tpImage tpLoadPNG( const char *fileName );
 tpImage tpLoadPNGMem( const void *png_data, int png_length );
+void tpFreePNG( tpImage* img );
 
 // loads indexed (paletted) pngs, but does not depalette the image into RGBA pixels
 // these two functions return tpIndexedImage::pix as 0 in event of errors
-// call free on tpIndexedImage::pix when done
+// call free on tpIndexedImage::pix when done, or call tpFreezIndexedPNG
 tpIndexedImage tpLoadIndexedPNG( const char* fileName );
 tpIndexedImage tpLoadIndexedPNGMem( const void *png_data, int png_length );
+void tpFreezIndexedPNG( tpIndexedImage* img );
 
 // converts paletted image into a standard RGBA image
 // call free on tpImage::pix when done
@@ -166,31 +168,39 @@ struct tpAtlasImage
 #ifdef TINYPNG_IMPLEMENTATION
 #undef TINYPNG_IMPLEMENTATION
 
-#ifdef _WIN32
+#if !defined(TP_ALLOCA)
+	#define TP_ALLOCA alloca
 
-	#if !defined( _CRT_SECURE_NO_WARNINGS )
-		#define _CRT_SECURE_NO_WARNINGS
+	#ifdef _WIN32
+		#include <malloc.h> // alloca
+	#else
+		#include <alloca.h> // alloca
 	#endif
+#endif
 
-	#include <malloc.h> // alloca
+#if !defined(TP_ALLOC)
+	#include <stdlib.h> // malloc, free, calloc
+	#define TP_ALLOC malloc
+	#define TP_FREE free
+	#define TP_CALLOC calloc
+#endif
 
-#else
+#if !defined(TP_MEMCPY)
+	#include <string.h> // memcpy
+	#define TP_MEMCPY memcpy
+#endif
 
-	#include <alloca.h> // alloca
+#if !defined(TP_MEMSET)
+	#include <string.h> // memset
+	#define TP_MEMSET memset
+#endif
 
+#if !defined(TP_ASSERT)
+	#include <assert.h> // assert
+	#define TP_ASSERT assert
 #endif
 
 #include <stdio.h>  // fopen, fclose, etc.
-#include <stdlib.h> // malloc, free, calloc
-#include <string.h> // memcpy
-#include <assert.h> // assert
-
-#define TP_ASSERT assert
-#define TP_ALLOC malloc
-#define TP_ALLOCA alloca
-#define TP_FREE free
-#define TP_MEMCPY memcpy
-#define TP_CALLOC calloc
 
 static tpPixel tpMakePixelA( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 {
@@ -355,7 +365,7 @@ static int tpBuild( tpState* s, uint32_t* tree, uint8_t* lens, int sym_count )
 		first[ n ] = first[ n - 1 ] + counts[ n - 1 ];
 	}
 
-	if ( s ) memset( s->lookup, 0, sizeof( 512 * sizeof( uint32_t ) ) );
+	if ( s ) TP_MEMSET( s->lookup, 0, sizeof( 512 * sizeof( uint32_t ) ) );
 	for ( int i = 0; i < sym_count; ++i )
 	{
 		int len = lens[ i ];
@@ -495,7 +505,7 @@ static int tpBlock( tpState* s )
 			switch ( backwards_distance )
 			{
 			case 1: // very common in images
-				memset( dst, *src, length );
+				TP_MEMSET( dst, *src, length );
 				break;
 			default: while ( length-- ) *dst++ = *src++;
 			}
@@ -1011,6 +1021,13 @@ tpImage tpLoadPNG( const char *fileName )
 	return img;
 }
 
+void tpFreePNG( tpImage* img )
+{
+	TP_FREE(img->pix);
+	img->pix = 0;
+	img->w = img->h = 0;
+}
+
 tpIndexedImage tpLoadIndexedPNG( const char* fileName )
 {
 	tpIndexedImage img = { 0 };
@@ -1144,6 +1161,13 @@ tp_err:
 	img.pix = 0;
 
 	return img;
+}
+
+void tpFreezIndexedPNG( tpIndexedImage* img )
+{
+	TP_FREE(img->pix);
+	img->pix = 0;
+	img->w = img->h = 0;
 }
 
 tpImage tpDepaletteIndexedImage( tpIndexedImage* img )
@@ -1407,7 +1431,7 @@ tpImage tpMakeAtlas( int atlas_width, int atlas_height, const tpImage* pngs, int
 	atlas_image_size = atlas_width * atlas_height * sizeof( tpPixel );
 	atlas_pixels = TP_ALLOC( atlas_image_size );
 	TP_CHECK( atlas_image_size, "out of mem" );
-	memset( atlas_pixels, TP_ATLAS_EMPTY_COLOR, atlas_image_size );
+	TP_MEMSET( atlas_pixels, TP_ATLAS_EMPTY_COLOR, atlas_image_size );
 
 	for ( int i = 0; i < png_count; ++i )
 	{
