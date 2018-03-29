@@ -1,7 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_NONSTDC_NO_DEPRECATE
 #include <glad/glad.h>
-#include <SDL2/SDL.h>
+//#include <SDL2/SDL.h>
 
 #define TINYTILED_IMPLEMENTATION
 #include <tinytiled.h>
@@ -15,7 +15,7 @@ int tab_count = 0;
 	do { print_tabs(); printf(name " : \n"); } while (0)
 
 #define print(pointer, name, specifier) \
-	do { print_tabs(); printf(#name " : " #specifier "\n", pointer##->##name); } while (0)
+	do { print_tabs(); printf(#name " : " #specifier "\n", pointer -> name); } while (0)
 
 void print_properties(tinytiled_property_t* properties, int property_count)
 {
@@ -34,6 +34,7 @@ void print_properties(tinytiled_property_t* properties, int property_count)
 		case TINYTILED_PROPERTY_STRING: printf("%s\n", p->data.string.ptr); break;
 		case TINYTILED_PROPERTY_FILE: printf("%s\n", p->data.file.ptr); break;
 		case TINYTILED_PROPERTY_COLOR: printf("%d\n", p->data.color); break;
+		case TINYTILED_PROPERTY_NONE: printf("TINYTILED_PROPERTY_NONE\n"); break;
 		}
 	}
 	--tab_count;
