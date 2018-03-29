@@ -1144,7 +1144,7 @@ typedef struct
 	int fit;          // non-zero if image fit and was placed into the atlas
 } spritebatch_internal_atlas_image_t;
 
-#define SPRITEBATCH_CHECK( X, Y ) do { if ( !(X) ) { SPRITEBATCH_LOG(Y); goto tp_err; } } while ( 0 )
+#define SPRITEBATCH_CHECK( X, Y ) do { if ( !(X) ) { SPRITEBATCH_LOG(Y); goto sb_err; } } while ( 0 )
 
 void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atlas_out, const spritebatch_internal_lonely_texture_t* imgs, int img_count)
 {
@@ -1339,12 +1339,9 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 
 	atlas_out->volume_ratio = volume_used / (atlas_width * atlas_height);
 
-	SPRITEBATCH_FREE(atlas_pixels, mem_ctx);
-	SPRITEBATCH_FREE(nodes, mem_ctx);
-	SPRITEBATCH_FREE(images, mem_ctx);
-	return;
+sb_err:
+	// no specific error handling needed here (yet)
 
-tp_err:
 	SPRITEBATCH_FREE(atlas_pixels, mem_ctx);
 	SPRITEBATCH_FREE(nodes, mem_ctx);
 	SPRITEBATCH_FREE(images, mem_ctx);
