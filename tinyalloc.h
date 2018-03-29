@@ -69,6 +69,7 @@ void* taLeakCheckAlloc(size_t size, char* file, int line);
 void* taLeakCheckCalloc(size_t count, size_t elementSize, char* file, int line);
 void taLeakCheckFree(void* mem);
 int TINYALLOC_CHECK_FOR_LEAKS();
+int TINYALLOC_BYTES_IN_USE();
 
 // define these to your own user definition as necessary
 #if !defined(TINYALLOC_MALLOC_FUNC)
@@ -258,6 +259,21 @@ int TINYALLOC_CHECK_FOR_LEAKS()
 	else printf("SUCCESS: No memory leaks detected.\n");
 	return leaks;
 }
+
+int TINYALLOC_BYTES_IN_USE()
+{
+	taAllocInfo* head = taAllocHead();
+	taAllocInfo* next = head->next;
+	int bytes = 0;
+
+	while (next != head)
+	{
+		bytes += next->size;
+		next = next->next;
+	}
+
+	return bytes;
+}
 #else
 #if !defined(TINYALLOC_UNUSED)
 	#if defined(_MSC_VER)
@@ -286,7 +302,8 @@ inline void taLeakCheckFree(void* mem)
 	return TINYALLOC_FREE_FUNC(mem);
 }
 
-inline int TINYALLOC_CHECK_FOR_LEAKS() {}
+inline int TINYALLOC_CHECK_FOR_LEAKS() { return 0; }
+inline int TINYALLOC_BYTES_IN_USE() { return 0; }
 #endif // TINYALLOC_LEAK_CHECK
 
 #endif // TINYALLOC_IMPLEMENTATION

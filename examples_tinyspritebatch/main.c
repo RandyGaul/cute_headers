@@ -94,9 +94,9 @@ sprite_t make_sprite(SPRITEBATCH_U64 image_id, float x, float y, float scale, fl
 // callbacks for tinyspritebatch.h
 void batch_report(spritebatch_sprite_t* sprites, int count)
 {
-	printf("begin batch\n");
-	for (int i = 0; i < count; ++i) printf("\t%llu\n", sprites[i].texture_id);
-	printf("end batch\n");
+	//printf("begin batch\n");
+	//for (int i = 0; i < count; ++i) printf("\t%llu\n", sprites[i].texture_id);
+	//printf("end batch\n");
 
 	// build the draw call
 	tgDrawCall call;
@@ -501,6 +501,8 @@ int main(int argc, char** argv)
 		spritebatch_tick(&sb);
 		spritebatch_flush(&sb);
 		sprite_verts_count = 0;
+
+		printf("Bytes in use: %d\n", TINYALLOC_BYTES_IN_USE());
 
 		// sprite batches have been submit to tinygl, go ahead and flush to screen
 		tgFlush(ctx_tg, swap_buffers, 0, 640, 480);

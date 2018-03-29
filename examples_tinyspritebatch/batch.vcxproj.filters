@@ -6,6 +6,5 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\tinyspritebatch.h" />
-    <ClInclude Include="..\tinypng.h" />
   </ItemGroup>
 </Project>
