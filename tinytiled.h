@@ -81,8 +81,20 @@ extern const char* tinytiled_error_reason;
 
 typedef struct tinytiled_map_t tinytiled_map_t;
 
+/*!
+ * Load a map from disk, placed into heap allocated memory.. \p mem_ctx can be
+ * NULL. It is used for custom allocations.
+ */
 tinytiled_map_t* tinytiled_load_map_from_file(const char* path, void* mem_ctx);
+
+/*!
+ * Load a map from memory. \p mem_ctx can be NULL. It is used for custom allocations.
+ */
 tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx);
+
+/*!
+ * Free all dynamic memory associated with this map.
+ */
 void tinytiled_free_map(tinytiled_map_t* map);
 
 #if !defined(TINYTILED_U64)
@@ -96,7 +108,7 @@ typedef struct tinytiled_property_t tinytiled_property_t;
 typedef union tinytiled_string_t tinytiled_string_t;
 typedef enum TINYTILED_PROPERTY_TYPE TINYTILED_PROPERTY_TYPE;
 
-/*
+/*!
  * To access a string, simply do: object->name.ptr; this union is needed
  * as a workaround for 32-bit builds where the size of a pointer is only
  * 32 bits. 
