@@ -144,7 +144,9 @@
         {
          "layers":[
                 {
-                 "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 31, 31, 0, 0, 0, 0, 0, 0, 31, 31, 0, 31, 0, 0, 0, 0, 0, 0, 31, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 31, 31, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 "compression":"gzip",
+                 "data":"H4sIAAAAAAAACmNgoC2QR8KE1DAQoQ6bHmLsp5YaYu2F6SEVAACae\/PzkAEAAA==",
+                 "encoding":"base64",
                  "height":10,
                  "name":"Tile Layer 1",
                  "opacity":1,
@@ -155,7 +157,9 @@
                  "y":0
                 }, 
                 {
-                 "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 31, 11, 11, 11, 0, 0, 0, 11, 0, 31, 31, 11, 31, 11, 11, 0, 11, 11, 0, 31, 0, 11, 31, 31, 0, 0, 11, 0, 0, 0, 0, 11, 31, 31, 0, 0, 11, 11, 11, 0, 0, 11, 31, 0, 0, 0, 0, 0, 11, 11, 11, 11, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                 "compression":"gzip",
+                 "data":"H4sIAAAAAAAACmNgoD7gRmLLQ\/ncaOLI6uSR1MmjqeVGU8eApA7GR7eTgYA6dLdwo6lBNwMZo5uHDxCrDhkAAE5OA2+QAQAA",
+                 "encoding":"base64",
                  "height":10,
                  "name":"Copy of Tile Layer 1",
                  "opacity":1,
@@ -168,7 +172,9 @@
                 {
                  "layers":[
                         {
-                         "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 13, 13, 13, 11, 0, 0, 0, 11, 0, 31, 13, 11, 13, 13, 11, 0, 11, 11, 0, 31, 13, 11, 31, 13, 0, 0, 11, 0, 0, 0, 13, 11, 13, 13, 0, 0, 11, 11, 11, 0, 13, 13, 13, 0, 0, 0, 0, 0, 11, 11, 13, 13, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                         "compression":"gzip",
+                         "data":"H4sIAAAAAAAACmNgoD7gRmLzImFuHOrkkeTR1XLjUAdjY7OTgQHTPGR1yGbyYlGD7kZkc+ShmBhArDpkAAAmffuZkAEAAA==",
+                         "encoding":"base64",
                          "height":10,
                          "name":"Deep Copy Tile Layer 1",
                          "opacity":1,
@@ -213,7 +219,7 @@
      "string":"string"
     },
  "renderorder":"right-down",
- "tiledversion":"1.1.3",
+ "tiledversion":"1.1.4",
  "tileheight":32,
  "tilesets":[
         {

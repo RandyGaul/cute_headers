@@ -135,6 +135,8 @@ int main(int argc, char** argv)
 
 	tinytiled_map_t* m = tinytiled_load_map_from_file("map.json", 0);
 
+	if (!m) return 0;
+
 	print_category("map"); ++tab_count;
 	print(m, backgroundcolor, %d);
 	print(m, height, %d);

@@ -1969,16 +1969,17 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 		switch (h)
 		{
 		case 14868627273436340303U: // compression
-			TINYTILED_CHECK(0, "Compression is not yet supported.");
+			TINYTILED_CHECK(0, "Compression is not yet supported. The expected tile format is CSV (uncompressed). Please see the docs if you are interested in compression.");
 			break;
 
 		case 4430454992770877055U: // data
+			TINYTILED_CHECK(tinytiled_peak(m) == '[', "The expected tile format is CSV (uncompressed). It looks like Base64 (uncompressed) was selected. Please see the docs if you are interested in compression.");
 			tinytiled_expect(m, '[');
 			tinytiled_read_csv_integers(m, &layer->data_count, &layer->data);
 			break;
 
 		case 1888774307506158416U: // encoding
-			TINYTILED_CHECK(0, "Encoding is not yet supported.");
+			TINYTILED_CHECK(0, "Encoding is not yet supported. The expected tile format is CSV (uncompressed). Please see the docs if you are interested in compression.");
 			break;
 
 		case 2841939415665718447U: // draworder
@@ -1995,6 +1996,7 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 		while (tinytiled_peak(m) != ']')
 		{
 			tinytiled_layer_t* child_layer = tinytiled_layers(m);
+			TINYTILED_FAIL_IF(!child_layer);
 			child_layer->next = layer->layers;
 			layer->layers = child_layer;
 			tinytiled_try(m, ',');
@@ -2172,6 +2174,7 @@ static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 		while (tinytiled_peak(m) != ']')
 		{
 			tinytiled_layer_t* layer = tinytiled_layers(m);
+			TINYTILED_FAIL_IF(!layer);
 			layer->next = m->map.layers;
 			m->map.layers = layer;
 			tinytiled_try(m, ',');
@@ -2357,6 +2360,7 @@ tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_
 
 tinytiled_err:
 	tinytiled_free_map_internal(m);
+	TINYTILED_WARNING(tinytiled_error_reason);
 	return 0;
 }
 
