@@ -2,9 +2,17 @@
 #include <glad/glad.h>
 #include <SDL2/SDL.h>
 
+#define TINYALLOC_IMPLEMENTATION
+#include <tinyalloc.h>
+
+#define TP_ALLOC(size) TINYALLOC_ALLOC(size, 0)
+#define TP_FREE(ptr) TINYALLOC_FREE(ptr, 0)
+#define TP_CALLOC(count, element_size) TINYALLOC_CALLOC(count, element_size, 0)
 #define TINYPNG_IMPLEMENTATION
 #include <tinypng.h>
 
+#define SPRITEBATCH_MALLOC(size, ctx) TINYALLOC_ALLOC(size, ctx)
+#define SPRITEBATCH_FREE(mem, ctx) TINYALLOC_FREE(mem, ctx)
 #define SPRITEBATCH_IMPLEMENTATION
 #include <tinyspritebatch.h>
 
@@ -86,9 +94,9 @@ sprite_t make_sprite(SPRITEBATCH_U64 image_id, float x, float y, float scale, fl
 // callbacks for tinyspritebatch.h
 void batch_report(spritebatch_sprite_t* sprites, int count)
 {
-	printf("begin batch\n");
-	for (int i = 0; i < count; ++i) printf("\t%llu\n", sprites[i].texture_id);
-	printf("end batch\n");
+	//printf("begin batch\n");
+	//for (int i = 0; i < count; ++i) printf("\t%llu\n", sprites[i].texture_id);
+	//printf("end batch\n");
 
 	// build the draw call
 	tgDrawCall call;
@@ -249,6 +257,12 @@ void load_images()
 {
 	for (int i = 0; i < images_count; ++i)
 		images[i] = tpLoadPNG(image_names[i]);
+}
+
+void unload_images()
+{
+	for (int i = 0; i < images_count; ++i)
+		tpFreePNG(images + i);
 }
 
 void setup_tinygl()
@@ -488,10 +502,17 @@ int main(int argc, char** argv)
 		spritebatch_flush(&sb);
 		sprite_verts_count = 0;
 
+		printf("Bytes in use: %d\n", TINYALLOC_BYTES_IN_USE());
+
 		// sprite batches have been submit to tinygl, go ahead and flush to screen
 		tgFlush(ctx_tg, swap_buffers, 0, 640, 480);
 		TG_PRINT_GL_ERRORS();
 	}
+
+	spritebatch_term(&sb);
+	unload_images();
+
+	TINYALLOC_CHECK_FOR_LEAKS();
 
 	return 0;
 }

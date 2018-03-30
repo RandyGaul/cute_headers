@@ -32,8 +32,8 @@
 		Then simply access the map's fields like so:
 
 			// get map width and height
-			int w = map->w;
-			int h = map->h;
+			int w = map->width;
+			int h = map->height;
 
 			// loop over the map's layers
 			tinytiled_layer_t* layer = map->layers;
@@ -106,7 +106,6 @@ typedef struct tinytiled_object_t tinytiled_object_t;
 typedef struct tinytiled_tileset_t tinytiled_tileset_t;
 typedef struct tinytiled_property_t tinytiled_property_t;
 typedef union tinytiled_string_t tinytiled_string_t;
-typedef enum TINYTILED_PROPERTY_TYPE TINYTILED_PROPERTY_TYPE;
 
 /*!
  * To access a string, simply do: object->name.ptr; this union is needed
@@ -126,7 +125,7 @@ union tinytiled_string_t
 	TINYTILED_U64 hash_id;
 };
 
-enum TINYTILED_PROPERTY_TYPE
+typedef enum TINYTILED_PROPERTY_TYPE
 {
 	TINYTILED_PROPERTY_NONE,
 	TINYTILED_PROPERTY_INT,
@@ -140,7 +139,7 @@ enum TINYTILED_PROPERTY_TYPE
 	TINYTILED_PROPERTY_FILE,
 
 	TINYTILED_PROPERTY_COLOR,
-};
+} TINYTILED_PROPERTY_TYPE;
 
 struct tinytiled_property_t
 {
@@ -857,7 +856,7 @@ static void strpool_internal_expand_handles( strpool_t* pool )
 
 static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* alloc_size )
     {
-    if( size < sizeof( strpool_internal_free_block_t ) ) size = sizeof( strpool_internal_free_block_t );
+    if( size < (int)sizeof( strpool_internal_free_block_t ) ) size = sizeof( strpool_internal_free_block_t );
     if( size < pool->min_data_size ) size = pool->min_data_size;
     size = (int)strpool_internal_pow2ceil( (STRPOOL_U32)size );
     
@@ -1873,71 +1872,71 @@ tinytiled_object_t* tinytiled_read_object(tinytiled_map_internal_t* m)
 
 		switch (h)
 		{
-		case 14479365350473253539: // ellipse
+		case 14479365350473253539U: // ellipse
 			tinytiled_read_bool(m, &object->ellipse);
 			break;
 
-		case 14992147199312073281: // gid
+		case 14992147199312073281U: // gid
 			tinytiled_read_int(m, &object->gid);
 			break;
 
-		case 809651598226485190: // height
+		case 809651598226485190U: // height
 			tinytiled_read_int(m, &object->height);
 			break;
 
-		case 3133932603199444032: // id
+		case 3133932603199444032U: // id
 			tinytiled_read_int(m, &object->id);
 			break;
 
-		case 12661511911333414066: // name
+		case 12661511911333414066U: // name
 			tinytiled_intern_string(m, &object->name);
 			break;
 
-		case 15925463322410838979: // point
+		case 15925463322410838979U: // point
 			tinytiled_read_bool(m, &object->point);
 			break;
 
-		case 11191351929714760271: // polyline
+		case 11191351929714760271U: // polyline
 			tinytiled_read_vertex_array(m, &object->vert_count, &object->vertices);
 			object->vert_type = 0;
 			break;
 
-		case 6623316362411997547: // polygon
+		case 6623316362411997547U: // polygon
 			tinytiled_read_vertex_array(m, &object->vert_count, &object->vertices);
 			object->vert_type = 1;
 			break;
 
-		case 8368542207491637236: // properties
+		case 8368542207491637236U: // properties
 			tinytiled_read_properties(m, &object->properties, &object->property_count);
 			break;
 
-		case 17386473859969670701: // rotation
+		case 17386473859969670701U: // rotation
 			tinytiled_read_float(m, &object->rotation);
 			break;
 
-		case 7758770083360183834: // text
+		case 7758770083360183834U: // text
 			TINYTILED_WARNING("Text field of Tiled objects is not yet supported.");
 			while (tinytiled_peak(m) != '}') tinytiled_next(m);
 			tinytiled_expect(m, '}');
 			break;
 
-		case 13509284784451838071: // type
+		case 13509284784451838071U: // type
 			tinytiled_intern_string(m, &object->type);
 			break;
 
-		case 128234417907068947: // visible
+		case 128234417907068947U: // visible
 			tinytiled_read_bool(m, &object->visible);
 			break;
 
-		case 7400839267610537869: // width
+		case 7400839267610537869U: // width
 			tinytiled_read_int(m, &object->width);
 			break;
 
-		case 644252274336276709: // x
+		case 644252274336276709U: // x
 			tinytiled_read_float(m, &object->x);
 			break;
 
-		case 643295699219922364: // y
+		case 643295699219922364U: // y
 			tinytiled_read_float(m, &object->y);
 			break;
 
@@ -1969,28 +1968,28 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 
 		switch (h)
 		{
-		case 14868627273436340303: // compression
+		case 14868627273436340303U: // compression
 			TINYTILED_CHECK(0, "Compression is not yet supported.");
 			break;
 
-		case 4430454992770877055: // data
+		case 4430454992770877055U: // data
 			tinytiled_expect(m, '[');
 			tinytiled_read_csv_integers(m, &layer->data_count, &layer->data);
 			break;
 
-		case 1888774307506158416: // encoding
+		case 1888774307506158416U: // encoding
 			TINYTILED_CHECK(0, "Encoding is not yet supported.");
 			break;
 
-		case 2841939415665718447: // draworder
+		case 2841939415665718447U: // draworder
 			tinytiled_intern_string(m, &layer->draworder);
 			break;
 
-		case 809651598226485190: // height
+		case 809651598226485190U: // height
 			tinytiled_read_int(m, &layer->height);
 			break;
 
-		case 4566956252693479661: // layers
+		case 4566956252693479661U: // layers
 		tinytiled_expect(m, '[');
 
 		while (tinytiled_peak(m) != ']')
@@ -2004,11 +2003,11 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 		tinytiled_expect(m, ']');
 		break;
 
-		case 12661511911333414066: // name
+		case 12661511911333414066U: // name
 			tinytiled_intern_string(m, &layer->name);
 			break;
 
-		case 107323337999513585: // objects
+		case 107323337999513585U: // objects
 			tinytiled_expect(m, '[');
 
 			while (tinytiled_peak(m) != ']')
@@ -2023,31 +2022,31 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 			tinytiled_expect(m, ']');
 			break;
 
-		case 11746902372727406098: // opacity
+		case 11746902372727406098U: // opacity
 			tinytiled_read_float(m, &layer->opacity);
 			break;
 
-		case 8368542207491637236: // properties
+		case 8368542207491637236U: // properties
 			tinytiled_read_properties(m, &layer->properties, &layer->property_count);
 			break;
 
-		case 13509284784451838071: // type
+		case 13509284784451838071U: // type
 			tinytiled_intern_string(m, &layer->type);
 			break;
 
-		case 128234417907068947: // visible
+		case 128234417907068947U: // visible
 			tinytiled_read_bool(m, &layer->visible);
 			break;
 
-		case 7400839267610537869: // width
+		case 7400839267610537869U: // width
 			tinytiled_read_int(m, &layer->width);
 			break;
 
-		case 644252274336276709: // x
+		case 644252274336276709U: // x
 			tinytiled_read_int(m, &layer->x);
 			break;
 
-		case 643295699219922364: // y
+		case 643295699219922364U: // y
 			tinytiled_read_int(m, &layer->y);
 			break;
 
@@ -2079,55 +2078,55 @@ tinytiled_tileset_t* tinytiled_tileset(tinytiled_map_internal_t* m)
 
 		switch (h)
 		{
-		case 12570673734542705940: // columns
+		case 12570673734542705940U: // columns
 			tinytiled_read_int(m, &tileset->columns);
 			break;
 
-		case 13956389100366699181: // firstgid
+		case 13956389100366699181U: // firstgid
 			tinytiled_read_int(m, &tileset->firstgid);
 			break;
 
-		case 13522647194774232494: // image
+		case 13522647194774232494U: // image
 			tinytiled_intern_string(m, &tileset->image);
 			break;
 
-		case 7796197983149768626: // imagewidth
+		case 7796197983149768626U: // imagewidth
 			tinytiled_read_int(m, &tileset->imagewidth);
 			break;
 
-		case 2114495263010514843: // imageheight
+		case 2114495263010514843U: // imageheight
 			tinytiled_read_int(m, &tileset->imageheight);
 			break;
 
-		case 4864566659847942049: // margin
+		case 4864566659847942049U: // margin
 			tinytiled_read_int(m, &tileset->margin);
 			break;
 
-		case 12661511911333414066: // name
+		case 12661511911333414066U: // name
 			tinytiled_intern_string(m, &tileset->name);
 			break;
 
-		case 8368542207491637236: // properties
+		case 8368542207491637236U: // properties
 			tinytiled_read_properties(m, &tileset->properties, &tileset->property_count);
 			break;
 
-		case 6491372721122724890: // spacing
+		case 6491372721122724890U: // spacing
 			tinytiled_read_int(m, &tileset->spacing);
 			break;
 
-		case 4065097716972592720: // tilecount
+		case 4065097716972592720U: // tilecount
 			tinytiled_read_int(m, &tileset->tilecount);
 			break;
 
-		case 13337683360624280154: // tileheight
+		case 13337683360624280154U: // tileheight
 			tinytiled_read_int(m, &tileset->tileheight);
 			break;
 
-		case 6504415465426505561: // tilewidth
+		case 6504415465426505561U: // tilewidth
 			tinytiled_read_int(m, &tileset->tilewidth);
 			break;
 
-		case 13509284784451838071: // type
+		case 13509284784451838071U: // type
 			tinytiled_intern_string(m, &tileset->type);
 			break;
 
@@ -2153,21 +2152,21 @@ static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 
  	switch (h)
 	{
-	case 17465100621023921744: // backgroundcolor
+	case 17465100621023921744U: // backgroundcolor
 		tinytiled_expect(m, '"');
 		tinytiled_read_hex_int(m, &m->map.backgroundcolor);
 		tinytiled_expect(m, '"');
 		break;
 
-	case 809651598226485190: // height
+	case 809651598226485190U: // height
 		tinytiled_read_int(m, &m->map.height);
 		break;
 
-	case 16529928297377797591: // infinite
+	case 16529928297377797591U: // infinite
 		tinytiled_read_bool(m, &m->map.infinite);
 		break;
 
-	case 4566956252693479661: // layers
+	case 4566956252693479661U: // layers
 		tinytiled_expect(m, '[');
 
 		while (tinytiled_peak(m) != ']')
@@ -2181,31 +2180,31 @@ static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 		tinytiled_expect(m, ']');
 		break;
 
-	case 11291153769551921430: // nextobjectid
+	case 11291153769551921430U: // nextobjectid
 		tinytiled_read_int(m, &m->map.nextobjectid);
 		break;
 
-	case 563935667693078739: // orientation
+	case 563935667693078739U: // orientation
 		tinytiled_intern_string(m, &m->map.orientation);
 		break;
 
-	case 8368542207491637236: // properties
+	case 8368542207491637236U: // properties
 		tinytiled_read_properties(m, &m->map.properties, &m->map.property_count);
 		break;
 
-	case 16693886730115578029: // renderorder
+	case 16693886730115578029U: // renderorder
 		tinytiled_intern_string(m, &m->map.renderorder);
 		break;
 
-	case 1007832939408977147: // tiledversion
+	case 1007832939408977147U: // tiledversion
 		tinytiled_intern_string(m, &m->map.tiledversion);
 		break;
 
-	case 13337683360624280154: // tileheight
+	case 13337683360624280154U: // tileheight
 		tinytiled_read_int(m, &m->map.tileheight);
 		break;
 
-	case 8310322674355535532: // tilesets
+	case 8310322674355535532U: // tilesets
 	{
 		tinytiled_expect(m, '[');
 
@@ -2220,19 +2219,19 @@ static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 		tinytiled_expect(m, ']');
 	}	break;
 
-	case 6504415465426505561: // tilewidth
+	case 6504415465426505561U: // tilewidth
 		tinytiled_read_int(m, &m->map.tilewidth);
 		break;
 
-	case 13509284784451838071: // type
+	case 13509284784451838071U: // type
 		tinytiled_intern_string(m, &m->map.type);
 		break;
 
-	case 8196820454517111669: // version
+	case 8196820454517111669U: // version
 		tinytiled_read_int(m, &m->map.version);
 		break;
 
-	case 7400839267610537869: // width
+	case 7400839267610537869U: // width
 		tinytiled_read_int(m, &m->map.width);
 		break;
 

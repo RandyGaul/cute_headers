@@ -14,7 +14,7 @@
 
 		1. taStack          - stack based allocator
 		2. taFrame          - frame based scratch allocator
-		3. TA_ALLOC/TA_FREE - malloc/free leak checker
+		3. TINYALLOC_ALLOC/TINYALLOC_FREE - malloc/free leak checker
 
 	And here are their descriptions:
 
@@ -28,7 +28,7 @@
 		assets, or for quick "temporary scratch-space" in the middle of an algorithm.
 
 		3. Thin wrapper around malloc/free for recording and reporting memory leaks. Call
-		TA_CHECK_FOR_LEAKS to find and printf any un-free'd memory. Define TA_LEAK_CHECK
+		TINYALLOC_CHECK_FOR_LEAKS to find and printf any un-free'd memory. Define TINYALLOC_LEAK_CHECK
 		to 0 in order to turn of leak checking and use raw malloc/free.
 
 	Revision history:
@@ -50,32 +50,38 @@ void* taFrameAlloc(taFrame* frame, size_t size);
 void taFrameFree(taFrame* frame);
 
 // define these to your own user definition as necessary
-#if !defined(TA_ALLOC)
-	#define TA_ALLOC(size) taLeakCheckAlloc((size), (char*)__FILE__, __LINE__)
+#if !defined(TINYALLOC_ALLOC)
+	#define TINYALLOC_ALLOC(size, ctx) taLeakCheckAlloc((size), (char*)__FILE__, __LINE__)
 #endif
 
-#if !defined(TA_FREE)
-	#define TA_FREE(mem) taLeakCheckFree(mem)
+#if !defined(TINYALLOC_FREE)
+	#define TINYALLOC_FREE(mem, ctx) taLeakCheckFree(mem)
+#endif
+
+#if !defined(TINYALLOC_CALLOC)
+	#define TINYALLOC_CALLOC(count, elementSize, ctx) taLeakCheckCalloc(count, elementSize, (char*)__FILE__, __LINE__)
 #endif
 
 // 1 - use the leak checker
 // 0 - use plain malloc/free
-#define TA_LEAK_CHECK 1
+#define TINYALLOC_LEAK_CHECK 1
 void* taLeakCheckAlloc(size_t size, char* file, int line);
+void* taLeakCheckCalloc(size_t count, size_t elementSize, char* file, int line);
 void taLeakCheckFree(void* mem);
-int TA_CHECK_FOR_LEAKS();
+int TINYALLOC_CHECK_FOR_LEAKS();
+int TINYALLOC_BYTES_IN_USE();
 
 // define these to your own user definition as necessary
-#if !defined(TA_MALLOC_FUNC)
-	#define TA_MALLOC_NEED_HEADER
-	#define TA_MALLOC_FUNC(size) malloc(size)
+#if !defined(TINYALLOC_MALLOC_FUNC)
+	#define TINYALLOC_MALLOC_FUNC malloc
 #endif
 
-#if !defined(TA_FREE_FUNC)
-	#if !defined(TA_MALLOC_NEED_HEADER)
-		#define TA_MALLOC_NEED_HEADER
-	#endif
-	#define TA_FREE_FUNC(mem) free(mem)
+#if !defined(TINYALLOC_FREE_FUNC)
+	#define TINYALLOC_FREE_FUNC free
+#endif
+
+#if !defined(TINYALLOC_CALLOC_FUNC)
+	#define TINYALLOC_CALLOC_FUNC calloc
 #endif
 
 #define TINYALLOC_H
@@ -91,15 +97,15 @@ struct taStack
 	size_t bytes_left;
 };
 
-#define TA_PTR_ADD(ptr, size) ((void*)(((char*)ptr) + (size)))
-#define TA_PTR_SUB(ptr, size) ((void*)(((char*)ptr) - (size)))
+#define TINYALLOC_PTR_ADD(ptr, size) ((void*)(((char*)ptr) + (size)))
+#define TINYALLOC_PTR_SUB(ptr, size) ((void*)(((char*)ptr) - (size)))
 
 taStack* taStackCreate(void* memory_chunk, size_t size)
 {
 	taStack* stack = (taStack*)memory_chunk;
 	if (size < sizeof(taStack)) return 0;
-	*(size_t*)TA_PTR_ADD(memory_chunk, sizeof(taStack)) = 0;
-	stack->memory = TA_PTR_ADD(memory_chunk, sizeof(taStack) + sizeof(size_t));
+	*(size_t*)TINYALLOC_PTR_ADD(memory_chunk, sizeof(taStack)) = 0;
+	stack->memory = TINYALLOC_PTR_ADD(memory_chunk, sizeof(taStack) + sizeof(size_t));
 	stack->capacity = size - sizeof(taStack) - sizeof(size_t);
 	stack->bytes_left = stack->capacity;
 	return stack;
@@ -109,8 +115,8 @@ void* taStackAlloc(taStack* stack, size_t size)
 {
 	if (stack->bytes_left - sizeof(size_t) < size) return 0;
 	void* user_mem = stack->memory;
-	*(size_t*)TA_PTR_ADD(user_mem, size) = size;
-	stack->memory = TA_PTR_ADD(user_mem, size + sizeof(size_t));
+	*(size_t*)TINYALLOC_PTR_ADD(user_mem, size) = size;
+	stack->memory = TINYALLOC_PTR_ADD(user_mem, size + sizeof(size_t));
 	stack->bytes_left -= sizeof(size_t) + size;
 	return user_mem;
 }
@@ -118,8 +124,8 @@ void* taStackAlloc(taStack* stack, size_t size)
 int taStackFree(taStack* stack, void* memory)
 {
 	if (!memory) return 0;
-	size_t size = *(size_t*)TA_PTR_SUB(stack->memory, sizeof(size_t));
-	void* prev = TA_PTR_SUB(stack->memory, size + sizeof(size_t));
+	size_t size = *(size_t*)TINYALLOC_PTR_SUB(stack->memory, sizeof(size_t));
+	void* prev = TINYALLOC_PTR_SUB(stack->memory, size + sizeof(size_t));
 	if (prev != memory) return 0;
 	stack->memory = prev;
 	stack->bytes_left += sizeof(size_t) + size;
@@ -142,7 +148,7 @@ struct taFrame
 taFrame* taFrameCreate(void* memory_chunk, size_t size)
 {
 	taFrame* frame = (taFrame*)memory_chunk;
-	frame->original = TA_PTR_ADD(memory_chunk, sizeof(taFrame));
+	frame->original = TINYALLOC_PTR_ADD(memory_chunk, sizeof(taFrame));
 	frame->ptr = frame->original;
 	frame->capacity = frame->bytes_left = size - sizeof(taFrame);
 	return frame;
@@ -152,7 +158,7 @@ void* taFrameAlloc(taFrame* frame, size_t size)
 {
 	if (frame->bytes_left < size) return 0;
 	void* user_mem = frame->ptr;
-	frame->ptr = TA_PTR_ADD(frame->ptr, size);
+	frame->ptr = TINYALLOC_PTR_ADD(frame->ptr, size);
 	frame->bytes_left -= size;
 	return user_mem;
 }
@@ -163,11 +169,9 @@ void taFrameFree(taFrame* frame)
 	frame->bytes_left = frame->capacity;
 }
 
-#if defined(TA_MALLOC_NEED_HEADER)
-#include <stdlib.h>	// malloc, free
-#endif
+#include <stdlib.h> // malloc, free
 
-#if TA_LEAK_CHECK
+#if TINYALLOC_LEAK_CHECK
 #include <stdio.h>
 
 typedef struct taAllocInfo taAllocInfo;
@@ -198,7 +202,7 @@ static taAllocInfo* taAllocHead()
 
 void* taLeakCheckAlloc(size_t size, char* file, int line)
 {
-	taAllocInfo* mem = (taAllocInfo*)TA_MALLOC_FUNC(sizeof(taAllocInfo) + size);
+	taAllocInfo* mem = (taAllocInfo*)TINYALLOC_MALLOC_FUNC(sizeof(taAllocInfo) + size);
 
 	if (!mem) return 0;
 
@@ -214,6 +218,19 @@ void* taLeakCheckAlloc(size_t size, char* file, int line)
 	return mem + 1;
 }
 
+#if !defined(TINYALLOC_MEMSET)
+	#include <string.h> // memset
+	#define TINYALLOC_MEMSET memset
+#endif
+
+void* taLeakCheckCalloc(size_t count, size_t elementSize, char* file, int line)
+{
+	size_t size = count * elementSize;
+	void* mem = taLeakCheckAlloc(size, file, line);
+	TINYALLOC_MEMSET(mem, 0, size);
+	return mem;
+}
+
 void taLeakCheckFree(void* mem)
 {
 	if (!mem) return;
@@ -222,10 +239,10 @@ void taLeakCheckFree(void* mem)
 	info->prev->next = info->next;
 	info->next->prev = info->prev;
 
-	TA_FREE_FUNC(info);
+	TINYALLOC_FREE_FUNC(info);
 }
 
-int TA_CHECK_FOR_LEAKS()
+int TINYALLOC_CHECK_FOR_LEAKS()
 {
 	taAllocInfo* head = taAllocHead();
 	taAllocInfo* next = head->next;
@@ -242,21 +259,52 @@ int TA_CHECK_FOR_LEAKS()
 	else printf("SUCCESS: No memory leaks detected.\n");
 	return leaks;
 }
+
+int TINYALLOC_BYTES_IN_USE()
+{
+	taAllocInfo* head = taAllocHead();
+	taAllocInfo* next = head->next;
+	int bytes = 0;
+
+	while (next != head)
+	{
+		bytes += next->size;
+		next = next->next;
+	}
+
+	return bytes;
+}
 #else
+#if !defined(TINYALLOC_UNUSED)
+	#if defined(_MSC_VER)
+		#define TINYALLOC_UNUSED(x) (void)x
+	#else
+		#define TINYALLOC_UNUSED(x) (void)(sizeof(x))
+	#endif
+#endif
+
 inline void* taLeakCheckAlloc(size_t size, char* file, int line)
 {
-	(void)file;
-	(void)line;
-	return malloc(size);
+	TINYALLOC_UNUSED(file);
+	TINYALLOC_UNUSED(line);
+	return TINYALLOC_MALLOC_FUNC(size);
+}
+
+void* taLeakCheckCalloc(size_t count, size_t elementSize, char* file, int line)
+{
+	TINYALLOC_UNUSED(file);
+	TINYALLOC_UNUSED(line);
+	return TINYALLOC_CALLOC_FUNC(count, size);
 }
 
 inline void taLeakCheckFree(void* mem)
 {
-	return free(mem);
+	return TINYALLOC_FREE_FUNC(mem);
 }
 
-inline int TA_CHECK_FOR_LEAKS() {}
-#endif // TA_LEAK_CHECK
+inline int TINYALLOC_CHECK_FOR_LEAKS() { return 0; }
+inline int TINYALLOC_BYTES_IN_USE() { return 0; }
+#endif // TINYALLOC_LEAK_CHECK
 
 #endif // TINYALLOC_IMPLEMENTATION
 

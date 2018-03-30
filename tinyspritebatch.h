@@ -237,8 +237,8 @@ struct spritebatch_sprite_t
 
 #ifndef SPRITEBATCH_MALLOC
 	#include <stdlib.h>
-	#define SPRITEBATCH_MALLOC(ctx, size) malloc(size)
-	#define SPRITEBATCH_FREE(ctx, ptr) free(ptr)
+	#define SPRITEBATCH_MALLOC(size, ctx) malloc(size)
+	#define SPRITEBATCH_FREE(ptr, ctx) free(ptr)
 #endif
 
 #ifndef SPRITEBATCH_MEMCPY
@@ -289,8 +289,8 @@ struct spritebatch_sprite_t
 
 #define HASHTABLE_MEMSET(ptr, val, n) SPRITEBATCH_MEMSET(ptr, val, n)
 #define HASHTABLE_MEMCPY(dst, src, n) SPRITEBATCH_MEMCPY(dst, src, n)
-#define HASHTABLE_MALLOC(ctx, size) SPRITEBATCH_MALLOC(ctx, size)
-#define HASHTABLE_FREE(ctx, ptr) SPRITEBATCH_FREE(ctx, ptr)
+#define HASHTABLE_MALLOC(ctx, size) SPRITEBATCH_MALLOC(size, ctx)
+#define HASHTABLE_FREE(ctx, ptr) SPRITEBATCH_FREE(ptr, ctx)
 
 
 // hashtable.h implementation by Mattias Gustavsson
@@ -738,19 +738,19 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config)
 	// initialize input buffer
 	sb->input_count = 0;
 	sb->input_capacity = 1024;
-	sb->input_buffer = (spritebatch_internal_sprite_t*)SPRITEBATCH_MALLOC(sb->mem_ctx, sizeof(spritebatch_internal_sprite_t) * sb->input_capacity);
+	sb->input_buffer = (spritebatch_internal_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_sprite_t) * sb->input_capacity, sb->mem_ctx);
 	if (!sb->input_buffer) return 1;
 
 	// initialize sprite buffer
 	sb->sprite_count = 0;
 	sb->sprite_capacity = 1024;
-	sb->sprites = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sb->mem_ctx, sizeof(spritebatch_sprite_t) * sb->sprite_capacity);
+	sb->sprites = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
 	if (!sb->sprites) return 1;
 
 	// initialize key buffer (for marking hash table entries for deletion)
 	sb->key_buffer_count = 0;
 	sb->key_buffer_capacity = 1024;
-	sb->key_buffer = (SPRITEBATCH_U64*)SPRITEBATCH_MALLOC(sb->mem_ctx, sizeof(SPRITEBATCH_U64) * sb->key_buffer_capacity);
+	sb->key_buffer = (SPRITEBATCH_U64*)SPRITEBATCH_MALLOC(sizeof(SPRITEBATCH_U64) * sb->key_buffer_capacity, sb->mem_ctx);
 
 	// setup tables
 	hashtable_init(&sb->sprites_to_lonely_textures, sizeof(spritebatch_internal_lonely_texture_t), 1024, sb->mem_ctx);
@@ -763,9 +763,9 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config)
 
 void spritebatch_term(spritebatch_t* sb)
 {
-	SPRITEBATCH_FREE(sb->mem_ctx, sb->input_buffer);
-	SPRITEBATCH_FREE(sb->mem_ctx, sb->sprites);
-	SPRITEBATCH_FREE(sb->mem_ctx, sb->key_buffer);
+	SPRITEBATCH_FREE(sb->input_buffer, sb->mem_ctx);
+	SPRITEBATCH_FREE(sb->sprites, sb->mem_ctx);
+	SPRITEBATCH_FREE(sb->key_buffer, sb->mem_ctx);
 	hashtable_term(&sb->sprites_to_lonely_textures);
 	hashtable_term(&sb->sprites_to_atlases);
 
@@ -777,7 +777,7 @@ void spritebatch_term(spritebatch_t* sb)
 		{
 			hashtable_term(&atlas->sprites_to_textures);
 			spritebatch_internal_atlas_t* next = atlas->next;
-			SPRITEBATCH_FREE(sb->mem_ctx, atlas);
+			SPRITEBATCH_FREE(atlas, sb->mem_ctx);
 			atlas = next;
 		}
 		while (atlas != sentinel);
@@ -806,10 +806,10 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 		if (ctx->count == ctx->capacity) \
 		{ \
 			int new_capacity = ctx->capacity * 2; \
-			void* new_data = SPRITEBATCH_MALLOC(ctx->mem_ctx, new_capacity); \
+			void* new_data = SPRITEBATCH_MALLOC(new_capacity, ctx->mem_ctx); \
 			if (!new_data) return 0; \
 			SPRITEBATCH_MEMCPY(new_data, ctx->data, type_size * ctx->count); \
-			SPRITEBATCH_FREE(ctx->mem_ctx, ctx->data); \
+			SPRITEBATCH_FREE(ctx->data, ctx->mem_ctx); \
 			ctx->data = new_data; \
 			ctx->capacity = new_capacity; \
 		} \
@@ -1144,7 +1144,7 @@ typedef struct
 	int fit;          // non-zero if image fit and was placed into the atlas
 } spritebatch_internal_atlas_image_t;
 
-#define SPRITEBATCH_CHECK( X, Y ) do { if ( !(X) ) { SPRITEBATCH_LOG(Y); goto tp_err; } } while ( 0 )
+#define SPRITEBATCH_CHECK( X, Y ) do { if ( !(X) ) { SPRITEBATCH_LOG(Y); goto sb_err; } } while ( 0 )
 
 void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atlas_out, const spritebatch_internal_lonely_texture_t* imgs, int img_count)
 {
@@ -1160,8 +1160,8 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 	int atlas_height = sb->atlas_height_in_pixels;
 	float volume_used = 0;
 
-	images = (spritebatch_internal_integer_image_t*)SPRITEBATCH_MALLOC(mem_ctx, sizeof(spritebatch_internal_integer_image_t) * img_count);
-	nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(mem_ctx, sizeof(spritebatch_internal_atlas_node_t) * atlas_node_capacity);
+	images = (spritebatch_internal_integer_image_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_integer_image_t) * img_count, mem_ctx);
+	nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_node_t) * atlas_node_capacity, mem_ctx);
 	SPRITEBATCH_CHECK(images, "out of mem");
 	SPRITEBATCH_CHECK(nodes, "out of mem");
 
@@ -1213,10 +1213,10 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 		if (sp == atlas_node_capacity)
 		{
 			int new_capacity = atlas_node_capacity * 2;
-			spritebatch_internal_atlas_node_t* new_nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(mem_ctx, sizeof(spritebatch_internal_atlas_node_t) * new_capacity);
+			spritebatch_internal_atlas_node_t* new_nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_node_t) * new_capacity, mem_ctx);
 			SPRITEBATCH_CHECK(new_nodes, "out of mem");
 			memcpy(new_nodes, nodes, sizeof(spritebatch_internal_atlas_node_t) * sp);
-			SPRITEBATCH_FREE(mem_ctx, nodes);
+			SPRITEBATCH_FREE(nodes, mem_ctx);
 			nodes = new_nodes;
 			atlas_node_capacity = new_capacity;
 		}
@@ -1253,7 +1253,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 	// Write the final atlas image, use SPRITEBATCH_ATLAS_EMPTY_COLOR as base color
 	atlas_stride = atlas_width * pixel_stride;
 	atlas_image_size = atlas_width * atlas_height * pixel_stride;
-	atlas_pixels = SPRITEBATCH_MALLOC(mem_ctx, atlas_image_size);
+	atlas_pixels = SPRITEBATCH_MALLOC(atlas_image_size, mem_ctx);
 	SPRITEBATCH_CHECK(atlas_image_size, "out of mem");
 	memset(atlas_pixels, SPRITEBATCH_ATLAS_EMPTY_COLOR, atlas_image_size);
 
@@ -1339,14 +1339,12 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 
 	atlas_out->volume_ratio = volume_used / (atlas_width * atlas_height);
 
-	SPRITEBATCH_FREE(mem_ctx, nodes);
-	SPRITEBATCH_FREE(mem_ctx, images);
-	return;
+sb_err:
+	// no specific error handling needed here (yet)
 
-tp_err:
-	SPRITEBATCH_FREE(mem_ctx, atlas_pixels);
-	SPRITEBATCH_FREE(mem_ctx, nodes);
-	SPRITEBATCH_FREE(mem_ctx, images);
+	SPRITEBATCH_FREE(atlas_pixels, mem_ctx);
+	SPRITEBATCH_FREE(nodes, mem_ctx);
+	SPRITEBATCH_FREE(images, mem_ctx);
 	return;
 }
 
@@ -1433,7 +1431,7 @@ void spritebatch_internal_flush_atlas(spritebatch_t* sb, spritebatch_internal_at
 	atlas->prev->next = atlas->next;
 	hashtable_term(&atlas->sprites_to_textures);
 	sb->delete_texture_callback(atlas->texture_id);
-	SPRITEBATCH_FREE(sb->mem_ctx, atlas);
+	SPRITEBATCH_FREE(atlas, sb->mem_ctx);
 }
 
 void spritebatch_internal_log_chain(spritebatch_internal_atlas_t* atlas)
@@ -1558,7 +1556,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 	int stuck = 0;
 	while (lonely_count > lonely_buffer_count_till_flush && !stuck)
 	{
-		atlas = (spritebatch_internal_atlas_t*)SPRITEBATCH_MALLOC(sb->mem_ctx, sizeof(spritebatch_internal_atlas_t));
+		atlas = (spritebatch_internal_atlas_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_t), sb->mem_ctx);
 		if (sb->atlases)
 		{
 			atlas->prev = sb->atlases;
