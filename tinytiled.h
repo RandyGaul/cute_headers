@@ -101,6 +101,14 @@ void tinytiled_free_map(tinytiled_map_t* map);
 	#define TINYTILED_U64 unsigned long long
 #endif
 
+#if !defined(TINYTILED_INLINE)
+	#if defined(_MSC_VER)
+		#define TINYTILED_INLINE __inline
+	#else
+		#define TINYTILED_INLINE __inline__
+	#endif
+#endif
+
 typedef struct tinytiled_layer_t tinytiled_layer_t;
 typedef struct tinytiled_object_t tinytiled_object_t;
 typedef struct tinytiled_tileset_t tinytiled_tileset_t;
@@ -189,6 +197,49 @@ struct tinytiled_object_t
 	float y;                          // y coordinate in pixels.
 	tinytiled_object_t* next;         // Pointer to next object. NULL if final object.
 };
+
+typedef enum TINYTILED_GID_FLIP_FLAGS
+{
+	TINYTILED_FLIPPED_HORIZONTALLY_FLAG = 0x80000000,
+	TINYTILED_FLIPPED_VERTICALLY_FLAG   = 0x40000000,
+	TINYTILED_FLIPPED_DIAGONALLY_FLAG   = 0x20000000,
+} TINYTILED_GID_FLIP_FLAGS;
+
+/*!
+ * Example of using both helper functions below to process the `data` pointer of a layer,
+ * containing an array of `GID`s.
+ *
+ * for (int i = 0; i < layer->data_count; i++)
+ * {
+ *     int hflip, vflip, dflip;
+ *     int tile_id = layer->data[i];
+ *     tinytiled_get_flags(tile_id, &hflip, &vflip, &dflip);
+ *     tile_id = tinytiled_unset_flags(tile_id);
+ *     DoSomethingWithFlags(tile_id, flip, vflip, dlfip);
+ *     DoSomethingWithTileID(tile_id);
+ * }
+ */
+
+/*!
+ * Helper for processing tile data in /ref `tinytiled_layer_t` `data`. Unsets all of
+ * the image flipping flags in the higher bit of /p `tile_data_gid`.
+ */
+TINYTILED_INLINE int tinytiled_unset_flags(int tile_data_gid)
+{
+	const int flags = ~(TINYTILED_FLIPPED_HORIZONTALLY_FLAG | TINYTILED_FLIPPED_VERTICALLY_FLAG | TINYTILED_FLIPPED_DIAGONALLY_FLAG);
+	return tile_data_gid &= flags;
+}
+
+/*!
+ * Helper for processing tile data in /ref `tinytiled_layer_t` `data`. Flags are
+ * stored in the GID array `data` for flipping the image. Retrieves all three flag types.
+ */
+TINYTILED_INLINE void tinytiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
+{
+	*flip_horizontal = tile_data_gid & TINYTILED_FLIPPED_HORIZONTALLY_FLAG;
+	*flip_vertical = tile_data_gid & TINYTILED_FLIPPED_VERTICALLY_FLAG;
+	*flip_diagonal = tile_data_gid & TINYTILED_FLIPPED_DIAGONALLY_FLAG;
+}
 
 struct tinytiled_layer_t
 {
@@ -1301,14 +1352,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		#define TINYTILED_UNUSED(x) (void)x
 	#else
 		#define TINYTILED_UNUSED(x) (void)(sizeof(x))
-	#endif
-#endif
-
-#if !defined(TINYTILED_INLINE)
-	#if defined(_MSC_VER)
-		#define TINYTILED_INLINE __inline
-	#else
-		#define TINYTILED_INLINE __inline__
 	#endif
 #endif
 
