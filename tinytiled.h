@@ -168,7 +168,7 @@ struct tinytiled_object_t
 	// Example to index each vert of a polygon/polyline:
 	/*
 		float x, y;
-		for(int i = 0; i < vert_count; i += 2)
+		for(int i = 0; i < vert_count * 2; i += 2)
 		{
 			x = vertices[i];
 			y = vertices[i + 1];
