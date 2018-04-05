@@ -768,11 +768,11 @@ tsLoadedSound tsLoadWAV( const char* path )
 		sound->channel_count = channel_count;
 		sound->channels[ 0 ] = a;
 		sound->channels[ 1 ] = b;
-		TS_FREE( samples );
+		free( samples );
 		return;
 
 	ts_err:
-		TS_FREE( samples );
+		free( samples );
 		memset( sound, 0, sizeof( tsLoadedSound ) );
 	}
 
