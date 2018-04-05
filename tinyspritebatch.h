@@ -146,7 +146,7 @@ typedef struct spritebatch_sprite_t spritebatch_sprite_t;
 // of the image referenced by `image_id`. `x` and `y` are the position of the sprite. `sx` and
 // `sy` are the scale factors on the x and y axis for the sprite. `c` and `s` are the cosine and
 // sine of the angle of the sprite, and represent a 2D rotation matrix.
-int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int image_w, int image_h, float x, float y, float sx, float sy, float c, float s, SPRITEBATCH_U64 sort_bits);
+int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int image_w, int image_h, float x, float y, float sx, float sy, float c, float s, int sort_bits);
 
 // Increments internal timestamps on all textures, for use in `spritebatch_defrag`.
 void spritebatch_tick(spritebatch_t* sb);
@@ -193,7 +193,7 @@ struct spritebatch_config_t
 	int atlas_height_in_pixels;
 	int ticks_to_decay_texture;         // number of ticks it takes for a texture handle to be destroyed via `destroy_texture_handle_t`
 	int lonely_buffer_count_till_flush; // number of unique textures until an atlas is constructed
-	int lonely_buffer_count_till_decay; // number of unique textures until decay metrics take effect
+	int lonely_buffer_count_till_decay; // number of unique textures until decay metrics take effect. (TODO) randy: what is this? Need better doc. Idea? Merge this with ticks_to_decay_texture.
 	float ratio_to_decay_atlas;         // from 0 to 1, once ratio is less than `ratio_to_decay_atlas`, flush active textures in atlas to lonely buffer
 	float ratio_to_merge_atlases;       // from 0 to 0.5, attempts to merge atlases with some ratio of empty space
 	submit_batch_t batch_callback;
@@ -208,10 +208,11 @@ struct spritebatch_sprite_t
 	SPRITEBATCH_U64 texture_id;
 
 	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
-	// internally sprites are sorted first based on `sort_bits`, and to break ties they
-	// are sorted on `texture_id`. Feel free to modifiy as necessary. Also feel free to
-	// change the sort predicate `spritebatch_internal_instance_pred` in the implement-
-	// ation section.
+	// The first 32-bits store the user's sort bits. The bottom 32-bits are for internal
+	// usage, and are not ever set by the user. Internally sprites are sorted first
+	// based on `sort_bits`, and to break ties they are sorted on `texture_id`. Feel free
+	// to change the sort predicate `spritebatch_internal_instance_pred` in the
+	// implementation section.
 	SPRITEBATCH_U64 sort_bits;
 
 	float x, y;       // x and y position
@@ -815,12 +816,17 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 		} \
 	} while (0)
 
-int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, float x, float y, float sx, float sy, float c, float s, SPRITEBATCH_U64 sort_bits)
+static SPRITEBATCH_U64 spritebatch_make_sort_key(int index, int sort_bits)
+{
+	return (((SPRITEBATCH_U64)sort_bits) << 32) | ((SPRITEBATCH_U64)index);
+}
+
+int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, float x, float y, float sx, float sy, float c, float s, int sort_bits)
 {
 	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, sizeof(spritebatch_internal_sprite_t));
 	spritebatch_internal_sprite_t sprite;
 	sprite.image_id = image_id;
-	sprite.sort_bits = sort_bits;
+	sprite.sort_bits = spritebatch_make_sort_key(sb->input_count, sort_bits);
 	sprite.w = w;
 	sprite.h = h;
 	sprite.x = x;
