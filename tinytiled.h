@@ -20,6 +20,9 @@
 		This header is up to date with Tiled's documentation Revision f205c0b5 and
 		verified to work with Tiled stable version 1.1.3.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
+
+		Here is a past discussion thread on this header:
+		https://www.reddit.com/r/gamedev/comments/87680n/tinytiled_tiled_json_map_parserloader_in_c/
 */
 
 /*
