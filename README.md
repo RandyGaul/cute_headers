@@ -31,9 +31,14 @@ How to Use
 Generally these headers do not have dependencies and are intended to be included directly into your source (check each header for specific documentation at the top of the file). Each header has a LIBNAME_IMPLEMENTATION symbol; add this to a single translation unit in your code and include the header right after in order to define library symbols. Just include the header as normal otherwise.
 
 Examples and Tests
------------------
+------------------
 
 Some headers also have example code or demos. In this repo just look for the corresponding examples or tests folders. The example folders are particularly useful for figuring out how to use a particular header.
+
+Discord Chat
+------------
+
+Here's a link to the discord chat for tinyheaders. Feel free to pop in and ask questions or make suggestions. If anyone has used tinyheaders it would be great to hear your experience! https://discord.gg/2DFHRmX
 
 FAQ
 ---
