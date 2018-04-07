@@ -35,10 +35,12 @@ Examples and Tests
 
 Some headers also have example code or demos. In this repo just look for the corresponding examples or tests folders. The example folders are particularly useful for figuring out how to use a particular header.
 
-Discord Chat
-------------
+Contact
+-------
 
 Here's a link to the discord chat for tinyheaders. Feel free to pop in and ask questions, make suggestions, or have a discussion. If anyone has used tinyheaders it would be great to hear your experience! https://discord.gg/2DFHRmX
+
+Another easy way to get a hold of me is on twitter [@randypgaul](https://twitter.com/RandyPGaul).
 
 FAQ
 ---
