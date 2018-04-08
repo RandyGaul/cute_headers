@@ -204,13 +204,15 @@ struct tpAtlasImage
 
 static tpPixel tpMakePixelA( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 {
-	tpPixel p = { r, g, b, a };
+	tpPixel p;
+	p.r = r; p.g = g; p.b = b; p.a = a;
 	return p;
 }
 
 static tpPixel tpMakePixel( uint8_t r, uint8_t g, uint8_t b )
 {
-	tpPixel p = { r, g, b, 0xFF };
+	tpPixel p;
+	p.r = r; p.g = g; p.b = b; p.a = 0xFF;
 	return p;
 }
 
