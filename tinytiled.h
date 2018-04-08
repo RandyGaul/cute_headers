@@ -198,13 +198,6 @@ struct tinytiled_object_t
 	tinytiled_object_t* next;         // Pointer to next object. NULL if final object.
 };
 
-typedef enum TINYTILED_GID_FLIP_FLAGS
-{
-	TINYTILED_FLIPPED_HORIZONTALLY_FLAG = 0x80000000,
-	TINYTILED_FLIPPED_VERTICALLY_FLAG   = 0x40000000,
-	TINYTILED_FLIPPED_DIAGONALLY_FLAG   = 0x20000000,
-} TINYTILED_GID_FLIP_FLAGS;
-
 /*!
  * Example of using both helper functions below to process the `data` pointer of a layer,
  * containing an array of `GID`s.
@@ -220,6 +213,10 @@ typedef enum TINYTILED_GID_FLIP_FLAGS
  * }
  */
 
+#define TINYTILED_FLIPPED_HORIZONTALLY_FLAG 0x80000000
+#define TINYTILED_FLIPPED_VERTICALLY_FLAG   0x40000000
+#define TINYTILED_FLIPPED_DIAGONALLY_FLAG   0x20000000
+
 /*!
  * Helper for processing tile data in /ref `tinytiled_layer_t` `data`. Unsets all of
  * the image flipping flags in the higher bit of /p `tile_data_gid`.
@@ -227,7 +224,7 @@ typedef enum TINYTILED_GID_FLIP_FLAGS
 TINYTILED_INLINE int tinytiled_unset_flags(int tile_data_gid)
 {
 	const int flags = ~(TINYTILED_FLIPPED_HORIZONTALLY_FLAG | TINYTILED_FLIPPED_VERTICALLY_FLAG | TINYTILED_FLIPPED_DIAGONALLY_FLAG);
-	return tile_data_gid &= flags;
+	return tile_data_gid & flags;
 }
 
 /*!
@@ -1557,7 +1554,7 @@ tinytiled_err:
 static int tinytiled_read_int_internal(tinytiled_map_internal_t* m, int* out)
 {
 	char* end;
-	int val = strtol(m->in, &end, 10);
+	int val = (int)strtoll(m->in, &end, 10);
 	TINYTILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
