@@ -268,7 +268,7 @@ int TINYALLOC_BYTES_IN_USE()
 
 	while (next != head)
 	{
-		bytes += next->size;
+		bytes += (int)next->size;
 		next = next->next;
 	}
 

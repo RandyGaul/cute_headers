@@ -1,0 +1,38 @@
+{ "height":8,
+ "infinite":false,
+ "layers":[
+        {
+         "data":[13, 14, 8, 9, 1, 1, 1, 1, 12, 234, 234, 30, 29, 1, 3221225706, 1140, 1141, 1, 1, 1, 220, 2684354794, 31, 20, 1, 2684354794, 47, 20, 189, 1, 1, 1, 223, 1, 234, 12, 1, 1, 234, 1, 1, 1, 1, 1, 1, 1, 1, 28, 40, 1, 1, 1, 1, 1, 5, 7, 1, 1, 1, 44, 56, 43, 187, 1, 1, 1, 2, 3, 24, 25, 27, 17, 2147483651, 2147483650, 203, 7, 11, 42, 18, 19, 20, 20, 536870914, 536870930, 2147483667, 2147483666, 20, 45, 20, 20, 20, 20, 17, 20, 536870915, 536870931],
+         "height":8,
+         "name":"Tile Layer 1",
+         "opacity":1,
+         "type":"tilelayer",
+         "visible":true,
+         "width":12,
+         "x":0,
+         "y":0
+        }],
+ "nextobjectid":1,
+ "orientation":"orthogonal",
+ "renderorder":"right-down",
+ "tiledversion":"1.1.4",
+ "tileheight":15,
+ "tilesets":[
+        {
+         "columns":16,
+         "firstgid":1,
+         "image":"cavestory_tiles.png",
+         "imageheight":2737,
+         "imagewidth":257,
+         "margin":1,
+         "name":"cavestory_tileset",
+         "spacing":1,
+         "tilecount":2736,
+         "tileheight":15,
+         "tilewidth":15
+        }],
+ "tilewidth":15,
+ "type":"map",
+ "version":1,
+ "width":12
+}

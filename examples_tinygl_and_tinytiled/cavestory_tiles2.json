@@ -1,0 +1,38 @@
+{ "height":8,
+ "infinite":false,
+ "layers":[
+        {
+         "data":[9, 8, 1, 8, 8, 1, 1, 8, 1, 9, 8, 9, 337, 338, 321, 322, 323, 339, 337, 321, 322, 323, 338, 339, 353, 369, 353, 388, 389, 390, 391, 392, 369, 353, 369, 353, 369, 353, 369, 404, 405, 406, 407, 408, 409, 369, 353, 369, 353, 369, 353, 420, 421, 1, 1323, 1, 425, 353, 369, 353, 369, 353, 369, 436, 1192, 2307, 1339, 440, 441, 369, 353, 369, 353, 369, 353, 452, 453, 454, 455, 456, 369, 353, 369, 353, 353, 369, 353, 369, 353, 369, 353, 369, 353, 369, 353, 369],
+         "height":8,
+         "name":"Tile Layer 1",
+         "opacity":1,
+         "type":"tilelayer",
+         "visible":true,
+         "width":12,
+         "x":0,
+         "y":0
+        }],
+ "nextobjectid":1,
+ "orientation":"orthogonal",
+ "renderorder":"right-down",
+ "tiledversion":"1.1.4",
+ "tileheight":15,
+ "tilesets":[
+        {
+         "columns":16,
+         "firstgid":1,
+         "image":"cavestory_tiles.png",
+         "imageheight":2737,
+         "imagewidth":257,
+         "margin":1,
+         "name":"cavestory_tileset",
+         "spacing":1,
+         "tilecount":2736,
+         "tileheight":15,
+         "tilewidth":15
+        }],
+ "tilewidth":15,
+ "type":"map",
+ "version":1,
+ "width":12
+}

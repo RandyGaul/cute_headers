@@ -236,9 +236,9 @@ TINYTILED_INLINE int tinytiled_unset_flags(int tile_data_gid)
  */
 TINYTILED_INLINE void tinytiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
 {
-	*flip_horizontal = tile_data_gid & TINYTILED_FLIPPED_HORIZONTALLY_FLAG;
-	*flip_vertical = tile_data_gid & TINYTILED_FLIPPED_VERTICALLY_FLAG;
-	*flip_diagonal = tile_data_gid & TINYTILED_FLIPPED_DIAGONALLY_FLAG;
+	*flip_horizontal = !!(tile_data_gid & TINYTILED_FLIPPED_HORIZONTALLY_FLAG);
+	*flip_vertical = !!(tile_data_gid & TINYTILED_FLIPPED_VERTICALLY_FLAG);
+	*flip_diagonal = !!(tile_data_gid & TINYTILED_FLIPPED_DIAGONALLY_FLAG);
 }
 
 struct tinytiled_layer_t

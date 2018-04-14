@@ -193,7 +193,6 @@ struct spritebatch_config_t
 	int atlas_height_in_pixels;
 	int ticks_to_decay_texture;         // number of ticks it takes for a texture handle to be destroyed via `destroy_texture_handle_t`
 	int lonely_buffer_count_till_flush; // number of unique textures until an atlas is constructed
-	int lonely_buffer_count_till_decay; // number of unique textures until decay metrics take effect. (TODO) randy: what is this? Need better doc. Idea? Merge this with ticks_to_decay_texture.
 	float ratio_to_decay_atlas;         // from 0 to 1, once ratio is less than `ratio_to_decay_atlas`, flush active textures in atlas to lonely buffer
 	float ratio_to_merge_atlases;       // from 0 to 0.5, attempts to merge atlases with some ratio of empty space
 	submit_batch_t batch_callback;
@@ -718,7 +717,8 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config)
 	sb->atlas_height_in_pixels = config->atlas_height_in_pixels;
 	sb->ticks_to_decay_texture = config->ticks_to_decay_texture;
 	sb->lonely_buffer_count_till_flush = config->lonely_buffer_count_till_flush;
-	sb->lonely_buffer_count_till_decay = config->lonely_buffer_count_till_decay;
+	sb->lonely_buffer_count_till_decay = sb->lonely_buffer_count_till_flush / 2;
+	if (sb->lonely_buffer_count_till_decay <= 0) sb->lonely_buffer_count_till_decay = 1;
 	sb->ratio_to_decay_atlas = config->ratio_to_decay_atlas;
 	sb->ratio_to_merge_atlases = config->ratio_to_merge_atlases;
 	sb->batch_callback = config->batch_callback;
@@ -789,11 +789,11 @@ void spritebatch_term(spritebatch_t* sb)
 
 void spritebatch_set_default_config(spritebatch_config_t* config)
 {
-	config->pixel_stride = sizeof(float) * 4;
+	config->pixel_stride = sizeof(char) * 4;
 	config->atlas_width_in_pixels = 1024;
 	config->atlas_height_in_pixels = 1024;
 	config->ticks_to_decay_texture = 60 * 30;
-	config->lonely_buffer_count_till_flush = 1024;
+	config->lonely_buffer_count_till_flush = 64;
 	config->ratio_to_decay_atlas = 0.5f;
 	config->ratio_to_merge_atlases = 0.25f;
 	config->batch_callback = 0;
@@ -985,20 +985,18 @@ void spritebatch_tick(spritebatch_t* sb)
 
 int spritebatch_flush(spritebatch_t* sb)
 {
-	int texture_count = hashtable_count(&sb->sprites_to_lonely_textures);
-	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
-
 	// process input buffer, make any necessary lonely textures
 	// convert user sprites to internal format
 	// lookup uv coordinates
 	spritebatch_internal_process_input(sb, 0);
 
-	// patchup any missing lonely textures
-	lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
+	// patchup any missing lonely textures that may have come from atlases decaying and whatnot
+	int texture_count = hashtable_count(&sb->sprites_to_lonely_textures);
+	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
 	for (int i = 0; i < texture_count; ++i)
 	{
 		spritebatch_internal_lonely_texture_t* lonely = lonely_textures + i;
-		lonely->texture_id = sb->generate_texture_callback(sb->get_pixels_callback(lonely->image_id), lonely->w, lonely->h);
+		if (lonely->texture_id == ~0) lonely->texture_id = sb->generate_texture_callback(sb->get_pixels_callback(lonely->image_id), lonely->w, lonely->h);
 	}
 
 	// sort internal sprite buffer and submit batches
@@ -1160,14 +1158,13 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 	int atlas_node_capacity = img_count * 2;
 	spritebatch_internal_integer_image_t* images = 0;
 	spritebatch_internal_atlas_node_t* nodes = 0;
-	void* mem_ctx = sb->mem_ctx;
 	int pixel_stride = sb->pixel_stride;
 	int atlas_width = sb->atlas_width_in_pixels;
 	int atlas_height = sb->atlas_height_in_pixels;
 	float volume_used = 0;
 
-	images = (spritebatch_internal_integer_image_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_integer_image_t) * img_count, mem_ctx);
-	nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_node_t) * atlas_node_capacity, mem_ctx);
+	images = (spritebatch_internal_integer_image_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_integer_image_t) * img_count, sb->mem_ctx);
+	nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_node_t) * atlas_node_capacity, sb->mem_ctx);
 	SPRITEBATCH_CHECK(images, "out of mem");
 	SPRITEBATCH_CHECK(nodes, "out of mem");
 
@@ -1271,6 +1268,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 		{
 			const spritebatch_internal_lonely_texture_t* img = imgs + image->img_index;
 			char* pixels = (char*)sb->get_pixels_callback(img->image_id);
+
 			spritebatch_v2_t min = image->min;
 			spritebatch_v2_t max = image->max;
 			int atlas_offset = min.x * pixel_stride;

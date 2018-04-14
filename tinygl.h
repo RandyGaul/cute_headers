@@ -229,6 +229,7 @@ void tgPushDrawCall(void* ctx, tgDrawCall call);
 
 typedef void (*tgFunc)();
 void tgFlush(void* ctx, tgFunc swap, tgFramebuffer* fb, int w, int h);
+int tgDrawCallCount(void* ctx);
 
 // 4x4 matrix helper functions
 void tgOrtho2D(float w, float h, float x, float y, float* m);
@@ -1081,6 +1082,12 @@ void tgFlush(void* ctx, tgFunc swap, tgFramebuffer* fb, int w, int h)
 	context->count = 0;
 
 	swap();
+}
+
+int tgDrawCallCount(void* ctx)
+{
+	tgContext* context = (tgContext*)ctx;
+	return context->count;
 }
 
 #include <math.h>
