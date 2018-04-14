@@ -228,7 +228,7 @@ TM2D_INLINE float surface_area(circle c) { return 2.0f * 3.14159265f * c.r; }
 TM2D_INLINE circle mul(transform tx, circle a) { circle b; b.p = mul(tx, a.p); b.r = a.r; return b; }
 
 // ray ops
-v2 impact(ray r, float t) { return r.p + r.d * t; }
+TM2D_INLINE v2 impact(ray r, float t) { return r.p + r.d * t; }
 
 TM2D_INLINE int ray_to_halfpsace(ray A, halfspace B, raycast* out)
 {
