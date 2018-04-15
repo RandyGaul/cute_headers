@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinyspritebatch.h - v0.01 (experimental release)
+	tinyspritebatch.h - v1.0
 
 	To create implementation (the function definitions)
 		#define SPRITEBATCH_IMPLEMENTATION
@@ -129,6 +129,7 @@
 
 	Revision history:
 		0.01 (11/20/2017) experimental release
+		1.00 (04/14/2018) initial release
 */
 
 #ifndef SPRITEBATCH_H
