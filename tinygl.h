@@ -249,7 +249,8 @@ void tgCopy(float* dst, float* src);
 #endif
 
 #ifdef TINYGL_IMPLEMENTATION
-#undef TINYGL_IMPLEMENTATION
+#ifndef TINYGL_IMPLEMENTATION_ONCE
+#define TINYGL_IMPLEMENTATION_ONCE
 
 #define TG_OFFSET_OF(type, member) ((uint32_t)((size_t)(&((type*)0)->member)))
 
@@ -1245,6 +1246,7 @@ void tgPrintGLErrors_internal(char* file, uint32_t line)
 }
 #endif
 
+#endif // TINYGL_IMPLEMENTATION_ONCE
 #endif // TINYGL_IMPLEMENTATION
 
 /*

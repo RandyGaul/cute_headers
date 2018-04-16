@@ -193,7 +193,8 @@ void tfDoUnitTests();
 #endif
 
 #ifdef TINYFILES_IMPLEMENTATION
-#undef TINYFILES_IMPLEMENTATION
+#ifndef TINYFILES_IMPLEMENTATION_ONCE
+#define TINYFILES_IMPLEMENTATION_ONCE
 
 #define tfSafeStrCpy( dst, src, n, max ) tfSafeStrCopy_internal( dst, src, n, max, __FILE__, __LINE__ )
 static int tfSafeStrCopy_internal( char* dst, const char* src, int n, int max, const char* file, int line )
@@ -471,7 +472,8 @@ int tfMatchExt( tfFILE* file, const char* ext )
 
 #endif // TF_PLATFORM
 
-#endif
+#endif // TINYFILES_IMPLEMENTATION_ONCE
+#endif // TINYFILES_IMPLEMENTATION
 
 /*
 	------------------------------------------------------------------------------

@@ -416,7 +416,8 @@ void tsStopAllSounds( tsContext* ctx );
 #endif
 
 #ifdef TINYSOUND_IMPLEMENTATION
-#undef TINYSOUND_IMPLEMENTATION
+#ifndef TINYSOUND_IMPLEMENTATION_ONCE
+#define TINYSOUND_IMPLEMENTATION_ONCE
 
 // Change the allocator as necessary
 #if !defined( TS_ALLOC )
@@ -2670,6 +2671,7 @@ static void tsPitchShift( float pitchShift, int num_samples_to_process, float sa
 	}
 }
 
+#endif // TINYSOUND_IMPLEMENTATION_ONCE
 #endif // TINYSOUND_IMPLEMENTATION
 
 /*

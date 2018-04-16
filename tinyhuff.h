@@ -177,8 +177,9 @@ void thDecompress( const thKey* decompression_key, const void* in, int in_bits, 
 #define TINYHUFF_H
 #endif
 
-#if defined( TINYHUFF_IMPLEMENTATION )
-#undef TINYHUFF_IMPLEMENTATION
+#ifdef TINYHUFF_IMPLEMENTATION
+#ifndef TINYHUFF_IMPLEMENTATION_ONCE
+#define TINYHUFF_IMPLEMENTATION_ONCE
 
 const char* th_error_reason;
 
@@ -768,6 +769,7 @@ void thDecompress( const thKey* decompression_key, const void* in_buf, int in_bi
 
 #endif // TH_INTERNAL_TESTS
 
+#endif // TINYHUFF_IMPLEMENTATION_ONCE
 #endif // TINYHUFF_IMPLEMENTATION
 
 /*

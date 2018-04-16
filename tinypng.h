@@ -166,7 +166,8 @@ struct tpAtlasImage
 #endif
 
 #ifdef TINYPNG_IMPLEMENTATION
-#undef TINYPNG_IMPLEMENTATION
+#ifdef TINYPNG_IMPLEMENTATION_ONCE
+#define TINYPNG_IMPLEMENTATION_ONCE
 
 #if !defined(TP_ALLOCA)
 	#define TP_ALLOCA alloca
@@ -1545,6 +1546,7 @@ tp_err:
 	return 0;
 }
 
+#endif // TINYPNG_IMPLEMENTATION_ONCE
 #endif // TINYPNG_IMPLEMENTATION
 
 /*

@@ -311,6 +311,8 @@ struct tinytiled_map_t
 #endif
 
 #ifdef TINYTILED_IMPLEMENTATION
+#ifndef TINYTILED_IMPLEMENTATION_ONCE
+#define TINYTILED_IMPLEMENTATION_ONCE
 
 #if !defined(TINYTILED_MALLOC)
 	#include <stdlib.h>
@@ -2413,8 +2415,8 @@ void tinytiled_free_map(tinytiled_map_t* map)
 	tinytiled_free_map_internal(m);
 }
 
-#undef TINYTILED_IMPLEMENTATION
-#endif
+#endif // TINYTILED_IMPLEMENTATION_ONCE
+#endif // TINYTILED_IMPLEMENTATION
 
 /*
 	------------------------------------------------------------------------------

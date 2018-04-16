@@ -68,7 +68,8 @@ void ttRecord( ttTimer* timer );
 #endif
 
 #ifdef TINYTIME_IMPLEMENTATION
-
+#ifndef TINYTIME_IMPLEMENTATION_ONCE
+#define TINYTIME_IMPLEMENTATION_ONCE
 
 // These functions are intended be called from a single thread only. In a
 // multi-threaded environment make sure to call Time from the main thread only.
@@ -191,6 +192,7 @@ void ttRecord( ttTimer* timer );
 
 #endif
 
+#endif // TINYTIME_IMPLEMENTATION_ONCE
 #endif // TINYTIME_IMPLEMENTATION
 
 /*

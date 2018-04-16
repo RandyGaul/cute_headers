@@ -226,7 +226,8 @@ struct spritebatch_sprite_t
 #endif
 
 #ifdef SPRITEBATCH_IMPLEMENTATION
-#undef SPRITEBATCH_IMPLEMENTATION
+#ifndef SPRITEBATCH_IMPLEMENTATION_ONCE
+#define SPRITEBATCH_IMPLEMENTATION_ONCE
 
 #ifndef _CRT_SECURE_NO_WARNINGS
 	#define _CRT_SECURE_NO_WARNINGS
@@ -1626,7 +1627,8 @@ int spritebatch_defrag(spritebatch_t* sb)
 	return 1;
 }
 
-#endif SPRITEBATCH_IMPLEMENTATION
+#endif // SPRITEBATCH_IMPLEMENTATION_ONCE
+#endif // SPRITEBATCH_IMPLEMENTATION
 
 /*
 	------------------------------------------------------------------------------

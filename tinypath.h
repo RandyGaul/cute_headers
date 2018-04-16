@@ -86,8 +86,9 @@ void tpDoUnitTests();
 #define TINYPATH_H
 #endif
 
-#if defined( TINYPATH_IMPLEMENTATION )
-#endif TINYPATH_IMPLEMENTATION
+#ifdef TINYPATH_IMPLEMENTATION
+#ifndef TINYPATH_IMPLEMENTATION_ONCE
+#define TINYPATH_IMPLEMENTATION_ONCE
 
 #ifdef _WIN32
 
@@ -501,6 +502,7 @@ int tpCompact( const char* path, char* out, int n )
 
 #endif // TP_UNIT_TESTS
 
+#endif // TINYPATH_IMPLEMENTATION_ONCE
 #endif // TINYPATH_IMPLEMENTATION
 
 /*

@@ -6,7 +6,7 @@
 	tinyspheremesh - v1.0 - 10/06/17
 
 	To create implementation (the function definitions)
-		#define TINYSPHEREMESH_IMPL
+		#define TINYSPHEREMESH_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
 	This header contains functions to generate a spherical mesh. The output
@@ -88,7 +88,9 @@ float* tsmGenerateSphereMeshVerts4(void* scratch_memory, int number_of_subdivisi
 #define TINYSPHEREMESH_H
 #endif
 
-#if defined( TINYSPHEREMESH_IMPL )
+#ifdef TINYSPHEREMESH_IMPLEMENTATION
+#ifndef TINYSPHEREMESH_IMPLEMENTATION_ONCE
+#define TINYSPHEREMESH_IMPLEMENTATION_ONCE
 
 #include <math.h>
 
@@ -417,8 +419,8 @@ float* tsmGenerateSphereMeshVerts4(void* scratch_memory, int number_of_subdivisi
 	return result;
 }
 
-#endif
-
+#endif // TINYSPHEREMESH_IMPLEMENTATION_ONCE
+#endif // TINYSPHEREMESH_IMPLEMENTATION
 
 /*
 	------------------------------------------------------------------------------

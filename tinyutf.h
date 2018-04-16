@@ -106,7 +106,9 @@ void tuShorten( const wchar_t* in, int in_len, char* out, int out_len );
 
 #endif
 
-#if defined( TINYUTF_IMPLEMENTATION )
+#ifdef TINYUTF_IMPLEMENTATION
+#ifndef TINYUTF_IMPLEMENTATION_ONCE
+#define TINYUTF_IMPLEMENTATION_ONCE
 
 // utf8 functions created from RFC-3629
 
@@ -257,6 +259,7 @@ void tuShorten( const wchar_t* in, int in_len, char* out, int out_len )
 }
 #endif
 
+#endif // TINYUTF_IMPLEMENTATION_ONCE
 #endif // TINYUTF_IMPLEMENTATION
 
 /*

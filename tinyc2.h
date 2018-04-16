@@ -412,6 +412,8 @@ C2_INLINE void c2BBVerts(c2v* out, c2AABB* bb)
 #endif
 
 #ifdef TINYC2_IMPLEMENTATION
+#ifndef TINYC2_IMPLEMENTATION_ONCE
+#define TINYC2_IMPLEMENTATION_ONCE
 
 int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB)
 {
@@ -1662,6 +1664,7 @@ void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, c
 	if (flip) m->normal = c2Neg(m->normal);
 }
 
+#endif // TINYC2_IMPLEMENTATION_ONCE
 #endif // TINYC2_IMPLEMENTATION
 
 /*
