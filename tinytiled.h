@@ -314,16 +314,6 @@ struct tinytiled_map_t
 #ifndef TINYTILED_IMPLEMENTATION_ONCE
 #define TINYTILED_IMPLEMENTATION_ONCE
 
-#if !defined(TINYTILED_MALLOC)
-	#include <stdlib.h>
-	#define TINYTILED_MALLOC(size, ctx) malloc(size)
-	#define TINYTILED_FREE(mem, ctx) free(mem)
-#endif
-
-#define STRPOOL_IMPLEMENTATION
-#define STRPOOL_MALLOC(ctx, size) TINYTILED_MALLOC(size, ctx)
-#define STRPOOL_FREE(ctx, ptr) TINYTILED_FREE(ptr, ctx)
-
 #ifndef _CRT_SECURE_NO_WARNINGS
 	#define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -332,8 +322,18 @@ struct tinytiled_map_t
 	#define _CRT_NONSTDC_NO_DEPRECATE
 #endif
 
+#if !defined(TINYTILED_MALLOC)
+	#include <stdlib.h>
+	#define TINYTILED_MALLOC(size, ctx) malloc(size)
+	#define TINYTILED_FREE(mem, ctx) free(mem)
+#endif
+
+#define STRPOOL_EMBEDDED_IMPLEMENTATION
+#define STRPOOL_EMBEDDED_MALLOC(ctx, size) TINYTILED_MALLOC(size, ctx)
+#define STRPOOL_EMBEDDED_FREE(ctx, ptr) TINYTILED_FREE(ptr, ctx)
+
 /*
-	begin embedding strpool.h
+	begin embedding modified strpool.h 
 */
 
 /*
@@ -344,23 +344,23 @@ struct tinytiled_map_t
 strpool.h - v1.4 - Highly efficient string pool for C/C++.
 
 Do this:
-    #define STRPOOL_IMPLEMENTATION
+    #define STRPOOL_EMBEDDED_IMPLEMENTATION
 before you include this file in *one* C/C++ file to create the implementation.
 */
 
-#ifndef strpool_h
-#define strpool_h
+#ifndef strpool_embedded_h
+#define strpool_embedded_h
 
-#ifndef STRPOOL_U32
-    #define STRPOOL_U32 unsigned int
+#ifndef STRPOOL_EMBEDDED_U32
+    #define STRPOOL_EMBEDDED_U32 unsigned int
 #endif
-#ifndef STRPOOL_U64
-    #define STRPOOL_U64 unsigned long long
+#ifndef STRPOOL_EMBEDDED_U64
+    #define STRPOOL_EMBEDDED_U64 unsigned long long
 #endif
 
-typedef struct strpool_t strpool_t;
+typedef struct strpool_embedded_t strpool_embedded_t;
 
-typedef struct strpool_config_t
+typedef struct strpool_embedded_config_t
     {
     void* memctx;
     int ignore_case;
@@ -370,31 +370,17 @@ typedef struct strpool_config_t
     int block_capacity;
     int block_size;
     int min_length;
-    } strpool_config_t;
+    } strpool_embedded_config_t;
 
-extern strpool_config_t const strpool_default_config;
+extern strpool_embedded_config_t const strpool_embedded_default_config;
 
-void strpool_init( strpool_t* pool, strpool_config_t const* config );
-void strpool_term( strpool_t* pool );
+void strpool_embedded_init( strpool_embedded_t* pool, strpool_embedded_config_t const* config );
+void strpool_embedded_term( strpool_embedded_t* pool );
 
-void strpool_defrag( strpool_t* pool );
+STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char const* string, int length );
+char const* strpool_embedded_cstr( strpool_embedded_t const* pool, STRPOOL_EMBEDDED_U64 handle );
 
-STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length );
-void strpool_discard( strpool_t* pool, STRPOOL_U64 handle );
-
-int strpool_incref( strpool_t* pool, STRPOOL_U64 handle );
-int strpool_decref( strpool_t* pool, STRPOOL_U64 handle );
-int strpool_getref( strpool_t* pool, STRPOOL_U64 handle );
-
-int strpool_isvalid( strpool_t const* pool, STRPOOL_U64 handle );
-
-char const* strpool_cstr( strpool_t const* pool, STRPOOL_U64 handle );
-int strpool_length( strpool_t const* pool, STRPOOL_U64 handle );
-
-char* strpool_collate( strpool_t const* pool, int* count );
-void strpool_free_collated( strpool_t const* pool, char* collated_ptr );
-
-#endif /* strpool_h */
+#endif /* strpool_embedded_h */
 
 /*
 ----------------------
@@ -402,101 +388,102 @@ void strpool_free_collated( strpool_t const* pool, char* collated_ptr );
 ----------------------
 */
 
-#ifndef strpool_impl
-#define strpool_impl
+#ifndef strpool_embedded_impl
+#define strpool_embedded_impl
 
-struct strpool_internal_hash_slot_t;
-struct strpool_internal_entry_t;
-struct strpool_internal_handle_t;
-struct strpool_internal_block_t;
+struct strpool_embedded_internal_hash_slot_t;
+struct strpool_embedded_internal_entry_t;
+struct strpool_embedded_internal_handle_t;
+struct strpool_embedded_internal_block_t;
 
-struct strpool_t
+struct strpool_embedded_t
     {
     void* memctx;
     int ignore_case;
     int counter_shift;
-    STRPOOL_U64 counter_mask;
-    STRPOOL_U64 index_mask;
+    STRPOOL_EMBEDDED_U64 counter_mask;
+    STRPOOL_EMBEDDED_U64 index_mask;
 
     int initial_entry_capacity;
     int initial_block_capacity;
     int block_size;
     int min_data_size;
 
-    struct strpool_internal_hash_slot_t* hash_table;
+    struct strpool_embedded_internal_hash_slot_t* hash_table;
     int hash_capacity;
 
-    struct strpool_internal_entry_t* entries;
+    struct strpool_embedded_internal_entry_t* entries;
     int entry_capacity;
     int entry_count;
 
-    struct strpool_internal_handle_t* handles;
+    struct strpool_embedded_internal_handle_t* handles;
     int handle_capacity;
     int handle_count;
     int handle_freelist_head;
     int handle_freelist_tail;
 
-    struct strpool_internal_block_t* blocks;
+    struct strpool_embedded_internal_block_t* blocks;
     int block_capacity;
     int block_count;
     int current_block;
     };
 
 
-#endif /* strpool_impl */
+#endif /* strpool_embedded_impl */
 
 
-#ifdef STRPOOL_IMPLEMENTATION
-#undef STRPOOL_IMPLEMENTATION
+#ifdef STRPOOL_EMBEDDED_IMPLEMENTATION
+#ifndef STRPOOL_EMBEDDED_IMPLEMENTATION_ONCE
+#define STRPOOL_EMBEDDED_IMPLEMENTATION_ONCE
 
 #include <stddef.h>
 
-#ifndef STRPOOL_ASSERT
+#ifndef STRPOOL_EMBEDDED_ASSERT
     #include <assert.h>
-    #define STRPOOL_ASSERT( x ) assert( x )
+    #define STRPOOL_EMBEDDED_ASSERT( x ) assert( x )
 #endif
 
-#ifndef STRPOOL_MEMSET
+#ifndef STRPOOL_EMBEDDED_MEMSET
     #include <string.h>
-    #define STRPOOL_MEMSET( ptr, val, cnt ) ( memset( ptr, val, cnt ) )
+    #define STRPOOL_EMBEDDED_MEMSET( ptr, val, cnt ) ( memset( ptr, val, cnt ) )
 #endif 
 
-#ifndef STRPOOL_MEMCPY
+#ifndef STRPOOL_EMBEDDED_MEMCPY
     #include <string.h>
-    #define STRPOOL_MEMCPY( dst, src, cnt ) ( memcpy( dst, src, cnt ) )
+    #define STRPOOL_EMBEDDED_MEMCPY( dst, src, cnt ) ( memcpy( dst, src, cnt ) )
 #endif 
 
-#ifndef STRPOOL_MEMCMP
+#ifndef STRPOOL_EMBEDDED_MEMCMP
     #include <string.h>
-    #define STRPOOL_MEMCMP( pr1, pr2, cnt ) ( memcmp( pr1, pr2, cnt ) )
+    #define STRPOOL_EMBEDDED_MEMCMP( pr1, pr2, cnt ) ( memcmp( pr1, pr2, cnt ) )
 #endif 
 
-#ifndef STRPOOL_STRNICMP
+#ifndef STRPOOL_EMBEDDED_STRNICMP
     #ifdef _WIN32
         #include <string.h>
-        #define STRPOOL_STRNICMP( s1, s2, len ) ( strnicmp( s1, s2, len ) )
+        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strnicmp( s1, s2, len ) )
     #else
         #include <string.h>
-        #define STRPOOL_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )        
+        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )        
     #endif
 #endif 
 
-#ifndef STRPOOL_MALLOC
+#ifndef STRPOOL_EMBEDDED_MALLOC
     #include <stdlib.h>
-    #define STRPOOL_MALLOC( ctx, size ) ( malloc( size ) )
-    #define STRPOOL_FREE( ctx, ptr ) ( free( ptr ) )
+    #define STRPOOL_EMBEDDED_MALLOC( ctx, size ) ( malloc( size ) )
+    #define STRPOOL_EMBEDDED_FREE( ctx, ptr ) ( free( ptr ) )
 #endif
 
 
-typedef struct strpool_internal_hash_slot_t
+typedef struct strpool_embedded_internal_hash_slot_t
     {
-    STRPOOL_U32 hash_key;
+    STRPOOL_EMBEDDED_U32 hash_key;
     int entry_index;
     int base_count;
-    } strpool_internal_hash_slot_t;
+    } strpool_embedded_internal_hash_slot_t;
 
 
-typedef struct strpool_internal_entry_t
+typedef struct strpool_embedded_internal_entry_t
     {
     int hash_slot;
     int handle_index;
@@ -504,33 +491,33 @@ typedef struct strpool_internal_entry_t
     int size;
     int length;
     int refcount;
-    } strpool_internal_entry_t;
+    } strpool_embedded_internal_entry_t;
 
 
-typedef struct strpool_internal_handle_t
+typedef struct strpool_embedded_internal_handle_t
     {
     int entry_index;
     int counter;
-    } strpool_internal_handle_t;
+    } strpool_embedded_internal_handle_t;
 
 
-typedef struct strpool_internal_block_t
+typedef struct strpool_embedded_internal_block_t
     {
     int capacity;
     char* data;
     char* tail;
     int free_list;
-    } strpool_internal_block_t;
+    } strpool_embedded_internal_block_t;
 
 
-typedef struct strpool_internal_free_block_t
+typedef struct strpool_embedded_internal_free_block_t
     {
     int size;
     int next;
-    } strpool_internal_free_block_t;
+    } strpool_embedded_internal_free_block_t;
 
 
-strpool_config_t const strpool_default_config = 
+strpool_embedded_config_t const strpool_embedded_default_config = 
     { 
     /* memctx         = */ 0,
     /* ignore_case    = */ 0,
@@ -544,7 +531,7 @@ strpool_config_t const strpool_default_config =
 
 
 
-static STRPOOL_U32 strpool_internal_pow2ceil( STRPOOL_U32 v )
+static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_pow2ceil( STRPOOL_EMBEDDED_U32 v )
     {
     --v;
     v |= v >> 1;
@@ -558,47 +545,47 @@ static STRPOOL_U32 strpool_internal_pow2ceil( STRPOOL_U32 v )
     }
 
 
-static int strpool_internal_add_block( strpool_t* pool, int size )
+static int strpool_embedded_internal_add_block( strpool_embedded_t* pool, int size )
     {
     if( pool->block_count >= pool->block_capacity ) 
         {
         pool->block_capacity *= 2;
-        strpool_internal_block_t* new_blocks = (strpool_internal_block_t*) STRPOOL_MALLOC( pool->memctx, 
+        strpool_embedded_internal_block_t* new_blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
             pool->block_capacity * sizeof( *pool->blocks ) );
-        STRPOOL_ASSERT( new_blocks );
-        STRPOOL_MEMCPY( new_blocks, pool->blocks, pool->block_count * sizeof( *pool->blocks ) );
-        STRPOOL_FREE( pool->memctx, pool->blocks );
+        STRPOOL_EMBEDDED_ASSERT( new_blocks );
+        STRPOOL_EMBEDDED_MEMCPY( new_blocks, pool->blocks, pool->block_count * sizeof( *pool->blocks ) );
+        STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks );
         pool->blocks = new_blocks;
         }
     pool->blocks[ pool->block_count ].capacity = size;
-    pool->blocks[ pool->block_count ].data = (char*) STRPOOL_MALLOC( pool->memctx, (size_t) size );
-    STRPOOL_ASSERT( pool->blocks[ pool->block_count ].data );
+    pool->blocks[ pool->block_count ].data = (char*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, (size_t) size );
+    STRPOOL_EMBEDDED_ASSERT( pool->blocks[ pool->block_count ].data );
     pool->blocks[ pool->block_count ].tail = pool->blocks[ pool->block_count ].data;
     pool->blocks[ pool->block_count ].free_list = -1;
     return pool->block_count++;
     }
 
 
-void strpool_init( strpool_t* pool, strpool_config_t const* config )
+void strpool_embedded_init( strpool_embedded_t* pool, strpool_embedded_config_t const* config )
     {
-    if( !config ) config = &strpool_default_config;
+    if( !config ) config = &strpool_embedded_default_config;
 
     pool->memctx = config->memctx;
     pool->ignore_case = config->ignore_case;
 
-    STRPOOL_ASSERT( config->counter_bits + config->index_bits <= 64 );
+    STRPOOL_EMBEDDED_ASSERT( config->counter_bits + config->index_bits <= 64 );
     pool->counter_shift = config->index_bits;
-    pool->counter_mask = ( 1ULL << (STRPOOL_U64) config->counter_bits ) - 1;
-    pool->index_mask = ( 1ULL << (STRPOOL_U64) config->index_bits ) - 1;
+    pool->counter_mask = ( 1ULL << (STRPOOL_EMBEDDED_U64) config->counter_bits ) - 1;
+    pool->index_mask = ( 1ULL << (STRPOOL_EMBEDDED_U64) config->index_bits ) - 1;
 
     pool->initial_entry_capacity = 
-        (int) strpool_internal_pow2ceil( config->entry_capacity > 1 ? (STRPOOL_U32)config->entry_capacity : 2U );
+        (int) strpool_embedded_internal_pow2ceil( config->entry_capacity > 1 ? (STRPOOL_EMBEDDED_U32)config->entry_capacity : 2U );
     pool->initial_block_capacity = 
-        (int) strpool_internal_pow2ceil( config->block_capacity > 1 ? (STRPOOL_U32)config->block_capacity : 2U );
+        (int) strpool_embedded_internal_pow2ceil( config->block_capacity > 1 ? (STRPOOL_EMBEDDED_U32)config->block_capacity : 2U );
     pool->block_size = 
-        (int) strpool_internal_pow2ceil( config->block_size > 256 ? (STRPOOL_U32)config->block_size : 256U );
+        (int) strpool_embedded_internal_pow2ceil( config->block_size > 256 ? (STRPOOL_EMBEDDED_U32)config->block_size : 256U );
     pool->min_data_size = 
-        (int) ( sizeof( int ) * 2 + 1 + ( config->min_length > 8 ? (STRPOOL_U32)config->min_length : 8U ) );
+        (int) ( sizeof( int ) * 2 + 1 + ( config->min_length > 8 ? (STRPOOL_EMBEDDED_U32)config->min_length : 8U ) );
 
     pool->hash_capacity = pool->initial_entry_capacity * 2;
     pool->entry_capacity = pool->initial_entry_capacity;
@@ -611,25 +598,25 @@ void strpool_init( strpool_t* pool, strpool_config_t const* config )
     pool->handle_count = 0;
     pool->entry_count = 0;
     
-    pool->hash_table = (strpool_internal_hash_slot_t*) STRPOOL_MALLOC( pool->memctx, 
+    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->hash_capacity * sizeof( *pool->hash_table ) );
-    STRPOOL_ASSERT( pool->hash_table );
-    STRPOOL_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
-    pool->entries = (strpool_internal_entry_t*) STRPOOL_MALLOC( pool->memctx, 
+    STRPOOL_EMBEDDED_ASSERT( pool->hash_table );
+    STRPOOL_EMBEDDED_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
+    pool->entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->entry_capacity * sizeof( *pool->entries ) );
-    STRPOOL_ASSERT( pool->entries );
-    pool->handles = (strpool_internal_handle_t*) STRPOOL_MALLOC( pool->memctx, 
+    STRPOOL_EMBEDDED_ASSERT( pool->entries );
+    pool->handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->handle_capacity * sizeof( *pool->handles ) );
-    STRPOOL_ASSERT( pool->handles );
-    pool->blocks = (strpool_internal_block_t*) STRPOOL_MALLOC( pool->memctx, 
+    STRPOOL_EMBEDDED_ASSERT( pool->handles );
+    pool->blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->block_capacity * sizeof( *pool->blocks ) );
-    STRPOOL_ASSERT( pool->blocks );
+    STRPOOL_EMBEDDED_ASSERT( pool->blocks );
 
-    pool->current_block = strpool_internal_add_block( pool, pool->block_size );
+    pool->current_block = strpool_embedded_internal_add_block( pool, pool->block_size );
     }
 
 
-void strpool_term( strpool_t* pool )
+void strpool_embedded_term( strpool_embedded_t* pool )
     {
 #if 0
     // Debug statistics
@@ -650,7 +637,7 @@ void strpool_term( strpool_t* pool )
         int total = 0;
         while( fl >= 0 )
             {
-            strpool_free_block_t* free_entry = (strpool_free_block_t*) ( pool->blocks[ i ].data + fl );
+            strpool_embedded_free_block_t* free_entry = (strpool_embedded_free_block_t*) ( pool->blocks[ i ].data + fl );
             total += free_entry->size;
             if( size == 0 ) { size = free_entry->size; }
             if( size != free_entry->size )
@@ -671,129 +658,39 @@ void strpool_term( strpool_t* pool )
     printf( "\n\n" );
 #endif
 
-    for( int i = 0; i < pool->block_count; ++i ) STRPOOL_FREE( pool->memctx, pool->blocks[ i ].data );
-    STRPOOL_FREE( pool->memctx, pool->blocks );         
-    STRPOOL_FREE( pool->memctx, pool->handles );            
-    STRPOOL_FREE( pool->memctx, pool->entries );            
-    STRPOOL_FREE( pool->memctx, pool->hash_table );         
+    for( int i = 0; i < pool->block_count; ++i ) STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks[ i ].data );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks );         
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->handles );            
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );            
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->hash_table );         
     }
 
 
-void strpool_defrag( strpool_t* pool )
+static STRPOOL_EMBEDDED_U64 strpool_embedded_internal_make_handle( int index, int counter, STRPOOL_EMBEDDED_U64 index_mask, int counter_shift, 
+    STRPOOL_EMBEDDED_U64 counter_mask )
     {
-    int data_size = 0;
-    int count = 0;
-    for( int i = 0; i < pool->entry_count; ++i )
-        {
-        strpool_internal_entry_t* entry = &pool->entries[ i ];
-        if( entry->refcount > 0 )
-            {
-            data_size += entry->size;
-            ++count;
-            }
-        }
-
-    int data_capacity = data_size < pool->block_size ? 
-        pool->block_size : (int)strpool_internal_pow2ceil( (STRPOOL_U32)data_size );
-
-    int hash_capacity = count + count / 2;
-    hash_capacity = hash_capacity < ( pool->initial_entry_capacity * 2 ) ? 
-        ( pool->initial_entry_capacity * 2 ) : (int)strpool_internal_pow2ceil( (STRPOOL_U32)hash_capacity );
-    strpool_internal_hash_slot_t* hash_table = (strpool_internal_hash_slot_t*) STRPOOL_MALLOC( pool->memctx, 
-        hash_capacity * sizeof( *hash_table ) );
-    STRPOOL_ASSERT( hash_table );
-    STRPOOL_MEMSET( hash_table, 0, hash_capacity * sizeof( *hash_table ) );
-
-    char* data = (char*) STRPOOL_MALLOC( pool->memctx, (size_t) data_capacity );
-    STRPOOL_ASSERT( data );
-    int capacity = count < pool->initial_entry_capacity ? 
-        pool->initial_entry_capacity : (int)strpool_internal_pow2ceil( (STRPOOL_U32)count );
-    strpool_internal_entry_t* entries = (strpool_internal_entry_t*) STRPOOL_MALLOC( pool->memctx, 
-        capacity * sizeof( *entries ) );
-    STRPOOL_ASSERT( entries );
-    int index = 0;
-    char* tail = data;
-    for( int i = 0; i < pool->entry_count; ++i )
-        {
-        strpool_internal_entry_t* entry = &pool->entries[ i ];
-        if( entry->refcount > 0 )
-            {
-            entries[ index ] = *entry;
-
-            STRPOOL_U32 hash = pool->hash_table[ entry->hash_slot ].hash_key;
-            int base_slot = (int)( hash & (STRPOOL_U32)( hash_capacity - 1 ) );
-            int slot = base_slot;
-            while( hash_table[ slot ].hash_key )
-                slot = (slot + 1 ) & ( hash_capacity - 1 );
-            STRPOOL_ASSERT( hash );
-            hash_table[ slot ].hash_key = hash;
-            hash_table[ slot ].entry_index = index;
-            ++hash_table[ base_slot ].base_count;
-
-            entries[ index ].hash_slot = slot;
-            entries[ index ].data = tail;
-            entries[ index ].handle_index = entry->handle_index;
-            pool->handles[ entry->handle_index ].entry_index = index;
-            STRPOOL_MEMCPY( tail, entry->data, entry->length + 1 + 2 * sizeof( STRPOOL_U32 ) );
-            tail += entry->size;
-            ++index;
-            }
-        }
-
-
-    STRPOOL_FREE( pool->memctx, pool->hash_table );
-    STRPOOL_FREE( pool->memctx, pool->entries );
-    for( int i = 0; i < pool->block_count; ++i ) STRPOOL_FREE( pool->memctx, pool->blocks[ i ].data );
-
-    if( pool->block_capacity != pool->initial_block_capacity )
-        {
-        STRPOOL_FREE( pool->memctx, pool->blocks );
-        pool->blocks = (strpool_internal_block_t*) STRPOOL_MALLOC( pool->memctx, 
-            pool->initial_block_capacity * sizeof( *pool->blocks ) );
-        STRPOOL_ASSERT( pool->blocks );
-        }
-    pool->block_capacity = pool->initial_block_capacity;
-    pool->block_count = 1;
-    pool->current_block = 0;
-    pool->blocks[ 0 ].capacity = data_capacity;
-    pool->blocks[ 0 ].data = data;
-    pool->blocks[ 0 ].tail = tail;
-    pool->blocks[ 0 ].free_list = -1;
-    
-    pool->hash_table = hash_table;
-    pool->hash_capacity = hash_capacity;
-
-    pool->entries = entries;
-    pool->entry_capacity = capacity;
-    pool->entry_count = count;
-    }
-
-
-static STRPOOL_U64 strpool_internal_make_handle( int index, int counter, STRPOOL_U64 index_mask, int counter_shift, 
-    STRPOOL_U64 counter_mask )
-    {
-    STRPOOL_U64 i = (STRPOOL_U64) ( index + 1 );
-    STRPOOL_U64 c = (STRPOOL_U64) counter;
+    STRPOOL_EMBEDDED_U64 i = (STRPOOL_EMBEDDED_U64) ( index + 1 );
+    STRPOOL_EMBEDDED_U64 c = (STRPOOL_EMBEDDED_U64) counter;
     return ( ( c & counter_mask ) << counter_shift ) | ( i & index_mask );
     }
 
 
-static int strpool_internal_counter_from_handle( STRPOOL_U64 handle, int counter_shift, STRPOOL_U64 counter_mask  )
+static int strpool_embedded_internal_counter_from_handle( STRPOOL_EMBEDDED_U64 handle, int counter_shift, STRPOOL_EMBEDDED_U64 counter_mask  )
     {
     return (int) ( ( handle >> counter_shift ) & counter_mask ) ;
     }
     
 
-static int strpool_internal_index_from_handle( STRPOOL_U64 handle, STRPOOL_U64 index_mask )
+static int strpool_embedded_internal_index_from_handle( STRPOOL_EMBEDDED_U64 handle, STRPOOL_EMBEDDED_U64 index_mask )
     {
     return ( (int) ( handle & index_mask ) ) - 1;
     }
 
 
-static strpool_internal_entry_t* strpool_internal_get_entry( strpool_t const* pool, STRPOOL_U64 handle )
+static strpool_embedded_internal_entry_t* strpool_embedded_internal_get_entry( strpool_embedded_t const* pool, STRPOOL_EMBEDDED_U64 handle )
     {
-    int index = strpool_internal_index_from_handle( handle, pool->index_mask );
-    int counter = strpool_internal_counter_from_handle( handle, pool->counter_shift, pool->counter_mask );
+    int index = strpool_embedded_internal_index_from_handle( handle, pool->index_mask );
+    int counter = strpool_embedded_internal_counter_from_handle( handle, pool->counter_shift, pool->counter_mask );
 
     if( index >= 0 && index < pool->handle_count && 
         counter == (int) ( pool->handles[ index ].counter & pool->counter_mask ) )
@@ -803,18 +700,18 @@ static strpool_internal_entry_t* strpool_internal_get_entry( strpool_t const* po
     }
 
 
-static STRPOOL_U32 strpool_internal_find_in_blocks( strpool_t const* pool, char const* string, int length )
+static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_embedded_t const* pool, char const* string, int length )
     {
     for( int i = 0; i < pool->block_count; ++i )
         {
-        strpool_internal_block_t* block = &pool->blocks[ i ];
+        strpool_embedded_internal_block_t* block = &pool->blocks[ i ];
         // Check if string comes from pool
-        if( string >= block->data + 2 * sizeof( STRPOOL_U32 ) && string < block->data + block->capacity ) 
+        if( string >= block->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ) && string < block->data + block->capacity ) 
             {
-            STRPOOL_U32* ptr = (STRPOOL_U32*) string;
+            STRPOOL_EMBEDDED_U32* ptr = (STRPOOL_EMBEDDED_U32*) string;
             int stored_length = (int)( *( ptr - 1 ) ); // Length is stored immediately before string
             if( stored_length != length || string[ length ] != '\0' ) return 0; // Invalid string
-            STRPOOL_U32 hash = *( ptr - 2 ); // Hash is stored before the length field
+            STRPOOL_EMBEDDED_U32 hash = *( ptr - 2 ); // Hash is stored before the length field
             return hash;
             }
         }
@@ -823,9 +720,9 @@ static STRPOOL_U32 strpool_internal_find_in_blocks( strpool_t const* pool, char 
     }
 
 
-static STRPOOL_U32 strpool_internal_calculate_hash( char const* string, int length, int ignore_case )
+static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_calculate_hash( char const* string, int length, int ignore_case )
     {
-    STRPOOL_U32 hash = 5381U; 
+    STRPOOL_EMBEDDED_U32 hash = 5381U; 
 
     if( ignore_case) 
         {
@@ -850,28 +747,28 @@ static STRPOOL_U32 strpool_internal_calculate_hash( char const* string, int leng
     }
 
 
-static void strpool_internal_expand_hash_table( strpool_t* pool )
+static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* pool )
     {
     int old_capacity = pool->hash_capacity;
-    strpool_internal_hash_slot_t* old_table = pool->hash_table;
+    strpool_embedded_internal_hash_slot_t* old_table = pool->hash_table;
 
     pool->hash_capacity *= 2;
 
-    pool->hash_table = (strpool_internal_hash_slot_t*) STRPOOL_MALLOC( pool->memctx, 
+    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->hash_capacity * sizeof( *pool->hash_table ) );
-    STRPOOL_ASSERT( pool->hash_table );
-    STRPOOL_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
+    STRPOOL_EMBEDDED_ASSERT( pool->hash_table );
+    STRPOOL_EMBEDDED_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
 
     for( int i = 0; i < old_capacity; ++i )
         {
-        STRPOOL_U32 hash_key = old_table[ i ].hash_key;
+        STRPOOL_EMBEDDED_U32 hash_key = old_table[ i ].hash_key;
         if( hash_key )
             {
-            int base_slot = (int)( hash_key & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
+            int base_slot = (int)( hash_key & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
             int slot = base_slot;
             while( pool->hash_table[ slot ].hash_key )
                 slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
-            STRPOOL_ASSERT( hash_key );
+            STRPOOL_EMBEDDED_ASSERT( hash_key );
             pool->hash_table[ slot ].hash_key = hash_key;
             pool->hash_table[ slot ].entry_index = old_table[ i ].entry_index;  
             pool->entries[ pool->hash_table[ slot ].entry_index ].hash_slot = slot; 
@@ -879,39 +776,39 @@ static void strpool_internal_expand_hash_table( strpool_t* pool )
             }               
         }
 
-    STRPOOL_FREE( pool->memctx, old_table );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, old_table );
     }
 
 
-static void strpool_internal_expand_entries( strpool_t* pool )
+static void strpool_embedded_internal_expand_entries( strpool_embedded_t* pool )
     {
     pool->entry_capacity *= 2;
-    strpool_internal_entry_t* new_entries = (strpool_internal_entry_t*) STRPOOL_MALLOC( pool->memctx, 
+    strpool_embedded_internal_entry_t* new_entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->entry_capacity * sizeof( *pool->entries ) );
-    STRPOOL_ASSERT( new_entries );
-    STRPOOL_MEMCPY( new_entries, pool->entries, pool->entry_count * sizeof( *pool->entries ) );
-    STRPOOL_FREE( pool->memctx, pool->entries );
+    STRPOOL_EMBEDDED_ASSERT( new_entries );
+    STRPOOL_EMBEDDED_MEMCPY( new_entries, pool->entries, pool->entry_count * sizeof( *pool->entries ) );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );
     pool->entries = new_entries;    
     }
 
 
-static void strpool_internal_expand_handles( strpool_t* pool )
+static void strpool_embedded_internal_expand_handles( strpool_embedded_t* pool )
     {
     pool->handle_capacity *= 2;
-    strpool_internal_handle_t* new_handles = (strpool_internal_handle_t*) STRPOOL_MALLOC( pool->memctx, 
+    strpool_embedded_internal_handle_t* new_handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
         pool->handle_capacity * sizeof( *pool->handles ) );
-    STRPOOL_ASSERT( new_handles );
-    STRPOOL_MEMCPY( new_handles, pool->handles, pool->handle_count * sizeof( *pool->handles ) );
-    STRPOOL_FREE( pool->memctx, pool->handles );
+    STRPOOL_EMBEDDED_ASSERT( new_handles );
+    STRPOOL_EMBEDDED_MEMCPY( new_handles, pool->handles, pool->handle_count * sizeof( *pool->handles ) );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->handles );
     pool->handles = new_handles;
     }
 
 
-static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* alloc_size )
+static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* pool, int size, int* alloc_size )
     {
-    if( size < (int)sizeof( strpool_internal_free_block_t ) ) size = sizeof( strpool_internal_free_block_t );
+    if( size < (int)sizeof( strpool_embedded_internal_free_block_t ) ) size = sizeof( strpool_embedded_internal_free_block_t );
     if( size < pool->min_data_size ) size = pool->min_data_size;
-    size = (int)strpool_internal_pow2ceil( (STRPOOL_U32)size );
+    size = (int)strpool_embedded_internal_pow2ceil( (STRPOOL_EMBEDDED_U32)size );
     
     // Try to find a large enough free slot in existing blocks
     for( int i = 0; i < pool->block_count; ++i )
@@ -920,8 +817,8 @@ static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* 
         int prev_list = -1;
         while( free_list >= 0 )
             {
-            strpool_internal_free_block_t* free_entry = 
-                (strpool_internal_free_block_t*) ( pool->blocks[ i ].data + free_list );
+            strpool_embedded_internal_free_block_t* free_entry = 
+                (strpool_embedded_internal_free_block_t*) ( pool->blocks[ i ].data + free_list );
             if( free_entry->size / 2 < size ) 
                 {
                 // At this point, all remaining slots are too small, so bail out if the current slot is not large enough
@@ -933,8 +830,8 @@ static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* 
                     }
                 else
                     {
-                    strpool_internal_free_block_t* prev_entry = 
-                        (strpool_internal_free_block_t*) ( pool->blocks[ i ].data + prev_list );
+                    strpool_embedded_internal_free_block_t* prev_entry = 
+                        (strpool_embedded_internal_free_block_t*) ( pool->blocks[ i ].data + prev_list );
                     prev_entry->next = free_entry->next;
                     }
                 *alloc_size = free_entry->size;
@@ -956,7 +853,7 @@ static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* 
         }
 
     // Allocate a new block
-    pool->current_block = strpool_internal_add_block( pool, size > pool->block_size ? size : pool->block_size );
+    pool->current_block = strpool_embedded_internal_add_block( pool, size > pool->block_size ? size : pool->block_size );
     char* data = pool->blocks[ pool->current_block ].tail;
     pool->blocks[ pool->current_block ].tail += size;
     *alloc_size = size;
@@ -964,41 +861,41 @@ static char* strpool_internal_get_data_storage( strpool_t* pool, int size, int* 
     }
     
 
-STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
+STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char const* string, int length )
     {
     if( !string || length < 0 ) return 0;
 
-    STRPOOL_U32 hash = strpool_internal_find_in_blocks( pool, string, length );
+    STRPOOL_EMBEDDED_U32 hash = strpool_embedded_internal_find_in_blocks( pool, string, length );
     // If no stored hash, calculate it from data
-    if( !hash ) hash = strpool_internal_calculate_hash( string, length, pool->ignore_case ); 
+    if( !hash ) hash = strpool_embedded_internal_calculate_hash( string, length, pool->ignore_case ); 
 
     // Return handle to existing string, if it is already in pool
-    int base_slot = (int)( hash & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
+    int base_slot = (int)( hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
     int base_count = pool->hash_table[ base_slot ].base_count;
     int slot = base_slot;
     int first_free = slot;
     while( base_count > 0 )
         {
-        STRPOOL_U32 slot_hash = pool->hash_table[ slot ].hash_key;
+        STRPOOL_EMBEDDED_U32 slot_hash = pool->hash_table[ slot ].hash_key;
         if( slot_hash == 0 && pool->hash_table[ first_free ].hash_key != 0 ) first_free = slot;
-        int slot_base = (int)( slot_hash & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
+        int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
         if( slot_base == base_slot ) 
             {
-            STRPOOL_ASSERT( base_count > 0 );
+            STRPOOL_EMBEDDED_ASSERT( base_count > 0 );
             --base_count;
             if( slot_hash == hash )
                 {
                 int index = pool->hash_table[ slot ].entry_index;
-                strpool_internal_entry_t* entry = &pool->entries[ index ];
+                strpool_embedded_internal_entry_t* entry = &pool->entries[ index ];
                 if( entry->length == length && 
                     ( 
-                       ( !pool->ignore_case &&   STRPOOL_MEMCMP( entry->data + 2 * sizeof( STRPOOL_U32 ), string, (size_t)length ) == 0 )
-                    || (  pool->ignore_case && STRPOOL_STRNICMP( entry->data + 2 * sizeof( STRPOOL_U32 ), string, (size_t)length ) == 0 ) 
+                       ( !pool->ignore_case &&   STRPOOL_EMBEDDED_MEMCMP( entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ), string, (size_t)length ) == 0 )
+                    || (  pool->ignore_case && STRPOOL_EMBEDDED_STRNICMP( entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ), string, (size_t)length ) == 0 ) 
                     ) 
                   )
                     {
                     int handle_index = entry->handle_index;
-                    return strpool_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, 
+                    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, 
                         pool->index_mask, pool->counter_shift, pool->counter_mask );
                     }
                 }
@@ -1010,16 +907,16 @@ STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
 
     if( pool->entry_count >= ( pool->hash_capacity  - pool->hash_capacity / 3 ) )
         {
-        strpool_internal_expand_hash_table( pool );
+        strpool_embedded_internal_expand_hash_table( pool );
 
-        base_slot = (int)( hash & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
+        base_slot = (int)( hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
         slot = base_slot;
         first_free = slot;
         while( base_count )
             {
-            STRPOOL_U32 slot_hash = pool->hash_table[ slot ].hash_key;
+            STRPOOL_EMBEDDED_U32 slot_hash = pool->hash_table[ slot ].hash_key;
             if( slot_hash == 0 && pool->hash_table[ first_free ].hash_key != 0 ) first_free = slot;
-            int slot_base = (int)( slot_hash & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
+            int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
             if( slot_base == base_slot )  --base_count;
             slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
             }       
@@ -1030,10 +927,10 @@ STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
         slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
 
     if( pool->entry_count >= pool->entry_capacity )
-        strpool_internal_expand_entries( pool );
+        strpool_embedded_internal_expand_entries( pool );
 
-    STRPOOL_ASSERT( !pool->hash_table[ slot ].hash_key && ( hash & ( (STRPOOL_U32) pool->hash_capacity - 1 ) ) == (STRPOOL_U32) base_slot );
-    STRPOOL_ASSERT( hash );
+    STRPOOL_EMBEDDED_ASSERT( !pool->hash_table[ slot ].hash_key && ( hash & ( (STRPOOL_EMBEDDED_U32) pool->hash_capacity - 1 ) ) == (STRPOOL_EMBEDDED_U32) base_slot );
+    STRPOOL_EMBEDDED_ASSERT( hash );
     pool->hash_table[ slot ].hash_key = hash;
     pool->hash_table[ slot ].entry_index = pool->entry_count;
     ++pool->hash_table[ base_slot ].base_count;
@@ -1055,7 +952,7 @@ STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
         }
     else
         {
-        strpool_internal_expand_handles( pool );
+        strpool_embedded_internal_expand_handles( pool );
         handle_index = pool->handle_count;
         pool->handles[ pool->handle_count ].counter = 1;
         ++pool->handle_count;           
@@ -1063,11 +960,11 @@ STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
 
     pool->handles[ handle_index ].entry_index = pool->entry_count;
         
-    strpool_internal_entry_t* entry = &pool->entries[ pool->entry_count ];
+    strpool_embedded_internal_entry_t* entry = &pool->entries[ pool->entry_count ];
     ++pool->entry_count;
         
-    int data_size = length + 1 + (int) ( 2 * sizeof( STRPOOL_U32 ) );
-    char* data = strpool_internal_get_data_storage( pool, data_size, &data_size );
+    int data_size = length + 1 + (int) ( 2 * sizeof( STRPOOL_EMBEDDED_U32 ) );
+    char* data = strpool_embedded_internal_get_data_storage( pool, data_size, &data_size );
     entry->hash_slot = slot;
     entry->handle_index = handle_index;
     entry->data = data;
@@ -1075,193 +972,27 @@ STRPOOL_U64 strpool_inject( strpool_t* pool, char const* string, int length )
     entry->length = length;
     entry->refcount = 0;
 
-    *(STRPOOL_U32*)(data) = hash;
-    data += sizeof( STRPOOL_U32 );
-    *(STRPOOL_U32*)(data) = (STRPOOL_U32) length;
-    data += sizeof( STRPOOL_U32 );
-    STRPOOL_MEMCPY( data, string, (size_t) length ); 
+    *(STRPOOL_EMBEDDED_U32*)(data) = hash;
+    data += sizeof( STRPOOL_EMBEDDED_U32 );
+    *(STRPOOL_EMBEDDED_U32*)(data) = (STRPOOL_EMBEDDED_U32) length;
+    data += sizeof( STRPOOL_EMBEDDED_U32 );
+    STRPOOL_EMBEDDED_MEMCPY( data, string, (size_t) length ); 
     data[ length ] = 0; // Ensure trailing zero
 
-    return strpool_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, pool->index_mask, 
+    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, pool->index_mask, 
         pool->counter_shift, pool->counter_mask );
     }
 
 
-void strpool_discard( strpool_t* pool, STRPOOL_U64 handle )
-    {   
-    strpool_internal_entry_t* entry = strpool_internal_get_entry( pool, handle );
-    if( entry && entry->refcount == 0 )
-        {
-        int entry_index = pool->handles[ entry->handle_index ].entry_index;
-
-        // recycle string mem
-        for( int i = 0; i < pool->block_count; ++i )
-            {
-            strpool_internal_block_t* block = &pool->blocks[ i ];
-            if( entry->data >= block->data && entry->data <= block->tail )
-                {
-                if( block->free_list < 0 )
-                    {
-                    strpool_internal_free_block_t* new_entry = (strpool_internal_free_block_t*) ( entry->data );
-                    block->free_list = (int) ( entry->data - block->data );
-                    new_entry->next = -1;
-                    new_entry->size = entry->size;
-                    }
-                else
-                    {
-                    int free_list = block->free_list;
-                    int prev_list = -1;
-                    while( free_list >= 0 )
-                        {
-                        strpool_internal_free_block_t* free_entry = 
-                            (strpool_internal_free_block_t*) ( pool->blocks[ i ].data + free_list );
-                        if( free_entry->size <= entry->size ) 
-                            {
-                            strpool_internal_free_block_t* new_entry = (strpool_internal_free_block_t*) ( entry->data );
-                            if( prev_list < 0 )
-                                {
-                                new_entry->next = pool->blocks[ i ].free_list;
-                                pool->blocks[ i ].free_list = (int) ( entry->data - block->data );          
-                                }
-                            else
-                                {
-                                strpool_internal_free_block_t* prev_entry = 
-                                    (strpool_internal_free_block_t*) ( pool->blocks[ i ].data + prev_list );
-                                prev_entry->next = (int) ( entry->data - block->data );
-                                new_entry->next = free_entry->next;
-                                }
-                            new_entry->size = entry->size;
-                            break;
-                            }
-                        prev_list = free_list;
-                        free_list = free_entry->next;
-                        }
-                    }
-                break;
-                }
-            }
-
-        // recycle handle
-        if( pool->handle_freelist_tail < 0 )
-            {
-            STRPOOL_ASSERT( pool->handle_freelist_head < 0 );
-            pool->handle_freelist_head = entry->handle_index;
-            pool->handle_freelist_tail = entry->handle_index;
-            }
-        else
-            {
-            pool->handles[ pool->handle_freelist_tail ].entry_index = entry->handle_index;
-            pool->handle_freelist_tail = entry->handle_index;
-            }
-        ++pool->handles[ entry->handle_index ].counter; // invalidate handle via counter
-        pool->handles[ entry->handle_index ].entry_index = -1;
-
-        // recycle hash slot
-        STRPOOL_U32 hash = pool->hash_table[ entry->hash_slot ].hash_key;
-        int base_slot = (int)( hash & (STRPOOL_U32)( pool->hash_capacity - 1 ) );
-        STRPOOL_ASSERT( hash );
-        --pool->hash_table[ base_slot ].base_count;
-        pool->hash_table[ entry->hash_slot ].hash_key = 0;
-
-        // recycle entry
-        if( entry_index != pool->entry_count - 1 )
-            {
-            pool->entries[ entry_index ] = pool->entries[ pool->entry_count - 1 ];
-            pool->hash_table[ pool->entries[ entry_index ].hash_slot ].entry_index = entry_index;
-            pool->handles[ pool->entries[ entry_index ].handle_index ].entry_index = entry_index;
-            }
-        --pool->entry_count;
-        }       
-
-    }
-
-
-int strpool_incref( strpool_t* pool, STRPOOL_U64 handle )
+char const* strpool_embedded_cstr( strpool_embedded_t const* pool, STRPOOL_EMBEDDED_U64 handle )
     {
-    strpool_internal_entry_t* entry = strpool_internal_get_entry( pool, handle );
-    if( entry )
-        {
-        ++entry->refcount;
-        return entry->refcount;
-        }
-    return 0;
-    }
-
-
-int strpool_decref( strpool_t* pool, STRPOOL_U64 handle )
-    {
-    strpool_internal_entry_t* entry = strpool_internal_get_entry( pool, handle );
-    if( entry )
-        {
-        STRPOOL_ASSERT( entry->refcount > 0 );
-        --entry->refcount;
-        return entry->refcount;
-        }
-    return 0;
-    }
-
-
-int strpool_getref( strpool_t* pool, STRPOOL_U64 handle )
-    {
-    strpool_internal_entry_t* entry = strpool_internal_get_entry( pool, handle );
-    if( entry ) return entry->refcount;
-    return 0;
-    }
-
-
-int strpool_isvalid( strpool_t const* pool, STRPOOL_U64 handle )
-    {
-    strpool_internal_entry_t const* entry = strpool_internal_get_entry( pool, handle );
-    if( entry ) return 1;
-    return 0;
-    }
-
-
-char const* strpool_cstr( strpool_t const* pool, STRPOOL_U64 handle )
-    {
-    strpool_internal_entry_t const* entry = strpool_internal_get_entry( pool, handle );
-    if( entry ) return entry->data + 2 * sizeof( STRPOOL_U32 ); // Skip leading hash value
+    strpool_embedded_internal_entry_t const* entry = strpool_embedded_internal_get_entry( pool, handle );
+    if( entry ) return entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ); // Skip leading hash value
     return NULL;
     }
 
-
-int strpool_length( strpool_t const* pool, STRPOOL_U64 handle )
-    {
-    strpool_internal_entry_t const* entry = strpool_internal_get_entry( pool, handle );
-    if( entry ) return entry->length;
-    return 0;
-    }
-
-
-char* strpool_collate( strpool_t const* pool, int* count )
-    {
-    int size = 0;
-    for( int i = 0; i < pool->entry_count; ++i ) size += pool->entries[ i ].length + 1;
-    if( size == 0 ) return NULL;
-
-    char* strings = (char*) STRPOOL_MALLOC( pool->memctx, (size_t) size );
-    STRPOOL_ASSERT( strings );
-    *count = pool->entry_count;
-    char* ptr = strings;
-    for( int i = 0; i < pool->entry_count; ++i )
-        {
-        int len = pool->entries[ i ].length + 1;
-        char* src = pool->entries[ i ].data += 2 * sizeof( STRPOOL_U32 );
-        STRPOOL_MEMCPY( ptr, src, (size_t) len );
-        ptr += len;
-        }
-    return strings;
-    }
-
-
-void strpool_free_collated( strpool_t const* pool, char* collated_ptr )
-    {
-    (void) pool;
-    STRPOOL_FREE( pool->memctx, collated_ptr );
-    }
-
-
-#endif /* STRPOOL_IMPLEMENTATION */
+#endif // STRPOOL_EMBEDDED_IMPLEMENTATION_ONCE
+#endif /* STRPOOL_EMBEDDED_IMPLEMENTATION */
 
 
 /*
@@ -1384,7 +1115,7 @@ struct tinytiled_map_internal_t
 	char* in;
 	char* end;
 	tinytiled_map_t map;
-	strpool_t strpool;
+	strpool_embedded_t strpool;
 	void* mem_ctx;
 	int page_size;
 	int bytes_left_on_page;
@@ -1698,10 +1429,10 @@ int tinytiled_intern_string_internal(tinytiled_map_internal_t* m, tinytiled_stri
 	// time.
 
 	// Later there will be a second pass to patch all these string
-	// pointers by doing: *out = (const char*)strpool_cstr(&m->strpool, id);
+	// pointers by doing: *out = (const char*)strpool_embedded_cstr(&m->strpool, id);
 
-	STRPOOL_U64 id = strpool_inject(&m->strpool, m->scratch, m->scratch_len);
-	// if (sizeof(const char*) < sizeof(STRPOOL_U64)) *(int*)0 = 0; // sanity check
+	STRPOOL_EMBEDDED_U64 id = strpool_embedded_inject(&m->strpool, m->scratch, m->scratch_len);
+	// if (sizeof(const char*) < sizeof(STRPOOL_EMBEDDED_U64)) *(int*)0 = 0; // sanity check
 	out->hash_id = id;
 
 	return 1;
@@ -2300,7 +2031,7 @@ tinytiled_err:
 
 static TINYTILED_INLINE void tinytiled_string_deintern(tinytiled_map_internal_t* m, tinytiled_string_t* s)
 {
-	s->ptr = strpool_cstr(&m->strpool, s->hash_id);
+	s->ptr = strpool_embedded_cstr(&m->strpool, s->hash_id);
 }
 
 static void tinytiled_deintern_properties(tinytiled_map_internal_t* m, tinytiled_property_t* properties, int property_count)
@@ -2361,7 +2092,7 @@ static void tinytiled_patch_interned_strings(tinytiled_map_internal_t* m)
 
 static void tinytiled_free_map_internal(tinytiled_map_internal_t* m)
 {
-	strpool_term(&m->strpool);
+	strpool_embedded_term(&m->strpool);
 
 	tinytiled_page_t* page = m->pages;
 	while (page)
@@ -2386,9 +2117,9 @@ tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_
 	m->pages = (tinytiled_page_t*)TINYTILED_MALLOC(sizeof(tinytiled_page_t) + m->page_size, mem_ctx);
 	m->pages->next = 0;
 	m->pages->data = m->pages + 1;
-	strpool_config_t config = strpool_default_config;
+	strpool_embedded_config_t config = strpool_embedded_default_config;
 	config.memctx = mem_ctx;
-	strpool_init(&m->strpool, &config);
+	strpool_embedded_init(&m->strpool, &config);
 
 	tinytiled_expect(m, '{');
 
