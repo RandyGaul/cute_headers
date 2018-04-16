@@ -804,16 +804,16 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 	config->allocator_context = 0;
 }
 
-#define SPRITEBATCH_CHECK_BUFFER_GROW(ctx, count, capacity, data, type_size) \
+#define SPRITEBATCH_CHECK_BUFFER_GROW(ctx, count, capacity, data, type) \
 	do { \
 		if (ctx->count == ctx->capacity) \
 		{ \
 			int new_capacity = ctx->capacity * 2; \
 			void* new_data = SPRITEBATCH_MALLOC(new_capacity, ctx->mem_ctx); \
 			if (!new_data) return 0; \
-			SPRITEBATCH_MEMCPY(new_data, ctx->data, type_size * ctx->count); \
+			SPRITEBATCH_MEMCPY(new_data, ctx->data, sizeof(type) * ctx->count); \
 			SPRITEBATCH_FREE(ctx->data, ctx->mem_ctx); \
-			ctx->data = new_data; \
+			ctx->data = (type*)new_data; \
 			ctx->capacity = new_capacity; \
 		} \
 	} while (0)
@@ -825,7 +825,7 @@ static SPRITEBATCH_U64 spritebatch_make_sort_key(int index, int sort_bits)
 
 int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, float x, float y, float sx, float sy, float c, float s, int sort_bits)
 {
-	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, sizeof(spritebatch_internal_sprite_t));
+	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, spritebatch_internal_sprite_t);
 	spritebatch_internal_sprite_t sprite;
 	sprite.image_id = image_id;
 	sprite.sort_bits = spritebatch_make_sort_key(sb->input_count, sort_bits);
@@ -945,7 +945,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 
 	if (!skipped_tex)
 	{
-		SPRITEBATCH_CHECK_BUFFER_GROW(sb, sprite_count, sprite_capacity, sprites, sizeof(spritebatch_sprite_t));
+		SPRITEBATCH_CHECK_BUFFER_GROW(sb, sprite_count, sprite_capacity, sprites, spritebatch_sprite_t);
 		sb->sprites[sb->sprite_count++] = sprite;
 	}
 	return skipped_tex;
@@ -1381,7 +1381,7 @@ static void spritebatch_internal_qsort_lonely(hashtable_t* lonely_table, spriteb
 
 int spritebatch_internal_buffer_key(spritebatch_t* sb, SPRITEBATCH_U64 key)
 {
-	SPRITEBATCH_CHECK_BUFFER_GROW(sb, key_buffer_count, key_buffer_capacity, key_buffer, sizeof(SPRITEBATCH_U64));
+	SPRITEBATCH_CHECK_BUFFER_GROW(sb, key_buffer_count, key_buffer_capacity, key_buffer, SPRITEBATCH_U64);
 	sb->key_buffer[sb->key_buffer_count++] = key;
 	return 0;
 }
