@@ -809,7 +809,7 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 		if (ctx->count == ctx->capacity) \
 		{ \
 			int new_capacity = ctx->capacity * 2; \
-			void* new_data = SPRITEBATCH_MALLOC(new_capacity, ctx->mem_ctx); \
+			void* new_data = SPRITEBATCH_MALLOC(sizeof(type) * new_capacity, ctx->mem_ctx); \
 			if (!new_data) return 0; \
 			SPRITEBATCH_MEMCPY(new_data, ctx->data, sizeof(type) * ctx->count); \
 			SPRITEBATCH_FREE(ctx->data, ctx->mem_ctx); \

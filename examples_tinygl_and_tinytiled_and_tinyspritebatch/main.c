@@ -391,6 +391,7 @@ void print_tilesets(tinytiled_tileset_t* tileset)
 		print(tileset, tileheight, %d);
 		print(tileset, tilewidth, %d);
 		print(tileset, type.ptr, %s);
+		print(tileset, source.ptr, %s);
 
 		tileset = tileset->next;
 		--tab_count;
@@ -420,7 +421,7 @@ void print_map(tinytiled_map_t* m)
 
 void test_map()
 {
-	tinytiled_map_t* m = tinytiled_load_map_from_file("test_map.json", 0);
+	tinytiled_map_t* m = tinytiled_load_map_from_file("untitled.txt", 0);
 	if (!m) return;
 	print_map(m);
 	tinytiled_free_map(m);

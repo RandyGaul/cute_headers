@@ -284,6 +284,7 @@ struct tinytiled_tileset_t
 	/* tiles */                       // Not currently supported.
 	int tilewidth;                    // Maximum width of tiles in this set.
 	tinytiled_string_t type;          // `tileset` (for tileset files, since 1.0).
+	tinytiled_string_t source;        // Relative path to tileset, when saved externally from the map file.
 	tinytiled_tileset_t* next;        // Pointer to next tileset. NULL if final tileset.
 };
 
@@ -1908,6 +1909,10 @@ tinytiled_tileset_t* tinytiled_tileset(tinytiled_map_internal_t* m)
 			tinytiled_intern_string(m, &tileset->type);
 			break;
 
+		case 8053780534892277672: // source
+			tinytiled_intern_string(m, &tileset->source);
+			break;
+
 		default:
 			TINYTILED_CHECK(0, "Unknown identifier found.");
 		}
@@ -1990,6 +1995,7 @@ static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 		while (tinytiled_peak(m) != ']')
 		{
 			tinytiled_tileset_t* tileset = tinytiled_tileset(m);
+			TINYTILED_FAIL_IF(!tileset);
 			tileset->next = m->map.tilesets;
 			m->map.tilesets = tileset;
 			tinytiled_try(m, ',');
@@ -2082,6 +2088,7 @@ static void tinytiled_patch_interned_strings(tinytiled_map_internal_t* m)
 		tinytiled_string_deintern(m, &tileset->image);
 		tinytiled_string_deintern(m, &tileset->name);
 		tinytiled_string_deintern(m, &tileset->type);
+		tinytiled_string_deintern(m, &tileset->source);
 		tinytiled_deintern_properties(m, tileset->properties, tileset->property_count);
 		tileset = tileset->next;
 	}
