@@ -22,6 +22,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++
 **[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 1.0 | C/C++
 **[tinytiled](tinytiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.0 | C/C++
+**[tinyfilewatch](tinyfilewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths | 1.0 | C/C++
 
 &ast; Not yet hit first release
 
