@@ -238,7 +238,7 @@ typedef struct
 
 	// always points from shape A to shape B (first and second shapes passed into
 	// any of the c2***to***Manifold functions)
-	c2v normal;
+	c2v n;
 } c2Manifold;
 
 // boolean collision detection
@@ -487,7 +487,7 @@ void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 	case C2_AABB:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->normal = c2Neg(m->normal); return;
+		case C2_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->n = c2Neg(m->n); return;
 		case C2_AABB:    return c2AABBtoAABBManifold(*(c2AABB*)A, *(c2AABB*)B, m);
 		case C2_CAPSULE: return c2AABBtoCapsuleManifold(*(c2AABB*)A, *(c2Capsule*)B, m);
 		case C2_POLY:    return c2AABBtoPolyManifold(*(c2AABB*)A, (const c2Poly*)B, bx, m);
@@ -497,8 +497,8 @@ void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 	case C2_CAPSULE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->normal = c2Neg(m->normal); return;
-		case C2_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->normal = c2Neg(m->normal); return;
+		case C2_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); return;
+		case C2_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); return;
 		case C2_CAPSULE: return c2CapsuletoCapsuleManifold(*(c2Capsule*)A, *(c2Capsule*)B, m);
 		case C2_POLY:    return c2CapsuletoPolyManifold(*(c2Capsule*)A, (const c2Poly*)B, bx, m);
 		}
@@ -507,9 +507,9 @@ void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 	case C2_POLY:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->normal = c2Neg(m->normal); return;
-		case C2_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->normal = c2Neg(m->normal); return;
-		case C2_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->normal = c2Neg(m->normal); return;
+		case C2_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
+		case C2_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
+		case C2_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
 		case C2_POLY:    return c2PolytoPolyManifold((const c2Poly*)A, ax, (const c2Poly*)B, bx, m);
 		}
 		break;
@@ -1200,7 +1200,7 @@ void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m)
 		m->count = 1;
 		m->depths[0] = r - l;
 		m->contact_points[0] = c2Sub(B.p, c2Mulvs(n, B.r));
-		m->normal = n;
+		m->n = n;
 	}
 }
 
@@ -1221,7 +1221,7 @@ void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m)
 			m->count = 1;
 			m->depths[0] = A.r - d;
 			m->contact_points[0] = c2Add(A.p, c2Mulvs(n, d));
-			m->normal = n;
+			m->n = n;
 		}
 
 		// deep (center of circle inside of AABB)
@@ -1256,7 +1256,7 @@ void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m)
 			m->count = 1;
 			m->depths[0] = A.r + depth;
 			m->contact_points[0] = c2Sub(A.p, c2Mulvs(n, depth));
-			m->normal = n;
+			m->n = n;
 		}
 	}
 }
@@ -1276,7 +1276,7 @@ void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m)
 		m->count = 1;
 		m->depths[0] = r - d;
 		m->contact_points[0] = c2Sub(b, c2Mulvs(n, B.r));
-		m->normal = n;
+		m->n = n;
 	}
 }
 
@@ -1334,7 +1334,7 @@ void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m)
 	m->count = 1;
 	m->contact_points[0] = p;
 	m->depths[0] = depth;
-	m->normal = n;
+	m->n = n;
 }
 
 void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m)
@@ -1362,7 +1362,7 @@ void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m)
 		m->count = 1;
 		m->depths[0] = r - d;
 		m->contact_points[0] = c2Sub(b, c2Mulvs(n, B.r));
-		m->normal = n;
+		m->n = n;
 	}
 }
 
@@ -1392,7 +1392,7 @@ void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Man
 			m->count = 1;
 			m->contact_points[0] = b;
 			m->depths[0] = A.r - l;
-			m->normal = c2Mulvs(n, 1.0f / l);
+			m->n = c2Mulvs(n, 1.0f / l);
 		}
 	}
 
@@ -1422,7 +1422,7 @@ void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Man
 		m->count = 1;
 		m->contact_points[0] = c2Mulxv(bx, p);
 		m->depths[0] = A.r - sep;
-		m->normal = c2Neg(c2Mulrv(bx.r, B->norms[index]));
+		m->n = c2Neg(c2Mulrv(bx.r, B->norms[index]));
 	}
 }
 
@@ -1484,7 +1484,7 @@ static void c2KeepDeep(c2v* seg, c2h h, c2Manifold* m)
 		}
 	}
 	m->count = cp;
-	m->normal = h.n;
+	m->n = h.n;
 }
 
 static C2_INLINE c2v c2CapsuleSupport(c2Capsule A, c2v dir)
@@ -1559,7 +1559,7 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 			m->count = 1;
 			m->contact_points[0] = b;
 			m->depths[0] = A.r - d;
-			m->normal = c2Mulvs(ab, 1.0f / d);
+			m->n = c2Mulvs(ab, 1.0f / d);
 		}
 
 		// 2 contacts if laying on a polygon face nicely
@@ -1661,7 +1661,7 @@ void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, c
 	c2h rh;
 	if (!c2SidePlanes(incident, rx, rp, re, &rh)) return;
 	c2KeepDeep(incident, rh, m);
-	if (flip) m->normal = c2Neg(m->normal);
+	if (flip) m->n = c2Neg(m->n);
 }
 
 #endif // TINYC2_IMPLEMENTATION_ONCE

@@ -267,7 +267,7 @@ void DrawCircle( c2v p, float r )
 
 void DrawManifold( c2Manifold m )
 {
-	c2v n = m.normal;
+	c2v n = m.n;
 	tgLineColor( ctx, 1.0f, 0.2f, 0.4f );
 	for ( int i = 0; i < m.count; ++i )
 	{
@@ -927,9 +927,9 @@ void sro5hRayBug( )
 		tgLine( ctx, impact.x, impact.y, 0, end.x, end.y, 0 );
 	}
 
-	//c2v end = c2Add( ray.p, c2Mulvs( ray.d, ray.t ) );
-	//tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
-	//tgLine( ctx, ray.p.x, ray.p.y, 0, end.x, end.y, 0 );
+	c2v end = c2Add( ray.p, c2Mulvs( ray.d, ray.t ) );
+	tgLineColor( ctx, 1.0f, 1.0f, 1.0f );
+	tgLine( ctx, ray.p.x, ray.p.y, 0, end.x, end.y, 0 );
 }
 
 void circle_to_aabb_bug()
@@ -942,6 +942,7 @@ void circle_to_aabb_bug()
 	b.min = c2V(-100, -50);
 	b.max = c2V(100, 50);
 
+	tgLineColor(ctx, 1, 1, 1);
 	DrawCircle(a.p, a.r);
 	DrawAABB(b.min, b.max);
 
