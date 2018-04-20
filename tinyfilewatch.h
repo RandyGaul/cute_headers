@@ -2223,11 +2223,6 @@ int filewatch_update(filewatch_t* filewatch)
 			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
 			if (was_removed)
 			{
-				// remove entry from table
-				hashtable_remove(&watch->entries, entry->name_id);
-				--entry_count;
-				--i;
-
 				// directory removed
 				if (entry->is_dir)
 				{
@@ -2241,6 +2236,11 @@ int filewatch_update(filewatch_t* filewatch)
 					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
 					remount_needed = 1;
 				}
+
+				// remove entry from table
+				hashtable_remove(&watch->entries, entry->name_id);
+				--entry_count;
+				--i;
 			}
 		}
 	}
