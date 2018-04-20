@@ -2033,6 +2033,8 @@ filewatch_t* filewatch_create(struct assetsys_t* assetsys, void* mem_ctx)
 void filewatch_free(filewatch_t* filewatch)
 {
 	strpool_embedded_term(&filewatch->strpool);
+	TINYFILEWATCH_FREE(filewatch->watches, filewatch->mem_ctx);
+	TINYFILEWATCH_FREE(filewatch->notifications, filewatch->mem_ctx);
 	TINYFILEWATCH_FREE(filewatch, filewatch->mem_ctx);
 }
 
@@ -2042,13 +2044,17 @@ void filewatch_free(filewatch_t* filewatch)
 
 int filewatch_mount(filewatch_t* filewatch, const char* actual_path, const char* mount_as_virtual_path)
 {
+	STRPOOL_EMBEDDED_U64 actual_id;
+	STRPOOL_EMBEDDED_U64 virtual_id;
+	assetsys_error_t ret;
+
 	TINYFILEWATCH_CHECK(!filewatch->mounted, "`filewatch_t` is already mounted. Please call `filewatch_dismount` before calling `filewatch_mount` again.");
 
-	STRPOOL_EMBEDDED_U64 actual_id = TINYFILEWATCH_INJECT(filewatch, actual_path, TINYFILEWATCH_STRLEN(actual_path));
-	STRPOOL_EMBEDDED_U64 virtual_id = TINYFILEWATCH_INJECT(filewatch, mount_as_virtual_path, TINYFILEWATCH_STRLEN(mount_as_virtual_path));
+	actual_id = TINYFILEWATCH_INJECT(filewatch, actual_path, TINYFILEWATCH_STRLEN(actual_path));
+	virtual_id = TINYFILEWATCH_INJECT(filewatch, mount_as_virtual_path, TINYFILEWATCH_STRLEN(mount_as_virtual_path));
 	filewatch->mount_path.virtual_id = virtual_id;
 	filewatch->mount_path.actual_id = actual_id;
-	assetsys_error_t ret = assetsys_mount(filewatch->assetsys, actual_path, mount_as_virtual_path);
+	ret = assetsys_mount(filewatch->assetsys, actual_path, mount_as_virtual_path);
 	TINYFILEWATCH_CHECK(ret == ASSETSYS_SUCCESS, "assetsys failed to initialize.");
 	filewatch->mounted = 1;
 
@@ -2132,8 +2138,8 @@ void filewatch_add_entry_internal(filewatch_t* filewatch, filewatch_watched_dir_
 
 int filewatch_update(filewatch_t* filewatch)
 {
-	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 	int remount_needed = 0;
+	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	for (int i = 0; i < filewatch->watch_count; ++i)
 	{
@@ -2266,10 +2272,12 @@ void filewatch_notify(filewatch_t* filewatch)
 
 int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, filewatch_callback_t* cb, void* udata)
 {
+	filewatch_watched_dir_internal_t* watch;
+	int success;
 	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	TINYFILEWATCH_CHECK_BUFFER_GROW(filewatch, watch_count, watch_capacity, watches, filewatch_watched_dir_internal_t);
-	filewatch_watched_dir_internal_t* watch = filewatch->watches + filewatch->watch_count++;
+	watch = filewatch->watches + filewatch->watch_count++;
 	watch->cb = cb;
 	watch->udata = udata;
 	hashtable_init(&watch->entries, sizeof(filewatch_entry_internal_t), 32, filewatch->mem_ctx);
@@ -2282,7 +2290,7 @@ int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, f
 	watch->dir_path = path;
 
 	tfDIR dir;
-	int success = tfDirOpen(&dir, actual_path);
+	success = tfDirOpen(&dir, actual_path);
 	TINYFILEWATCH_CHECK(success, "`virtual_path` is not a valid directory.");
 
 	while (dir.has_next)
