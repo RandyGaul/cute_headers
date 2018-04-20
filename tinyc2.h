@@ -1445,7 +1445,7 @@ static int c2Clip(c2v* seg, c2h h)
 	float d0, d1;
 	if ((d0 = c2Dist(h, seg[0])) < 0) out[sp++] = seg[0];
 	if ((d1 = c2Dist(h, seg[1])) < 0) out[sp++] = seg[1];
-	if (d0 * d1 < 0) out[sp++] = c2Intersect(seg[0], seg[1], d0, d1);
+	if (d0 * d1 <= 0) out[sp++] = c2Intersect(seg[0], seg[1], d0, d1);
 	seg[0] = out[0]; seg[1] = out[1];
 	return sp;
 }

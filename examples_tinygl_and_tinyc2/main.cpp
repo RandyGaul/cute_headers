@@ -954,6 +954,47 @@ void circle_to_aabb_bug()
 	}
 }
 
+void DJLink_aabb_bug( )
+{
+	bool draw_aabb = false;
+	
+	c2AABB ba;
+	ba.min = c2V( -50.0f, -200.0f );
+	ba.max = c2V( 50.0f, -100.0f );
+
+	c2AABB bb;
+	bb.min = c2V( -10.0f, -225.0f );
+	bb.max = c2V( 50.0f, -180.0f ); //<= if using 49 instead of 50 collision will work
+	
+	if (draw_aabb)
+	{
+		DrawBB(ba, bb);
+	}
+	else
+	{
+		//Dirty conversion for poly just for tests
+		c2Poly p1;
+		c2BBVerts(p1.verts, &ba);
+		p1.count = 4;
+		c2Norms(p1.verts, p1.norms, 4);
+
+		c2Poly p2;
+		c2BBVerts(p2.verts, &bb);
+		p2.count = 4;
+		c2Norms(p2.verts, p2.norms, 4);
+
+		c2x cx = c2xIdentity();
+		tgLineColor(ctx, 1.0f, 1.0f, 1.0f);
+		DrawPoly2(&p1, cx);
+		DrawPoly2(&p2, cx);
+
+		c2Manifold m;
+		m.count = 0;
+		c2PolytoPolyManifold(&p1, nullptr, &p2, nullptr, &m);
+		DrawManifold(m);
+	}
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -1048,8 +1089,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 11;
-		if ( arrow_pressed ) code = (code + 1) % 13;
+		static int code = 12;
+		if ( arrow_pressed ) code = (code + 1) % 14;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -1065,6 +1106,7 @@ int main( )
 		case 10: PlastburkRayBug( ); break;
 		case 11: sro5hRayBug( ); break;
 		case 12: circle_to_aabb_bug(); break;
+		case 13: DJLink_aabb_bug(); break;
 		}
 
 		// push a draw call to tinygl
