@@ -2247,7 +2247,7 @@ int filewatch_update(filewatch_t* filewatch)
 
 	if (remount_needed)
 	{
-		const char* actual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
+		const char* actual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
 		const char* virtual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
 		assetsys_dismount(filewatch->assetsys, actual_path, virtual_path);
 		assetsys_mount(filewatch->assetsys, actual_path, virtual_path);
