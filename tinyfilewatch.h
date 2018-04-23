@@ -2145,6 +2145,38 @@ int filewatch_update(filewatch_t* filewatch)
 	{
 		filewatch_watched_dir_internal_t* watch = filewatch->watches + i;
 
+		// look for removed entries
+		int entry_count = hashtable_count(&watch->entries);
+		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
+
+		for (int i = 0; i < entry_count; ++i)
+		{
+			filewatch_entry_internal_t* entry = entries + i;
+
+			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
+			if (was_removed)
+			{
+				// directory removed
+				if (entry->is_dir)
+				{
+					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_DIR_REMOVED);
+					remount_needed = 1;
+				}
+
+				// file removed
+				else
+				{
+					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
+					remount_needed = 1;
+				}
+
+				// remove entry from table
+				hashtable_remove(&watch->entries, entry->name_id);
+				--entry_count;
+				--i;
+			}
+		}
+
 		// watched directory was removed
 		int dir_was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, watch->dir_path.actual_id));
 		if (dir_was_removed)
@@ -2211,38 +2243,6 @@ int filewatch_update(filewatch_t* filewatch)
 		}
 
 		tfDirClose(&dir);
-
-		// look for removed entries
-		int entry_count = hashtable_count(&watch->entries);
-		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
-
-		for (int i = 0; i < entry_count; ++i)
-		{
-			filewatch_entry_internal_t* entry = entries + i;
-
-			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
-			if (was_removed)
-			{
-				// directory removed
-				if (entry->is_dir)
-				{
-					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_DIR_REMOVED);
-					remount_needed = 1;
-				}
-
-				// file removed
-				else
-				{
-					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
-					remount_needed = 1;
-				}
-
-				// remove entry from table
-				hashtable_remove(&watch->entries, entry->name_id);
-				--entry_count;
-				--i;
-			}
-		}
 	}
 
 	if (remount_needed)
