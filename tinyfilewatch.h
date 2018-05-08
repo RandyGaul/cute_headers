@@ -2053,6 +2053,8 @@ filewatch_t* filewatch_create(struct assetsys_t* assetsys, void* mem_ctx)
 void filewatch_free(filewatch_t* filewatch)
 {
 	strpool_embedded_term(&filewatch->strpool);
+	TINYFILEWATCH_FREE(filewatch->watches, filewatch->mem_ctx);
+	TINYFILEWATCH_FREE(filewatch->notifications, filewatch->mem_ctx);
 	TINYFILEWATCH_FREE(filewatch, filewatch->mem_ctx);
 }
 
@@ -2062,13 +2064,17 @@ void filewatch_free(filewatch_t* filewatch)
 
 int filewatch_mount(filewatch_t* filewatch, const char* actual_path, const char* mount_as_virtual_path)
 {
+	STRPOOL_EMBEDDED_U64 actual_id;
+	STRPOOL_EMBEDDED_U64 virtual_id;
+	assetsys_error_t ret;
+
 	TINYFILEWATCH_CHECK(!filewatch->mounted, "`filewatch_t` is already mounted. Please call `filewatch_dismount` before calling `filewatch_mount` again.");
 
-	STRPOOL_EMBEDDED_U64 actual_id = TINYFILEWATCH_INJECT(filewatch, actual_path, TINYFILEWATCH_STRLEN(actual_path));
-	STRPOOL_EMBEDDED_U64 virtual_id = TINYFILEWATCH_INJECT(filewatch, mount_as_virtual_path, TINYFILEWATCH_STRLEN(mount_as_virtual_path));
+	actual_id = TINYFILEWATCH_INJECT(filewatch, actual_path, TINYFILEWATCH_STRLEN(actual_path));
+	virtual_id = TINYFILEWATCH_INJECT(filewatch, mount_as_virtual_path, TINYFILEWATCH_STRLEN(mount_as_virtual_path));
 	filewatch->mount_path.virtual_id = virtual_id;
 	filewatch->mount_path.actual_id = actual_id;
-	assetsys_error_t ret = assetsys_mount(filewatch->assetsys, actual_path, mount_as_virtual_path);
+	ret = assetsys_mount(filewatch->assetsys, actual_path, mount_as_virtual_path);
 	TINYFILEWATCH_CHECK(ret == ASSETSYS_SUCCESS, "assetsys failed to initialize.");
 	filewatch->mounted = 1;
 
@@ -2151,12 +2157,44 @@ void filewatch_add_entry_internal(filewatch_watched_dir_internal_t* watch, filew
 
 int filewatch_update(filewatch_t* filewatch)
 {
-	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 	int remount_needed = 0;
+	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	for (int i = 0; i < filewatch->watch_count; ++i)
 	{
 		filewatch_watched_dir_internal_t* watch = filewatch->watches + i;
+
+		// look for removed entries
+		int entry_count = hashtable_count(&watch->entries);
+		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
+
+		for (int i = 0; i < entry_count; ++i)
+		{
+			filewatch_entry_internal_t* entry = entries + i;
+
+			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
+			if (was_removed)
+			{
+				// directory removed
+				if (entry->is_dir)
+				{
+					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_DIR_REMOVED);
+					remount_needed = 1;
+				}
+
+				// file removed
+				else
+				{
+					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
+					remount_needed = 1;
+				}
+
+				// remove entry from table
+				hashtable_remove(&watch->entries, entry->name_id);
+				--entry_count;
+				--i;
+			}
+		}
 
 		// watched directory was removed
 		int dir_was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, watch->dir_path.actual_id));
@@ -2224,43 +2262,11 @@ int filewatch_update(filewatch_t* filewatch)
 		}
 
 		tfDirClose(&dir);
-
-		// look for removed entries
-		int entry_count = hashtable_count(&watch->entries);
-		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
-
-		for (int j = 0; j < entry_count; ++j)
-		{
-			filewatch_entry_internal_t* entry = entries + j;
-
-			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
-			if (was_removed)
-			{
-				// remove entry from table
-				hashtable_remove(&watch->entries, entry->name_id);
-				--entry_count;
-				--j;
-
-				// directory removed
-				if (entry->is_dir)
-				{
-					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_DIR_REMOVED);
-					remount_needed = 1;
-				}
-
-				// file removed
-				else
-				{
-					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
-					remount_needed = 1;
-				}
-			}
-		}
 	}
 
 	if (remount_needed)
 	{
-		const char* actual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
+		const char* actual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
 		const char* virtual_path = TINYFILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
 		assetsys_dismount(filewatch->assetsys, actual_path, virtual_path);
 		assetsys_mount(filewatch->assetsys, actual_path, virtual_path);
@@ -2285,10 +2291,12 @@ void filewatch_notify(filewatch_t* filewatch)
 
 int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, filewatch_callback_t* cb, void* udata)
 {
+	filewatch_watched_dir_internal_t* watch;
+	int success;
 	TINYFILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	TINYFILEWATCH_CHECK_BUFFER_GROW(filewatch, watch_count, watch_capacity, watches, filewatch_watched_dir_internal_t);
-	filewatch_watched_dir_internal_t* watch = filewatch->watches + filewatch->watch_count++;
+	watch = filewatch->watches + filewatch->watch_count++;
 	watch->cb = cb;
 	watch->udata = udata;
 	hashtable_init(&watch->entries, sizeof(filewatch_entry_internal_t), 32, filewatch->mem_ctx);
@@ -2301,7 +2309,7 @@ int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, f
 	watch->dir_path = path;
 
 	tfDIR dir;
-	int success = tfDirOpen(&dir, actual_path);
+	success = tfDirOpen(&dir, actual_path);
 	TINYFILEWATCH_CHECK(success, "`virtual_path` is not a valid directory.");
 
 	while (dir.has_next)

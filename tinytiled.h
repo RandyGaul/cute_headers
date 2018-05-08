@@ -1291,10 +1291,10 @@ char tinytiled_parse_char(char c)
 
 static int tinytiled_read_string_internal(tinytiled_map_internal_t* m)
 {
-	tinytiled_expect(m, '"');
-
 	int count = 0;
 	int done = 0;
+	tinytiled_expect(m, '"');
+
 	while (!done)
 	{
 		TINYTILED_CHECK(count < TINYTILED_INTERNAL_BUFFER_MAX, "String exceeded max length of TINYTILED_INTERNAL_BUFFER_MAX.");
@@ -1366,7 +1366,8 @@ static int tinytiled_read_hex_int_internal(tinytiled_map_internal_t* m, int* out
 	}
 
 	char* end;
-	int val = strtol(m->in, &end, 16);
+	int val;
+	val = strtol(m->in, &end, 16);
 	TINYTILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
@@ -1466,6 +1467,7 @@ tinytiled_err:
 
 int tinytiled_intern_string_internal(tinytiled_map_internal_t* m, tinytiled_string_t* out)
 {
+	STRPOOL_EMBEDDED_U64 id;
 	tinytiled_read_string(m);
 
 	// Store string id inside the memory of the pointer. This is important since
@@ -1475,7 +1477,7 @@ int tinytiled_intern_string_internal(tinytiled_map_internal_t* m, tinytiled_stri
 	// Later there will be a second pass to patch all these string
 	// pointers by doing: *out = (const char*)strpool_embedded_cstr(&m->strpool, id);
 
-	STRPOOL_EMBEDDED_U64 id = strpool_embedded_inject(&m->strpool, m->scratch, m->scratch_len);
+	id = strpool_embedded_inject(&m->strpool, m->scratch, m->scratch_len);
 	// if (sizeof(const char*) < sizeof(STRPOOL_EMBEDDED_U64)) *(int*)0 = 0; // sanity check
 	out->hash_id = id;
 
@@ -1492,11 +1494,12 @@ tinytiled_err:
 
 int tinytiled_read_vertex_array_internal(tinytiled_map_internal_t* m, int* out_count, float** out_verts)
 {
-	tinytiled_expect(m, '[');
-
 	int vert_count = 0;
 	int capacity = 32;
-	float* verts = (float*)TINYTILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
+	float *verts;
+	tinytiled_expect(m, '[');
+
+	verts = (float*)TINYTILED_MALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
 
 	while (tinytiled_peak(m) != ']')
 	{
@@ -1550,7 +1553,8 @@ int tinytiled_read_properties_internal(tinytiled_map_internal_t* m, tinytiled_pr
 {
 	int count = 0;
 	int capacity = 32;
-	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_ALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
+	const char* propertytypes = "propertytypes";
+	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_MALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
 
 	tinytiled_expect(m, '{');
 
@@ -1654,10 +1658,10 @@ int tinytiled_read_properties_internal(tinytiled_map_internal_t* m, tinytiled_pr
 		tinytiled_try(m, ',');
 	}
 
+
 	tinytiled_expect(m, '}');
 	tinytiled_expect(m, ',');
 	tinytiled_read_string(m); // should be "properytypes"
-	const char* propertytypes = "propertytypes";
 	for (int i = 0; i < m->scratch_len; ++i) TINYTILED_CHECK(m->scratch[i] == propertytypes[i], "Expected \"propertytypes\" string here.");
 	tinytiled_expect(m, ':');
 	tinytiled_expect(m, '{');
@@ -2075,9 +2079,10 @@ tinytiled_err:
 
 static int tinytiled_dispatch_map_internal(tinytiled_map_internal_t* m)
 {
+	TINYTILED_U64 h;
 	tinytiled_read_string(m);
 	tinytiled_expect(m, ':');
-	TINYTILED_U64 h = tinytiled_FNV1a(m->scratch, m->scratch_len + 1);
+	h = tinytiled_FNV1a(m->scratch, m->scratch_len + 1);
 
  	switch (h)
 	{
