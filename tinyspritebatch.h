@@ -378,6 +378,7 @@ struct hashtable_t
 
 #endif /* hashtable_t_h */
 
+#define HASHTABLE_IMPLEMENTATION
 
 #ifdef HASHTABLE_IMPLEMENTATION
 #ifndef HASHTABLE_IMPLEMENTATION_ONCE

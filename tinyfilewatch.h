@@ -2168,9 +2168,9 @@ int filewatch_update(filewatch_t* filewatch)
 		int entry_count = hashtable_count(&watch->entries);
 		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
 
-		for (int i = 0; i < entry_count; ++i)
+		for (int j = 0; j < entry_count; ++j)
 		{
-			filewatch_entry_internal_t* entry = entries + i;
+			filewatch_entry_internal_t* entry = entries + j;
 
 			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
 			if (was_removed)
@@ -2192,7 +2192,7 @@ int filewatch_update(filewatch_t* filewatch)
 				// remove entry from table
 				hashtable_remove(&watch->entries, entry->name_id);
 				--entry_count;
-				--i;
+				--j;
 			}
 		}
 

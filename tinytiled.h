@@ -1499,7 +1499,7 @@ int tinytiled_read_vertex_array_internal(tinytiled_map_internal_t* m, int* out_c
 	float *verts;
 	tinytiled_expect(m, '[');
 
-	verts = (float*)TINYTILED_MALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
+	verts = (float*)TINYTILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
 
 	while (tinytiled_peak(m) != ']')
 	{
@@ -1554,7 +1554,7 @@ int tinytiled_read_properties_internal(tinytiled_map_internal_t* m, tinytiled_pr
 	int count = 0;
 	int capacity = 32;
 	const char* propertytypes = "propertytypes";
-	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_MALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
+	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_ALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
 
 	tinytiled_expect(m, '{');
 
