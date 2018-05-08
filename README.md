@@ -20,9 +20,9 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++
 **[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
 **[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++
-**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 1.0 | C/C++
-**[tinytiled](tinytiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.0 | C/C++
-**[tinyfilewatch](tinyfilewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.0 | C/C++
+**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 1.01 | C/C++
+**[tinytiled](tinytiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.02 | C/C++
+**[tinyfilewatch](tinyfilewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 
 &ast; Not yet hit first release
 
