@@ -130,6 +130,7 @@
 	Revision history:
 		0.01 (11/20/2017) experimental release
 		1.00 (04/14/2018) initial release
+		1.01 (05/07/2018) modification for easier file embedding
 */
 
 #ifndef SPRITEBATCH_H
@@ -299,12 +300,23 @@ struct spritebatch_sprite_t
 // See: http://www.mattiasgustavsson.com/ and https://github.com/mattiasgustavsson/libs/blob/master/hashtable.h
 // begin hashtable.h
 
-#ifndef HASHTABLE_U64
-	#define HASHTABLE_U64 SPRITEBATCH_U64
-#endif
+/*
+------------------------------------------------------------------------------
+          Licensing information can be found at the end of the file.
+------------------------------------------------------------------------------
 
-#ifndef HASHTABLE_U32
-	#define HASHTABLE_U32 unsigned int
+hashtable.h - v1.1 - Cache efficient hash table implementation for C/C++.
+
+Do this:
+    #define HASHTABLE_IMPLEMENTATION
+before you include this file in *one* C/C++ file to create the implementation.
+*/
+
+#ifndef hashtable_h
+#define hashtable_h
+
+#ifndef HASHTABLE_U64
+    #define HASHTABLE_U64 unsigned long long
 #endif
 
 typedef struct hashtable_t hashtable_t;
@@ -323,6 +335,22 @@ void* hashtable_items( hashtable_t const* table );
 HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
 
 void hashtable_swap( hashtable_t* table, int index_a, int index_b );
+
+
+#endif /* hashtable_h */
+
+/*
+----------------------
+    IMPLEMENTATION
+----------------------
+*/
+
+#ifndef hashtable_t_h
+#define hashtable_t_h
+
+#ifndef HASHTABLE_U32
+    #define HASHTABLE_U32 unsigned int
+#endif
 
 struct hashtable_internal_slot_t
     {
@@ -348,6 +376,13 @@ struct hashtable_t
     void* swap_temp;
     };
 
+#endif /* hashtable_t_h */
+
+
+#ifdef HASHTABLE_IMPLEMENTATION
+#ifndef HASHTABLE_IMPLEMENTATION_ONCE
+#define HASHTABLE_IMPLEMENTATION_ONCE
+
 #ifndef HASHTABLE_SIZE_T
     #include <stddef.h>
     #define HASHTABLE_SIZE_T size_t
@@ -356,6 +391,22 @@ struct hashtable_t
 #ifndef HASHTABLE_ASSERT
     #include <assert.h>
     #define HASHTABLE_ASSERT( x ) assert( x )
+#endif
+
+#ifndef HASHTABLE_MEMSET
+    #include <string.h>
+    #define HASHTABLE_MEMSET( ptr, val, cnt ) ( memset( ptr, val, cnt ) )
+#endif 
+
+#ifndef HASHTABLE_MEMCPY
+    #include <string.h>
+    #define HASHTABLE_MEMCPY( dst, src, cnt ) ( memcpy( dst, src, cnt ) )
+#endif 
+
+#ifndef HASHTABLE_MALLOC
+    #include <stdlib.h>
+    #define HASHTABLE_MALLOC( ctx, size ) ( malloc( size ) )
+    #define HASHTABLE_FREE( ctx, ptr ) ( free( ptr ) )
 #endif
 
 
@@ -385,7 +436,7 @@ void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, vo
     HASHTABLE_ASSERT( table->slots );
     HASHTABLE_MEMSET( table->slots, 0, (HASHTABLE_SIZE_T) slots_size );
     table->item_capacity = (int) hashtable_internal_pow2ceil( (HASHTABLE_U32) initial_capacity );
-    table->items_key = (HASHTABLE_U64*) HASHTABLE_MALLOC( table->memctx, 
+    table->items_key = (HASHTABLE_U64*) HASHTABLE_MALLOC( table->memctx,
         table->item_capacity * ( sizeof( *table->items_key ) + sizeof( *table->items_slot ) + table->item_size ) + table->item_size );
     HASHTABLE_ASSERT( table->items_key );
     table->items_slot = (int*)( table->items_key + table->item_capacity );
@@ -540,13 +591,14 @@ void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item 
     table->slots[ slot ].item_index = table->count;
     ++table->slots[ base_slot ].base_count;
 
+
     void* dest_item = (void*)( ( (uintptr_t) table->items_data ) + table->count * table->item_size );
     memcpy( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
     table->items_key[ table->count ] = key;
     table->items_slot[ table->count ] = slot;
     ++table->count;
     return dest_item;
-    }
+    } 
 
 
 void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
@@ -573,6 +625,13 @@ void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
         table->slots[ table->items_slot[ last_index ] ].item_index = index;
         }
     --table->count;
+    } 
+
+
+void hashtable_clear( hashtable_t* table )
+    {
+    table->count = 0;
+    HASHTABLE_MEMSET( table->slots, 0, table->slot_capacity * sizeof( *table->slots ) );
     }
 
 
@@ -584,13 +643,6 @@ void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
     int const index = table->slots[ slot ].item_index;
     void* const item = (void*)( ( (uintptr_t) table->items_data ) + index * table->item_size );
     return item;
-    }
-
-
-void hashtable_clear( hashtable_t* table )
-    {
-    table->count = 0;
-    HASHTABLE_MEMSET( table->slots, 0, table->slot_capacity * sizeof( *table->slots ) );
     }
 
 
@@ -635,6 +687,77 @@ void hashtable_swap( hashtable_t* table, int index_a, int index_b )
     table->slots[ slot_a ].item_index = index_b;
     table->slots[ slot_b ].item_index = index_a;
     }
+
+
+#endif /* HASHTABLE_IMPLEMENTATION */
+#endif // HASHTABLE_IMPLEMENTATION_ONCE
+
+/*
+
+contributors:
+    Randy Gaul (hashtable_clear, hashtable_swap )
+
+revision history:
+    1.1     added hashtable_clear, hashtable_swap
+    1.0     first released version  
+
+*/
+
+/*
+------------------------------------------------------------------------------
+
+This software is available under 2 licenses - you may choose the one you like.
+
+------------------------------------------------------------------------------
+
+ALTERNATIVE A - MIT License
+
+Copyright (c) 2015 Mattias Gustavsson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of 
+this software and associated documentation files (the "Software"), to deal in 
+the Software without restriction, including without limitation the rights to 
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
+of the Software, and to permit persons to whom the Software is furnished to do 
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all 
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+SOFTWARE.
+
+------------------------------------------------------------------------------
+
+ALTERNATIVE B - Public Domain (www.unlicense.org)
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this 
+software, either in source code form or as a compiled binary, for any purpose, 
+commercial or non-commercial, and by any means.
+
+In jurisdictions that recognize copyright laws, the author or authors of this 
+software dedicate any and all copyright interest in the software to the public 
+domain. We make this dedication for the benefit of the public at large and to 
+the detriment of our heirs and successors. We intend this dedication to be an 
+overt act of relinquishment in perpetuity of all present and future rights to 
+this software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+------------------------------------------------------------------------------
+*/
 
 // end of hashtable.h
 

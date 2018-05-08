@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinyfilewatch.h - v1.0
+	tinyfilewatch.h - v1.1
 
 	To create implementation (the function definitions)
 		#define TINYFILEWATCH_IMPLEMENTATION
@@ -95,6 +95,12 @@
 
 	Revision history:
 		1.00 (04/17/2018) initial release
+		1.01 (05/07/2017) bugfixes by dseyedm
+*/
+
+/*
+	Contributors:
+		dseyedm           1.01 - various bugfixes
 */
 
 #ifndef TINYFILEWATCH_H
@@ -232,8 +238,15 @@ void filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* v
 	#define TINYFILEWATCH_ASSERT(condition) assert(condition)
 #endif
 
-#define STRPOOL_EMBEDDED_MALLOC(ctx, size) TINYFILEWATCH_MALLOC(size, ctx)
-#define STRPOOL_EMBEDDED_FREE(ctx, ptr) TINYFILEWATCH_FREE(ptr, ctx)
+
+#ifndef STRPOOL_EMBEDDED_MALLOC
+	#define STRPOOL_EMBEDDED_MALLOC(ctx, size) TINYFILEWATCH_MALLOC(size, ctx)
+#endif
+
+#ifndef STRPOOL_EMBEDDED_FREE
+	#define STRPOOL_EMBEDDED_FREE(ctx, ptr) TINYFILEWATCH_FREE(ptr, ctx)
+#endif
+
 #define STRPOOL_EMBEDDED_IMPLEMENTATION
 
 // being embed modified strpool.h by Mattias Gustavsson
@@ -1189,7 +1202,7 @@ static int tfSafeStrCopy_internal( char* dst, const char* src, int n, int max, c
 		}
 
 		c = *src++;
-		dst[ n ] = c;
+		dst[ n ] = (char)c;
 		++n;
 	} while ( c );
 
@@ -1277,6 +1290,7 @@ int tfMatchExt( tfFILE* file, const char* ext )
 			dir->has_next = 0;
 			DWORD err = GetLastError( );
 			TF_ASSERT( err == ERROR_SUCCESS || err == ERROR_NO_MORE_FILES );
+			(void)err;
 		}
 	}
 
@@ -1488,9 +1502,15 @@ int tfMatchExt( tfFILE* file, const char* ext )
 */
 
 // end embed tinyfiles.h
-	
-#define HASHTABLE_MALLOC(ctx, size) TINYFILEWATCH_MALLOC(size, ctx)
-#define HASHTABLE_FREE(ctx, ptr) TINYFILEWATCH_FREE(ptr, ctx)
+
+#ifndef HASHTABLE_MALLOC
+	#define HASHTABLE_MALLOC(ctx, size) TINYFILEWATCH_MALLOC(size, ctx)
+#endif
+
+#ifndef HASHTABLE_FREE
+	#define HASHTABLE_FREE(ctx, ptr) TINYFILEWATCH_FREE(ptr, ctx)
+#endif
+
 #define HASHTABLE_IMPLEMENTATION
 
 // begin embed hashtable.h by Mattias Gustavsson
@@ -2071,7 +2091,6 @@ void filewatch_dismount(filewatch_t* filewatch)
 static int filewatch_strncpy_internal(char* dst, const char* src, int n, int max)
 {
 	int c;
-	const char* original = src;
 
 	do
 	{
@@ -2081,7 +2100,7 @@ static int filewatch_strncpy_internal(char* dst, const char* src, int n, int max
 			break;
 		}
 		c = *src++;
-		dst[n] = c;
+		dst[n] = (char)c;
 		++n;
 	} while (c);
 
@@ -2120,7 +2139,7 @@ int filewatch_add_notification_internal(filewatch_t* filewatch, filewatch_watche
 	return 0;
 }
 
-void filewatch_add_entry_internal(filewatch_t* filewatch, filewatch_watched_dir_internal_t* watch, filewatch_path_t path, STRPOOL_EMBEDDED_U64 name_id, const char* actual_buffer, int is_dir)
+void filewatch_add_entry_internal(filewatch_watched_dir_internal_t* watch, filewatch_path_t path, STRPOOL_EMBEDDED_U64 name_id, const char* actual_buffer, int is_dir)
 {
 	filewatch_entry_internal_t entry;
 	entry.path = path;
@@ -2184,7 +2203,7 @@ int filewatch_update(filewatch_t* filewatch)
 				// discovered new file
 				else
 				{
-					filewatch_add_entry_internal(filewatch, watch, path, name_id, file.path, 0);
+					filewatch_add_entry_internal(watch, path, name_id, file.path, 0);
 					filewatch_add_notification_internal(filewatch, watch, path, FILEWATCH_FILE_ADDED);
 					remount_needed = 1;
 				}
@@ -2195,7 +2214,7 @@ int filewatch_update(filewatch_t* filewatch)
 				// found new directory
 				if (!entry)
 				{
-					filewatch_add_entry_internal(filewatch, watch, path, name_id, file.path, 1);
+					filewatch_add_entry_internal(watch, path, name_id, file.path, 1);
 					filewatch_add_notification_internal(filewatch, watch, path, FILEWATCH_DIR_ADDED);
 					remount_needed = 1;
 				}
@@ -2210,9 +2229,9 @@ int filewatch_update(filewatch_t* filewatch)
 		int entry_count = hashtable_count(&watch->entries);
 		filewatch_entry_internal_t* entries = (filewatch_entry_internal_t*)hashtable_items(&watch->entries);
 
-		for (int i = 0; i < entry_count; ++i)
+		for (int j = 0; j < entry_count; ++j)
 		{
-			filewatch_entry_internal_t* entry = entries + i;
+			filewatch_entry_internal_t* entry = entries + j;
 
 			int was_removed = !tfFileExists(TINYFILEWATCH_CSTR(filewatch, entry->path.actual_id));
 			if (was_removed)
@@ -2220,7 +2239,7 @@ int filewatch_update(filewatch_t* filewatch)
 				// remove entry from table
 				hashtable_remove(&watch->entries, entry->name_id);
 				--entry_count;
-				--i;
+				--j;
 
 				// directory removed
 				if (entry->is_dir)
@@ -2290,16 +2309,16 @@ int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, f
 		tfFILE file;
 		tfReadFile(&dir, &file);
 		STRPOOL_EMBEDDED_U64 name_id = TINYFILEWATCH_INJECT(filewatch, file.name, TINYFILEWATCH_STRLEN(file.name));
-		filewatch_path_t path = filewatch_build_path_internal(filewatch, watch, file.path, file.name);
+		filewatch_path_t file_path = filewatch_build_path_internal(filewatch, watch, file.path, file.name);
 
 		if (!file.is_dir && file.is_reg)
 		{
-			filewatch_add_entry_internal(filewatch, watch, path, name_id, file.path, 0);
+			filewatch_add_entry_internal(watch, file_path, name_id, file.path, 0);
 		}
 
 		else if (file.is_dir && file.name[0] != '.')
 		{
-			filewatch_add_entry_internal(filewatch, watch, path, name_id, file.path, 1);
+			filewatch_add_entry_internal(watch, file_path, name_id, file.path, 1);
 		}
 
 		tfDirNext(&dir);

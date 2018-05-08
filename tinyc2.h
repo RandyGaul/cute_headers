@@ -477,40 +477,40 @@ void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 	case C2_CIRCLE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  return c2CircletoCircleManifold(*(c2Circle*)A, *(c2Circle*)B, m);
-		case C2_AABB:    return c2CircletoAABBManifold(*(c2Circle*)A, *(c2AABB*)B, m);
-		case C2_CAPSULE: return c2CircletoCapsuleManifold(*(c2Circle*)A, *(c2Capsule*)B, m);
-		case C2_POLY:    return c2CircletoPolyManifold(*(c2Circle*)A, (const c2Poly*)B, bx, m);
+		case C2_CIRCLE:  c2CircletoCircleManifold(*(c2Circle*)A, *(c2Circle*)B, m); break;
+		case C2_AABB:    c2CircletoAABBManifold(*(c2Circle*)A, *(c2AABB*)B, m); break;
+		case C2_CAPSULE: c2CircletoCapsuleManifold(*(c2Circle*)A, *(c2Capsule*)B, m); break;
+		case C2_POLY:    c2CircletoPolyManifold(*(c2Circle*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
 	case C2_AABB:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->n = c2Neg(m->n); return;
-		case C2_AABB:    return c2AABBtoAABBManifold(*(c2AABB*)A, *(c2AABB*)B, m);
-		case C2_CAPSULE: return c2AABBtoCapsuleManifold(*(c2AABB*)A, *(c2Capsule*)B, m);
-		case C2_POLY:    return c2AABBtoPolyManifold(*(c2AABB*)A, (const c2Poly*)B, bx, m);
+		case C2_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->n = c2Neg(m->n); break;
+		case C2_AABB:    c2AABBtoAABBManifold(*(c2AABB*)A, *(c2AABB*)B, m); break;
+		case C2_CAPSULE: c2AABBtoCapsuleManifold(*(c2AABB*)A, *(c2Capsule*)B, m); break;
+		case C2_POLY:    c2AABBtoPolyManifold(*(c2AABB*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
 	case C2_CAPSULE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); return;
-		case C2_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); return;
-		case C2_CAPSULE: return c2CapsuletoCapsuleManifold(*(c2Capsule*)A, *(c2Capsule*)B, m);
-		case C2_POLY:    return c2CapsuletoPolyManifold(*(c2Capsule*)A, (const c2Poly*)B, bx, m);
+		case C2_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
+		case C2_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
+		case C2_CAPSULE: c2CapsuletoCapsuleManifold(*(c2Capsule*)A, *(c2Capsule*)B, m); break;
+		case C2_POLY:    c2CapsuletoPolyManifold(*(c2Capsule*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
 	case C2_POLY:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
-		case C2_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
-		case C2_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); return;
-		case C2_POLY:    return c2PolytoPolyManifold((const c2Poly*)A, ax, (const c2Poly*)B, bx, m);
+		case C2_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_POLY:    c2PolytoPolyManifold((const c2Poly*)A, ax, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 	}
@@ -1123,19 +1123,19 @@ int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out)
 		// hit bottom half-circle
 		if (y < 0)
 		{
-			c2Circle c;
-			c.p = B.a;
-			c.r = B.r;
-			return c2RaytoCircle(A, c, out);
+			c2Circle C;
+			C.p = B.a;
+			C.r = B.r;
+			return c2RaytoCircle(A, C, out);
 		}
 
 		// hit top-half circle
 		else if (y > yBb.y)
 		{
-			c2Circle c;
-			c.p = B.b;
-			c.r = B.r;
-			return c2RaytoCircle(A, c, out);
+			c2Circle C;
+			C.p = B.b;
+			C.r = B.r;
+			return c2RaytoCircle(A, C, out);
 		}
 
 		// hit the middle of capsule
@@ -1408,7 +1408,7 @@ void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Man
 		for (int i = 0; i < B->count; ++i)
 		{
 			c2h h = c2PlaneAt(B, i);
-			float d = c2Dist(h, local);
+			d = c2Dist(h, local);
 			if (d > A.r) return;
 			if (d > sep)
 			{
@@ -1449,6 +1449,11 @@ static int c2Clip(c2v* seg, c2h h)
 	seg[0] = out[0]; seg[1] = out[1];
 	return sp;
 }
+
+#ifdef _MSC_VER
+	#pragma warning(push)
+	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer
+#endif
 
 // clip a segment to the "side planes" of another segment.
 // side planes are planes orthogonal to a segment and attached to the
@@ -1499,7 +1504,7 @@ static void c2AntinormalFace(c2Capsule cap, const c2Poly* p, c2x x, int* face_ou
 {
 	float sep = -FLT_MAX;
 	int index = ~0;
-	c2v n;
+	c2v n = c2V(0, 0);
 	for (int i = 0; i < p->count; ++i)
 	{
 		c2h h = c2Mulxh(x, c2PlaneAt(p, i));
@@ -1575,6 +1580,10 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		}
 	}
 }
+
+#ifdef _MSC_VER
+	#pragma warning(pop)
+#endif
 
 static float c2CheckFaces(const c2Poly* A, c2x ax, const c2Poly* B, c2x bx, int* face_index)
 {

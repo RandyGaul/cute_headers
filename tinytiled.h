@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinytiled.h - v1.00
+	tinytiled.h - v1.02
 
 	To create implementation (the function definitions)
 		#define TINYTILED_IMPLEMENTATION
@@ -17,12 +17,22 @@
 		is loaded up in entirety and used to fill in a set of structs. The entire
 		struct collection is then handed to the user.
 
-		This header is up to date with Tiled's documentation Revision f205c0b5 and
-		verified to work with Tiled stable version 1.1.3.
+		This header is up to date with Tiled's documentation Revision 9bcd6a6f and
+		verified to work with Tiled stable version 1.1.5.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
 		https://www.reddit.com/r/gamedev/comments/87680n/tinytiled_tiled_json_map_parserloader_in_c/
+
+	Revision history:
+		1.00 (03/24/2018) initial release
+		1.01 (05/04/2018) tile descriptors in tilesets for collision geometry
+		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
+*/
+
+/*
+	Contributors:
+		ZenToad           1.02 - Bug reports and goto statement errors for g++
 */
 
 /*
@@ -114,6 +124,7 @@ void tinytiled_free_map(tinytiled_map_t* map);
 
 typedef struct tinytiled_layer_t tinytiled_layer_t;
 typedef struct tinytiled_object_t tinytiled_object_t;
+typedef struct tinytiled_tile_descriptor_t tinytiled_tile_descriptor_t;
 typedef struct tinytiled_tileset_t tinytiled_tileset_t;
 typedef struct tinytiled_property_t tinytiled_property_t;
 typedef union tinytiled_string_t tinytiled_string_t;
@@ -169,12 +180,12 @@ struct tinytiled_property_t
 
 struct tinytiled_object_t
 {
-	int ellipse;                      // 0 or 1. Used to mark an object as an ellipse.
-	int gid;                          // GID, only if object comes from a Tilemap.
-	int height;                       // Height in pixels. Ignored if using a gid.
-	int id;                           // Incremental id - unique across all objects.
-	tinytiled_string_t name;          // String assigned to name field in editor.
-	int point;                        // 0 or 1. Used to mark an object as a point.
+	int ellipse;                        // 0 or 1. Used to mark an object as an ellipse.
+	int gid;                            // GID, only if object comes from a Tilemap.
+	int height;                         // Height in pixels. Ignored if using a gid.
+	int id;                             // Incremental id - unique across all objects.
+	tinytiled_string_t name;            // String assigned to name field in editor.
+	int point;                          // 0 or 1. Used to mark an object as a point.
 
 	// Example to index each vert of a polygon/polyline:
 	/*
@@ -186,19 +197,20 @@ struct tinytiled_object_t
 		}
 	*/
 	int vert_count;
-	float* vertices;                  // Represents both type `polyline` and `polygon`.
-	int vert_type;                    // 1 for `polygon` and 0 for `polyline`.
+	float* vertices;                    // Represents both type `polyline` and `polygon`.
+	int vert_type;                      // 1 for `polygon` and 0 for `polyline`.
 
-	int property_count;               // Number of elements in the properties array.
-	tinytiled_property_t* properties; // Array of properties.
-	float rotation;                   // Angle in degrees clockwise.
-	/* text */                        // Not currently supported.
-	tinytiled_string_t type;          // String assigned to type field in editor.
-	int visible;                      // 0 or 1. Whether object is shown in editor.
-	int width;                        // Width in pixels. Ignored if using a gid.
-	float x;                          // x coordinate in pixels.
-	float y;                          // y coordinate in pixels.
-	tinytiled_object_t* next;         // Pointer to next object. NULL if final object.
+	int property_count;                 // Number of elements in the `properties` array.
+	tinytiled_property_t* properties;   // Array of properties.
+	float rotation;                     // Angle in degrees clockwise.
+	/* template */                      // Not currently supported.
+	/* text */                          // Not currently supported.
+	tinytiled_string_t type;            // String assigned to type field in editor.
+	int visible;                        // 0 or 1. Whether object is shown in editor.
+	int width;                          // Width in pixels. Ignored if using a gid.
+	float x;                            // x coordinate in pixels.
+	float y;                            // y coordinate in pixels.
+	tinytiled_object_t* next;           // Pointer to next object. NULL if final object.
 };
 
 /*!
@@ -243,69 +255,93 @@ TINYTILED_INLINE void tinytiled_get_flags(int tile_data_gid, int* flip_horizonta
 
 struct tinytiled_layer_t
 {
-	/* compression; */                // Not currently supported.
-	int data_count;                   // Number of integers in `data`.
-	int* data;                        // Array of GIDs. `tilelayer` only. Only support CSV style exports.
-	/* encoding; */                   // Not currently supported.
-	tinytiled_string_t draworder;     // `topdown` (default) or `index`. `objectgroup` only.
-	int height;                       // Row count. Same as map height for fixed-size maps.
-	tinytiled_layer_t* layers;        // Linked list of layers. Only appears if `type` is `group`.
-	tinytiled_string_t name;          // Name assigned to this layer.
-	tinytiled_object_t* objects;      // Linked list of objects. `objectgroup` only.
-	float opacity;                    // Value between 0 and 1.
-	int property_count;               // Number of elements in the properties array.
-	tinytiled_property_t* properties; // Array of properties.
-	tinytiled_string_t type;          // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
-	int visible;                      // 0 or 1. Whether layer is shown or hidden in editor.
-	int width;                        // Column count. Same as map width for fixed-size maps.
-	int x;                            // Horizontal layer offset in tiles. Always 0.
-	int y;                            // Vertical layer offset in tiles. Always 0.
-	tinytiled_layer_t* next;          // Pointer to the next layer. NULL if final layer.
+	/* chunks */                        // Not currently supported.
+	/* compression; */                  // Not currently supported.
+	int data_count;                     // Number of integers in `data`.
+	int* data;                          // Array of GIDs. `tilelayer` only. Only support CSV style exports.
+	tinytiled_string_t draworder;       // `topdown` (default) or `index`. `objectgroup` only.
+	/* encoding; */                     // Not currently supported.
+	int height;                         // Row count. Same as map height for fixed-size maps.
+	tinytiled_layer_t* layers;          // Linked list of layers. Only appears if `type` is `group`.
+	tinytiled_string_t name;            // Name assigned to this layer.
+	tinytiled_object_t* objects;        // Linked list of objects. `objectgroup` only.
+	/* offsetx */                       // Not currently supported.
+	/* offsety */                       // Not currently supported.
+	float opacity;                      // Value between 0 and 1.
+	int property_count;                 // Number of elements in the `properties` array.
+	tinytiled_property_t* properties;   // Array of properties.
+	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	tinytiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
+	int visible;                        // 0 or 1. Whether layer is shown or hidden in editor.
+	int width;                          // Column count. Same as map width for fixed-size maps.
+	int x;                              // Horizontal layer offset in tiles. Always 0.
+	int y;                              // Vertical layer offset in tiles. Always 0.
+	tinytiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
+};
+
+struct tinytiled_tile_descriptor_t
+{
+	int tile_index;                     // ID of the tile local to the associated tileset.
+	/* animation */                     // Not currently supported.
+	/* image */                         // Not currently supported.
+	/* imageheight */                   // Not currently supported.
+	/* imagewidth */                    // Not currently supported.
+	tinytiled_layer_t* objectgroup;     // Linked list of layers of type `objectgroup` only. Useful for holding collision info.
+	int property_count;                 // Number of elements in the `properties` array.
+	tinytiled_property_t* properties;   // Array of properties.
+	/* terrain */                       // Not currently supported.
+	float probability;                  // The probability used when painting with the terrain brush in `Random Mode`.
+	tinytiled_tile_descriptor_t* next;  // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
 struct tinytiled_tileset_t
 {
-	int columns;                      // The number of tile columns in the tileset.
-	int firstgid;                     // GID corresponding to the first tile in the set.
-	/* grid */                        // Not currently supported.
-	tinytiled_string_t image;         // Image used for tiles in this set (relative path from map file to source image).
-	int imagewidth;                   // Width of source image in pixels.
-	int imageheight;                  // Height of source image in pixels.
-	int margin;                       // Buffer between image edge and first tile (pixels).
-	tinytiled_string_t name;          // Name given to this tileset.
-	int property_count;               // Number of elements in the properties array.
-	tinytiled_property_t* properties; // Array of properties.
-	int spacing;                      // Spacing between adjacent tiles in image (pixels).
-	/* terrains */                    // Not currently supported.
-	int tilecount;                    // The number of tiles in this tileset.
-	int tileheight;                   // Maximum height of tiles in this set.
-	/* tileoffset */                  // Not currently supported.
-	/* tileproperties */              // Not currently supported.
-	/* tiles */                       // Not currently supported.
-	int tilewidth;                    // Maximum width of tiles in this set.
-	tinytiled_string_t type;          // `tileset` (for tileset files, since 1.0).
-	tinytiled_string_t source;        // Relative path to tileset, when saved externally from the map file.
-	tinytiled_tileset_t* next;        // Pointer to next tileset. NULL if final tileset.
+	int columns;                        // The number of tile columns in the tileset.
+	int firstgid;                       // GID corresponding to the first tile in the set.
+	/* grid */                          // Not currently supported.
+	tinytiled_string_t image;           // Image used for tiles in this set (relative path from map file to source image).
+	int imagewidth;                     // Width of source image in pixels.
+	int imageheight;                    // Height of source image in pixels.
+	int margin;                         // Buffer between image edge and first tile (pixels).
+	tinytiled_string_t name;            // Name given to this tileset.
+	int property_count;                 // Number of elements in the `properties` array.
+	tinytiled_property_t* properties;   // Array of properties.
+	int spacing;                        // Spacing between adjacent tiles in image (pixels).
+	/* terrains */                      // Not currently supported.
+	int tilecount;                      // The number of tiles in this tileset.
+	int tileheight;                     // Maximum height of tiles in this set.
+	/* tileproperties */                // Not currently supported.
+	/* tilepropertytypes */             // Not currently supported.
+	/* tileoffset */                    // Not currently supported.
+	tinytiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
+	int tilewidth;                      // Maximum width of tiles in this set.
+	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	tinytiled_string_t type;            // `tileset` (for tileset files, since 1.0).
+	tinytiled_string_t source;          // Relative path to tileset, when saved externally from the map file.
+	tinytiled_tileset_t* next;          // Pointer to next tileset. NULL if final tileset.
 };
 
 struct tinytiled_map_t
 {
-	int backgroundcolor;              // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	int height;                       // Number of tile rows.
-	int infinite;                     // Whether the map has infinite dimensions.
-	tinytiled_layer_t* layers;        // Linked list of layers. Can be NULL.
-	int nextobjectid;                 // Auto-increments for each placed object.
-	tinytiled_string_t orientation;   // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
-	int property_count;               // Number of elements in the properties array.
-	tinytiled_property_t* properties; // Array of properties.
-	tinytiled_string_t renderorder;   // Rendering direction (orthogonal maps only).
-	tinytiled_string_t tiledversion;  // The Tiled version used to save the file.
-	int tileheight;                   // Map grid height.
-	tinytiled_tileset_t* tilesets;    // Linked list of tilesets.
-	int tilewidth;                    // Map grid width.
-	tinytiled_string_t type;          // `map` (since 1.0).
-	int version;                      // The JSON format version.
-	int width;                        // Number of tile columns.
+	int backgroundcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	int height;                         // Number of tile rows.
+	/* hexsidelength */                 // Not currently supported.
+	int infinite;                       // Whether the map has infinite dimensions.
+	tinytiled_layer_t* layers;          // Linked list of layers. Can be NULL.
+	int nextobjectid;                   // Auto-increments for each placed object.
+	tinytiled_string_t orientation;     // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
+	int property_count;                 // Number of elements in the `properties` array.
+	tinytiled_property_t* properties;   // Array of properties.
+	tinytiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
+	/* staggeraxis */                   // Not currently supported.
+	/* staggerindex */                  // Not currently supported.
+	tinytiled_string_t tiledversion;    // The Tiled version used to save the file.
+	int tileheight;                     // Map grid height.
+	tinytiled_tileset_t* tilesets;      // Linked list of tilesets.
+	int tilewidth;                      // Map grid width.
+	tinytiled_string_t type;            // `map` (since 1.0).
+	int version;                        // The JSON format version.
+	int width;                          // Number of tile columns.
 };
 
 #define TINYTILED_H
@@ -323,15 +359,22 @@ struct tinytiled_map_t
 	#define _CRT_NONSTDC_NO_DEPRECATE
 #endif
 
-#if !defined(TINYTILED_MALLOC)
+#if !defined(TINYTILED_ALLOC)
 	#include <stdlib.h>
-	#define TINYTILED_MALLOC(size, ctx) malloc(size)
+	#define TINYTILED_ALLOC(size, ctx) malloc(size)
 	#define TINYTILED_FREE(mem, ctx) free(mem)
 #endif
 
+
+#ifndef STRPOOL_EMBEDDED_MALLOC
+	#define STRPOOL_EMBEDDED_MALLOC(ctx, size) TINYTILED_ALLOC(size, ctx)
+#endif
+
+#ifndef STRPOOL_EMBEDDED_FREE
+	#define STRPOOL_EMBEDDED_FREE(ctx, ptr) TINYTILED_FREE(ptr, ctx)
+#endif
+
 #define STRPOOL_EMBEDDED_IMPLEMENTATION
-#define STRPOOL_EMBEDDED_MALLOC(ctx, size) TINYTILED_MALLOC(size, ctx)
-#define STRPOOL_EMBEDDED_FREE(ctx, ptr) TINYTILED_FREE(ptr, ctx)
 
 /*
 	begin embedding modified strpool.h 
@@ -1129,7 +1172,7 @@ void* tinytiled_alloc(tinytiled_map_internal_t* m, int size)
 {
 	if (m->bytes_left_on_page < size)
 	{
-		tinytiled_page_t* page = (tinytiled_page_t*)TINYTILED_MALLOC(sizeof(tinytiled_page_t) + m->page_size, m->mem_ctx);
+		tinytiled_page_t* page = (tinytiled_page_t*)TINYTILED_ALLOC(sizeof(tinytiled_page_t) + m->page_size, m->mem_ctx);
 		if (!page) return 0;
 		page->next = m->pages;
 		page->data = page + 1;
@@ -1168,7 +1211,7 @@ static char* tinytiled_read_file_to_memory_and_null_terminate(const char* path, 
 		fseek(fp, 0, SEEK_END);
 		sz = ftell(fp);
 		fseek(fp, 0, SEEK_SET);
-		data = (char*)TINYTILED_MALLOC(sz + 1, mem_ctx);
+		data = (char*)TINYTILED_ALLOC(sz + 1, mem_ctx);
 		fread(data, sz, 1, fp);
 		data[sz] = 0;
 		fclose(fp);
@@ -1187,7 +1230,7 @@ tinytiled_map_t* tinytiled_load_map_from_file(const char* path, void* mem_ctx)
 	return map;
 }
 
-#define TINYTILED_CHECK(X, Y) do { if (!(X)) { tinytiled_error_reason = Y; goto tinytiled_err; } } while (0)
+#define TINYTILED_CHECK(X, Y) do { if (!(X)) { tinytiled_error_reason = Y; __debugbreak(); goto tinytiled_err; } } while (0)
 #define TINYTILED_FAIL_IF(X) do { if (X) { goto tinytiled_err; } } while (0)
 
 static int tinytiled_isspace(char c)
@@ -1388,7 +1431,7 @@ int tinytiled_read_csv_integers_internal(tinytiled_map_internal_t* m, int* count
 {
 	int count = 0;
 	int capacity = 1024;
-	int* integers = (int*)TINYTILED_MALLOC(capacity * sizeof(int), m->mem_ctx);
+	int* integers = (int*)TINYTILED_ALLOC(capacity * sizeof(int), m->mem_ctx);
 
 	char c;
 	do
@@ -1398,7 +1441,7 @@ int tinytiled_read_csv_integers_internal(tinytiled_map_internal_t* m, int* count
 		if (count == capacity)
 		{
 			capacity *= 2;
-			int* new_integers = (int*)TINYTILED_MALLOC(capacity * sizeof(int), m->mem_ctx);
+			int* new_integers = (int*)TINYTILED_ALLOC(capacity * sizeof(int), m->mem_ctx);
 			TINYTILED_MEMCPY(new_integers, integers, sizeof(int) * count);
 			TINYTILED_FREE(integers, m->mem_ctx);
 			integers = new_integers;
@@ -1453,7 +1496,7 @@ int tinytiled_read_vertex_array_internal(tinytiled_map_internal_t* m, int* out_c
 
 	int vert_count = 0;
 	int capacity = 32;
-	float* verts = (float*)TINYTILED_MALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
+	float* verts = (float*)TINYTILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
 
 	while (tinytiled_peak(m) != ']')
 	{
@@ -1477,7 +1520,7 @@ int tinytiled_read_vertex_array_internal(tinytiled_map_internal_t* m, int* out_c
 		if (vert_count == capacity)
 		{
 			capacity *= 2;
-			float* new_verts = (float*)TINYTILED_MALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
+			float* new_verts = (float*)TINYTILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
 			TINYTILED_MEMCPY(new_verts, verts, sizeof(float) * 2 * vert_count);
 			TINYTILED_FREE(verts, m->mem_ctx);
 			verts = new_verts;
@@ -1507,7 +1550,7 @@ int tinytiled_read_properties_internal(tinytiled_map_internal_t* m, tinytiled_pr
 {
 	int count = 0;
 	int capacity = 32;
-	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_MALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
+	tinytiled_property_t* props = (tinytiled_property_t*)TINYTILED_ALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
 
 	tinytiled_expect(m, '{');
 
@@ -1601,7 +1644,7 @@ int tinytiled_read_properties_internal(tinytiled_map_internal_t* m, tinytiled_pr
 		if (count == capacity)
 		{
 			capacity *= 2;
-			tinytiled_property_t* new_props = (tinytiled_property_t*)TINYTILED_MALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
+			tinytiled_property_t* new_props = (tinytiled_property_t*)TINYTILED_ALLOC(capacity * sizeof(tinytiled_property_t), m->mem_ctx);
 			TINYTILED_MEMCPY(new_props, props, sizeof(tinytiled_property_t) * count);
 			TINYTILED_FREE(props, m->mem_ctx);
 			props = new_props;
@@ -1809,6 +1852,12 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 			tinytiled_read_properties(m, &layer->properties, &layer->property_count);
 			break;
 
+		case 8489814081865549564U: // transparentcolor
+			tinytiled_expect(m, '"');
+			tinytiled_read_hex_int(m, &layer->transparentcolor);
+			tinytiled_expect(m, '"');
+			break;
+
 		case 13509284784451838071U: // type
 			tinytiled_intern_string(m, &layer->type);
 			break;
@@ -1841,6 +1890,73 @@ tinytiled_layer_t* tinytiled_layers(tinytiled_map_internal_t* m)
 
 tinytiled_err:
 	return 0;
+}
+
+tinytiled_tile_descriptor_t* tinytiled_read_tile_descriptor(tinytiled_map_internal_t* m)
+{
+	tinytiled_tile_descriptor_t* tile_descriptor = (tinytiled_tile_descriptor_t*)tinytiled_alloc(m, sizeof(tinytiled_tile_descriptor_t));
+	TINYTILED_MEMSET(tile_descriptor, 0, sizeof(tinytiled_tile_descriptor_t));
+
+	tinytiled_expect(m, '"');
+	tinytiled_read_int(m, &tile_descriptor->tile_index);
+	tinytiled_expect(m, '"');
+	tinytiled_expect(m, ':');
+
+	tinytiled_expect(m, '{');
+	while (tinytiled_peak(m) != '}')
+	{
+		tinytiled_read_string(m);
+		tinytiled_expect(m, ':');
+		TINYTILED_U64 h = tinytiled_FNV1a(m->scratch, m->scratch_len + 1);
+
+		switch (h)
+		{
+		case 8368542207491637236U: // properties
+			tinytiled_read_properties(m, &tile_descriptor->properties, &tile_descriptor->property_count);
+			break;
+
+		case 6659907350341014391U: // objectgroup
+		{
+			tinytiled_layer_t* layer = tinytiled_layers(m);
+			TINYTILED_FAIL_IF(!layer);
+			layer->next = tile_descriptor->objectgroup;
+			tile_descriptor->objectgroup = layer;
+		}	break;
+
+		case 6875414612738028948: // probability
+			tinytiled_read_float(m, &tile_descriptor->probability);
+			break;
+
+		default:
+			TINYTILED_CHECK(0, "Unknown identifier found.");
+		}
+
+		tinytiled_try(m, ',');
+
+	}
+
+	tinytiled_expect(m, '}');
+	return tile_descriptor;
+
+tinytiled_err:
+	return 0;
+}
+
+static TINYTILED_INLINE int tinytiled_skip_curly_braces_internal(tinytiled_map_internal_t* m)
+{
+	tinytiled_expect(m, '{');
+	int count = 1;
+	while (count)
+	{
+		char c = tinytiled_next(m);
+		if (c == '}') --count;
+		else if (c == '{') ++count;
+	}
+
+	return 0;
+
+tinytiled_err:
+	return 1;
 }
 
 tinytiled_tileset_t* tinytiled_tileset(tinytiled_map_internal_t* m)
@@ -1901,17 +2017,47 @@ tinytiled_tileset_t* tinytiled_tileset(tinytiled_map_internal_t* m)
 			tinytiled_read_int(m, &tileset->tileheight);
 			break;
 
+		case 7277156227374254384U: // tileproperties
+			TINYTILED_WARNING("`tileproperties` is not currently supported. Attempting to skip.");
+			TINYTILED_FAIL_IF(tinytiled_skip_curly_braces_internal(m));
+			break;
+
+		case 15569462518706435895: // tilepropertytypes
+			TINYTILED_WARNING("`tilepropertytypes` is not currently supported. Attempting to skip.");
+			TINYTILED_FAIL_IF(tinytiled_skip_curly_braces_internal(m));
+			break;
+
 		case 6504415465426505561U: // tilewidth
 			tinytiled_read_int(m, &tileset->tilewidth);
+			break;
+
+		case 8489814081865549564U: // transparentcolor
+			tinytiled_expect(m, '"');
+			tinytiled_read_hex_int(m, &tileset->transparentcolor);
+			tinytiled_expect(m, '"');
 			break;
 
 		case 13509284784451838071U: // type
 			tinytiled_intern_string(m, &tileset->type);
 			break;
 
-		case 8053780534892277672: // source
+		case 8053780534892277672U: // source
 			tinytiled_intern_string(m, &tileset->source);
 			break;
+
+		case 104417158474046698U: // tiles
+		{
+			tinytiled_expect(m, '{');
+			while (tinytiled_peak(m) != '}')
+			{
+				tinytiled_tile_descriptor_t* tile_descriptor = tinytiled_read_tile_descriptor(m);
+				TINYTILED_FAIL_IF(!tile_descriptor);
+				tile_descriptor->next = tileset->tiles;
+				tileset->tiles = tile_descriptor;
+				tinytiled_try(m, ',');
+			}
+			tinytiled_expect(m, '}');
+		}	break;
 
 		default:
 			TINYTILED_CHECK(0, "Unknown identifier found.");
@@ -2090,6 +2236,12 @@ static void tinytiled_patch_interned_strings(tinytiled_map_internal_t* m)
 		tinytiled_string_deintern(m, &tileset->type);
 		tinytiled_string_deintern(m, &tileset->source);
 		tinytiled_deintern_properties(m, tileset->properties, tileset->property_count);
+		tinytiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
+		while (tile_descriptor)
+		{
+			tinytiled_deintern_properties(m, tile_descriptor->properties, tile_descriptor->property_count);
+			tile_descriptor = tile_descriptor->next;
+		}
 		tileset = tileset->next;
 	}
 
@@ -2112,16 +2264,28 @@ static void tinytiled_free_map_internal(tinytiled_map_internal_t* m)
 	TINYTILED_FREE(m, m->mem_ctx);
 }
 
+#define TINYTILED_REVERSE_LIST(T, root) \
+	do { \
+		T* n = 0; \
+		while (root) { \
+			T* next = root->next; \
+			root->next = n; \
+			n = root; \
+			root = next; \
+		} \
+		root = n; \
+	} while (0)
+
 tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
-	tinytiled_map_internal_t* m = (tinytiled_map_internal_t*)TINYTILED_MALLOC(sizeof(tinytiled_map_internal_t), mem_ctx);
+	tinytiled_map_internal_t* m = (tinytiled_map_internal_t*)TINYTILED_ALLOC(sizeof(tinytiled_map_internal_t), mem_ctx);
 	TINYTILED_MEMSET(m, 0, sizeof(tinytiled_map_internal_t));
 	m->in = (char*)memory;
 	m->end = m->in + size_in_bytes;
 	m->mem_ctx = mem_ctx;
 	m->page_size = 1024 * 10;
 	m->bytes_left_on_page = m->page_size;
-	m->pages = (tinytiled_page_t*)TINYTILED_MALLOC(sizeof(tinytiled_page_t) + m->page_size, mem_ctx);
+	m->pages = (tinytiled_page_t*)TINYTILED_ALLOC(sizeof(tinytiled_page_t) + m->page_size, mem_ctx);
 	m->pages->next = 0;
 	m->pages->data = m->pages + 1;
 	strpool_embedded_config_t config = strpool_embedded_default_config;
@@ -2129,16 +2293,30 @@ tinytiled_map_t* tinytiled_load_map_from_memory(const void* memory, int size_in_
 	strpool_embedded_init(&m->strpool, &config);
 
 	tinytiled_expect(m, '{');
-
 	while (tinytiled_peak(m) != '}')
 	{
 		tinytiled_dispatch_map(m);
 		tinytiled_try(m, ',');
 	}
-
 	tinytiled_expect(m, '}');
 
+	// finalize output by patching strings and reversing singly linked lists
 	tinytiled_patch_interned_strings(m);
+	TINYTILED_REVERSE_LIST(tinytiled_layer_t, m->map.layers);
+	TINYTILED_REVERSE_LIST(tinytiled_tileset_t, m->map.tilesets);
+	tinytiled_layer_t* layer = m->map.layers;
+	while (layer)
+	{
+		TINYTILED_REVERSE_LIST(tinytiled_object_t, layer->objects);
+		layer = layer->next;
+	}
+	tinytiled_tileset_t* tileset = m->map.tilesets;
+	while (tileset)
+	{
+		TINYTILED_REVERSE_LIST(tinytiled_tile_descriptor_t, tileset->tiles);
+		tileset = tileset->next;
+	}
+
 	return &m->map;
 
 tinytiled_err:
