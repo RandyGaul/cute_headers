@@ -1,0 +1,6 @@
+Controls:
+Press space to check out other fonts.
+
+Here is some sample text.
+Tässä on jotain paikkamerkkitekstiä.
+Här är några platshållare.
