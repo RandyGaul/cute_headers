@@ -997,7 +997,7 @@ tpImage tpLoadPNGMem( const void* png_data, int png_length )
 	if ( color_type == 3 )
 	{
 		TP_CHECK( plte, "color type of indexed requires a PLTE chunk" );
-		uint32_t trns_len = tpGetChunkByteLength( trns );
+		uint32_t trns_len = trns ? tpGetChunkByteLength( trns ) : 0;
 		tpDepalette( img.w, img.h, out, img.pix, plte, trns, trns_len );
 	}
 	else tpConvert( bpp, img.w, img.h, out, img.pix );
