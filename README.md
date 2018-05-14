@@ -24,6 +24,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[tinytiled](tinytiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.02 | C/C++
 **[tinyfilewatch](tinyfilewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 **[tinyani](tinyani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
+**[tinyfont](tinyfont.h)** | Load font atlases, and fill vertex buffers for rasterized fonts | 1.0 | C/C++
 
 &ast; Not yet hit first release
 
