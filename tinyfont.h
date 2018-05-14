@@ -27,6 +27,7 @@
 	BMFont - tinyfont_load_bmfont
 
 		Simply pass in a BMFont .fnt file to `tinyfont_load_bmfont`.
+		WARNING: Currently does *not* support more than one texture page.
 
 	Revision history:
 		1.0  (05/13/2018) initial release
