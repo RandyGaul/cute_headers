@@ -5,13 +5,13 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 | library | description | latest version| language(s) 
 |---------|-------------|---------------|-------------
 **[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.04 | C/C++
-**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.08 | C/C++
+**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.09 | C/C++
 **[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++
 **[tinytime](tinytime.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
 **[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
 **[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
 **[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
-**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.1 | C++
+**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.01 | C++
 **[tinypng](tinypng.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++
 **[tinygl](tinygl.h)** | OpenGL ES 3.0+ wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++
 **[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
