@@ -12,7 +12,10 @@
 	SUMMARY
 
 		Loads up hand-crafted fonts with either ASCII-128, codepage 1252, or BMFont
-		file formats. There are also some functions for getting text width/height
+		file formats. The BMFont format can handle rasterized system fonts! See
+		BMFont at angelcode: http://www.angelcode.com/products/bmfont/
+
+		There are also some functions for getting text width/height
 		in pixels, as well as a vertex buffer filling function. Kerning is supported
 		via the BMFont format. All functions dealing with text accept utf8 string
 		format.
