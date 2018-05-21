@@ -287,7 +287,7 @@ tsLoadedSound tsLoadWAV( const char* path );
 // Reads a WAV file from memory. Still allocates memory for the tsLoadedSound since
 // WAV format will interlace stereo, and we need separate data streams to do SIMD
 // properly.
-void tsReadMemWAV( const void* memory, tsLoadedSound* sound );
+void tsReadMemWAV( const void* memory, int size, tsLoadedSound* sound );
 
 // If stb_vorbis was included *before* tinysound go ahead and create
 // some functions for dealing with OGG files.
@@ -543,7 +543,7 @@ static void tsLastElement( __m128* a, int i, int j, int16_t* samples, int offset
 	}
 }
 
-void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
+void tsReadMemWAV( const void* memory, int size, tsLoadedSound* sound )
 {
 	#pragma pack( push, 1 )
 	typedef struct
@@ -562,13 +562,20 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 	#pragma pack( pop )
 
 	char* data = (char*)memory;
+	char* end = data + size;
 	TS_CHECK( data, "Unable to read input file (file doesn't exist, or could not allocate heap memory." );
 	TS_CHECK( tsFourCC( "RIFF", data ), "Incorrect file header; is this a WAV file?" );
 	TS_CHECK( tsFourCC( "WAVE", data + 8 ), "Incorrect file header; is this a WAV file?" );
 
 	data += 12;
 
-	TS_CHECK( tsFourCC( "fmt ", data ), "fmt chunk not found." );
+	while (1)
+	{
+		TS_CHECK(end > data, "Error searching for fmt chunk.");
+		if ( tsFourCC( "fmt ", data ) ) break;
+		data = tsNext( data );
+	}
+
 	Fmt fmt;
 	fmt = *(Fmt*)(data + 8);
 	TS_CHECK( fmt.wFormatTag == 1, "Only PCM WAV files are supported." );
@@ -578,10 +585,13 @@ void tsReadMemWAV( const void* memory, tsLoadedSound* sound )
 
 	sound->sample_rate = (int)fmt.nSamplesPerSec;
 
-	data = tsNext( data ); // skip fmt chunk
-	if ( tsFourCC( "fact", data ) ) data = tsNext( data ); // skip possible fact chunk
+	while (1)
+	{
+		TS_CHECK(end > data, "Error searching for data chunk.");
+		if ( tsFourCC( "data", data ) ) break;
+		data = tsNext( data );
+	}
 	
-	TS_CHECK( tsFourCC( "data", data ), "data chunk not found." );
 	int sample_size = *((uint32_t*)(data + 4));
 	int sample_count = sample_size / (fmt.nChannels * sizeof( uint16_t ));
 	sound->sample_count = sample_count;
@@ -653,8 +663,9 @@ ts_err:
 tsLoadedSound tsLoadWAV( const char* path )
 {
 	tsLoadedSound sound = { 0 };
-	char* wav = (char*)tsReadFileToMemory( path, 0 );
-	tsReadMemWAV( wav, &sound );
+	int size;
+	char* wav = (char*)tsReadFileToMemory( path, &size );
+	tsReadMemWAV( wav, size, &sound );
 	TS_FREE( wav );
 	return sound;
 }
@@ -692,8 +703,9 @@ tsLoadedSound tsLoadWAV( const char* path )
 	tsLoadedSound tsLoadWAVRW( SDL_RWops* context )
 	{
 		tsLoadedSound sound = { 0 };
-		char* wav = (char*)tsReadRWToMemory( context, 0 );
-		tsReadMemWAV( wav, &sound );
+		int size;
+		char* wav = (char*)tsReadRWToMemory( context, &size );
+		tsReadMemWAV( wav, size, &sound );
 		TS_FREE( wav );
 		return sound;
 	}

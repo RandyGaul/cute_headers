@@ -996,6 +996,20 @@ void DJLink_aabb_bug( )
 	}
 }
 
+void lundmark_GJK_div_by_0_bug()
+{
+	c2Circle A;
+	c2Capsule B;
+	A = { { 1147.21912f, 1464.05212f }, 2.0f };
+	B = { { 1133.07214f, 1443.59570f }, { 1127.39636f, 1440.69470f }, 6.0f };
+
+	c2v a, b;
+	float d = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 1);
+
+	int x;
+	x = 10;
+}
+
 int main( )
 {
 	// glfw and glad setup
@@ -1090,8 +1104,8 @@ int main( )
 
 		if ( wheel ) Rotate( (c2v*)&user_capsule, (c2v*)&user_capsule, 2 );
 
-		static int code = 12;
-		if ( arrow_pressed ) code = (code + 1) % 14;
+		static int code = 14;
+		if ( arrow_pressed ) code = (code + 1) % 15;
 		switch ( code )
 		{
 		case 0: TestDrawPrim( ); break;
@@ -1108,6 +1122,7 @@ int main( )
 		case 11: sro5hRayBug( ); break;
 		case 12: circle_to_aabb_bug(); break;
 		case 13: DJLink_aabb_bug(); break;
+		case 14: lundmark_GJK_div_by_0_bug(); break;
 		}
 
 		// push a draw call to tinygl
