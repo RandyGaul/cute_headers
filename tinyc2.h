@@ -790,6 +790,7 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 	s.a.sB = c2Mulxv(bx, pB.verts[0]);
 	s.a.p = c2Sub(s.a.sB, s.a.sA);
 	s.a.u = 1.0f;
+	s.div = 1.0f;
 	s.count = 1;
 
 	c2sv* verts = &s.a;
