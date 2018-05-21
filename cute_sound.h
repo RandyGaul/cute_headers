@@ -219,8 +219,8 @@
 
 /*
 	Some past discussion threads:
-	https://www.reddit.com/r/gamedev/comments/6i39j2/cute_sound_the_cutest_library_to_get_audio_into/
-	https://www.reddit.com/r/gamedev/comments/4ml6l9/cute_sound_singlefile_c_audio_library/
+	https://www.reddit.com/r/gamedev/comments/6i39j2/tinysound_the_cutest_library_to_get_audio_into/
+	https://www.reddit.com/r/gamedev/comments/4ml6l9/tinysound_singlefile_c_audio_library/
 	https://forums.tigsource.com/index.php?topic=58706.0
 */
 
