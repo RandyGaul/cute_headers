@@ -1,30 +1,30 @@
-# tinyheaders
+# cute_headers
 
 Various single-file cross-platform C/C++ headers implementing self-contianed libraries.
 
 | library | description | latest version| language(s) 
 |---------|-------------|---------------|-------------
-**[tinyc2](tinyc2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.04 | C/C++
-**[tinysound](tinysound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.09 | C/C++
-**[tinynet](tinynet.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++
-**[tinytime](tinytime.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
-**[tinymemfile](tinymemfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
-**[tinyfiles](tinyfiles.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
-**[tinysid](tinysid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
-**[tinymath](tinymath.h)** | Professional level 3D vector math via SIMD intrinsics | 1.01 | C++
-**[tinypng](tinypng.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++
-**[tinygl](tinygl.h)** | OpenGL ES 3.0+ wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++
-**[tinyutf](tinyutf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
-**[tinyhuff](tinyhuff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
-**[tinyspheremesh](tinyspheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++
-**[tinypath](tinypath.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++
-**[tinyalloc](tinyalloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
-**[tinymath2d](tinymath2d.h)** | 2d vector math and shape routines | 1.0 | C++
-**[tinyspritebatch](tinyspritebatch.h)** | run-time 2d sprite batcher | 1.01 | C/C++
-**[tinytiled](tinytiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.02 | C/C++
-**[tinyfilewatch](tinyfilewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
-**[tinyani](tinyani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
-**[tinyfont](tinyfont.h)** | Load font atlases, and fill vertex buffers for rasterized fonts | 1.0 | C/C++
+**[cute_c2](cute_c2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation | 1.04 | C/C++
+**[cute_sound](cute_sound.h)** | Load/play/loop/pitch/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time) | 1.09 | C/C++
+**[cute_net](cute_net.h)** &ast; | Netcode for multiplayer games, reliable/unreliable packets, send/recieve large chunks reliably, encryption, network simulator, flow control, serialization + data integrity checks, compression | 0.0 | C/C++
+**[cute_time](cute_time.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
+**[cute_memfile](cute_memfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
+**[cute_files](cute_files.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
+**[cute_sid](cute_sid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
+**[cute_math](cute_math.h)** | Professional level 3D vector math via SIMD intrinsics | 1.01 | C++
+**[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++
+**[cute_gl](cute_gl.h)** | OpenGL ES 3.0+ wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++
+**[cute_utf](cute_utf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
+**[cute_huff](cute_huff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
+**[cute_spheremesh](cute_spheremesh.h)** | Generates beautiful vertices (triangles) of a sphere | 1.0 | C/C++
+**[cute_path](cute_path.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++
+**[cute_alloc](cute_alloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
+**[cute_math2d](cute_math2d.h)** | 2d vector math and shape routines | 1.0 | C++
+**[cute_spritebatch](cute_spritebatch.h)** | run-time 2d sprite batcher | 1.01 | C/C++
+**[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.02 | C/C++
+**[cute_filewatch](cute_filewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
+**[cute_ani](cute_ani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
+**[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts | 1.0 | C/C++
 
 &ast; Not yet hit first release
 
@@ -41,7 +41,7 @@ Some headers also have example code or demos. In this repo just look for the cor
 Contact
 -------
 
-Here's a link to the discord chat for tinyheaders. Feel free to pop in and ask questions, make suggestions, or have a discussion. If anyone has used tinyheaders it would be great to hear your experience! https://discord.gg/2DFHRmX
+Here's a link to the discord chat for cute_headers. Feel free to pop in and ask questions, make suggestions, or have a discussion. If anyone has used cute_headers it would be great to hear your experience! https://discord.gg/2DFHRmX
 
 Another easy way to get a hold of me is on twitter [@randypgaul](https://twitter.com/RandyPGaul).
 
