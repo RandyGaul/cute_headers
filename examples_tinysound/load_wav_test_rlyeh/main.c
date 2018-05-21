@@ -7,7 +7,7 @@
 int main()
 {
 	HWND hwnd = GetConsoleWindow();
-	tsContext* ctx = tsMakeContext(hwnd, 44100, 15, 5, 0);
+	tsContext* ctx = tsMakeContext(hwnd, 48000, 15, 5, 0);
 	tsLoadedSound voice_audio = tsLoadWAV("demo.wav");
 	tsPlayingSound voice_instance = tsMakePlayingSound(&voice_audio);
 	printf("demo.wav has a sample rate of %d Hz.\n", voice_audio.sample_rate);
@@ -21,7 +21,6 @@ int main()
 
 		if (GetAsyncKeyState(0x31))
 			tsInsertSound(ctx, &voice_instance);
-
 
 		tsMix(ctx );
 	}
