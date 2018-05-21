@@ -286,9 +286,6 @@ typedef struct
 	// updated whenever playing instances are inserted into the context.
 	int playing_count;
 
-	// Data used when streaming in OGG files via stb_vorbis.
-
-
 	// The actual raw audio samples in memory.
 	void* channels[2];
 } tsLoadedSound;
