@@ -579,7 +579,7 @@ struct cute_threadpool_t
 	void* mem_ctx;
 };
 
-int cute_try_pop_task(cute_threadpool_t* pool, cute_task_t* task)
+int cute_try_pop_task_internal(cute_threadpool_t* pool, cute_task_t* task)
 {
 	cute_lock(pool->task_mutex);
 
@@ -600,7 +600,7 @@ int cute_worker_thread_internal(void* udata)
 	while (pool->running)
 	{
 		cute_task_t task;
-		if (cute_try_pop_task(pool, &task))
+		if (cute_try_pop_task_internal(pool, &task))
 		{
 			task.do_work(task.param);
 		}
@@ -663,7 +663,7 @@ void cute_threadpool_kick_and_wait(cute_threadpool_t* pool)
 	while (pool->task_count)
 	{
 		cute_task_t task;
-		if (cute_try_pop_task(pool, &task))
+		if (cute_try_pop_task_internal(pool, &task))
 		{
 			cute_sem_try(pool->semaphore);
 			task.do_work(task.param);
