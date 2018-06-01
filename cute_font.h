@@ -92,7 +92,7 @@ typedef struct cute_font_vert_t
 
 // Fills in an array of triangles, two triangles for each quad, one quad for each text glyph.
 // Will return 0 if the function tries to overrun the vertex buffer. Quads are setup in 2D where
-// the y axis points up, x axis points left. The top left of the first glyph is placed at the
+// the y axis points up, x axis points right. The top left of the first glyph is placed at the
 // coordinate {`x`, `y`}. Newlines move quads downward by the text height added with `line_height`.
 // `count_written` contains the number of outputted vertices.
 int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x, float y, float line_height, cute_font_vert_t* buffer, int buffer_max, int* count_written);
