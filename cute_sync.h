@@ -16,6 +16,10 @@
 		implemented with the SDL2 API, though cute_sync has been written so it can
 		be implemented by other backends, such as pthreads, or Windows primitives.
 
+		Here are some slides I wrote for those interested in learning prequisite
+		knowledge for utilizing this header:
+		http://www.randygaul.net/2014/09/24/multi-threading-best-practices-for-gamedev/
+
 	Revision history:
 		1.0  (05/31/2018) initial release
 */
