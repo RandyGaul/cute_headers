@@ -88,7 +88,7 @@ void cute_cv_destroy(cute_cv_t* cv);
 cute_sem_t* cute_sem_create(unsigned initial_count);
 
 /**
- * Automically increments the semaphore's value and then wakes sleeping threads.
+ * Automically increments the semaphore's value and then wakes a sleeping thread.
  * Returns 1 on success, zero otherwise.
  */
 int cute_sem_post(cute_sem_t* semaphore);
@@ -122,7 +122,7 @@ cute_thread_id_t cute_thread_get_id(cute_thread_t* thread);
 cute_thread_id_t cute_thread_id();
 
 /**
- * Returns the number of CPU cores on the machine. Can be affected my machine dependent terminology,
+ * Returns the number of CPU cores on the machine. Can be affected my machine dependent technology,
  * such as Intel's hyperthreading.
  */
 int cute_core_count();
@@ -663,7 +663,8 @@ void cute_threadpool_add_task(cute_threadpool_t* pool, void (*func)(void*), void
 
 void cute_threadpool_kick_and_wait(cute_threadpool_t* pool)
 {
-	if (pool->task_count) cute_sem_post(pool->semaphore);
+	cute_threadpool_kick(pool);
+
 	while (pool->task_count)
 	{
 		cute_task_t task;
@@ -680,7 +681,11 @@ void cute_threadpool_kick(cute_threadpool_t* pool)
 {
 	if (pool->task_count)
 	{
-		cute_sem_post(pool->semaphore);
+		int count = pool->task_count < pool->thread_count ? pool->task_count : pool->thread_count;
+		for (int i = 0; i < count; ++i)
+		{
+			cute_sem_post(pool->semaphore);
+		}
 	}
 }
 
