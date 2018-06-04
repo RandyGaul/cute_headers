@@ -553,7 +553,8 @@ static void* cute_malloc_aligned(size_t size, int alignment, void* mem_ctx)
 static void cute_free_aligned(void* p, void* mem_ctx)
 {
 	if (!p) return;
-	CUTE_THREAD_FREE((char*)p - (size_t)*((char*)p - 1), mem_ctx);
+	size_t alignment = (size_t)*((char*)p - 1) & 0xFF;
+	CUTE_THREAD_FREE((char*)p - alignment, mem_ctx);
 }
 
 typedef struct cute_task_t
@@ -633,7 +634,6 @@ cute_threadpool_t* cute_threadpool_create(int thread_count, void* mem_ctx)
 	for (int i = 0; i < thread_count; ++i)
 	{
 		pool->threads[i].thread = cute_thread_create(cute_worker_thread_internal, 0, pool);
-		cute_thread_detach(pool->threads[i].thread);
 	}
 
 	return pool;
@@ -691,6 +691,11 @@ void cute_threadpool_destroy(cute_threadpool_t* pool)
 	for (int i = 0; i < pool->thread_count; ++i)
 	{
 		cute_sem_post(pool->semaphore);
+	}
+
+	for (int i = 0; i < pool->thread_count; ++i)
+	{
+		cute_thread_wait(pool->threads[i].thread);
 	}
 
 	cute_free_aligned(pool->tasks, pool->mem_ctx);

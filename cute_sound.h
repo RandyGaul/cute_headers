@@ -553,7 +553,7 @@ static void* cs_malloc16(size_t size)
 static void cs_free16(void* p)
 {
 	if (!p) return;
-	CUTE_SOUND_FREE((char*)p - (size_t)*((char*)p - 1));
+	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF));
 }
 
 static void cs_last_element(__m128* a, int i, int j, int16_t* samples, int offset)
@@ -595,6 +595,8 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		uint8_t SubFormat[18];
 	} Fmt;
 	#pragma pack(pop)
+
+	sound->playing_count = 0;
 
 	char* data = (char*)memory;
 	char* end = data + size;
@@ -816,6 +818,7 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 		sound->channel_count = channel_count;
 		sound->channels[0] = a;
 		sound->channels[1] = b;
+		sound->playing_count = 0;
 		free(samples);
 		return;
 
@@ -854,8 +857,6 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 
 void cs_free_sound(cs_loaded_sound_t* sound)
 {
-	// Attempted to free a sound while it is still being used to play audio in the context.
-	CUTE_SOUND_ASSERT(!sound->playing_count);
 	cs_free16(sound->channels[0]);
 	memset(sound, 0, sizeof(cs_loaded_sound_t));
 }
@@ -891,6 +892,7 @@ int cs_is_active(cs_playing_sound_t* sound)
 
 void cs_stop_sound(cs_playing_sound_t* sound)
 {
+	sound->loaded_sound = 0;
 	sound->active = 0;
 }
 
@@ -1868,6 +1870,9 @@ void cs_mix(cs_context_t* ctx)
 			goto remove;
 
 		cs_loaded_sound_t* loaded = playing->loaded_sound;
+		if (!loaded)
+			goto remove;
+
 		__m128* cA = (__m128*)loaded->channels[0];
 		__m128* cB = (__m128*)loaded->channels[1];
 
@@ -1991,8 +1996,12 @@ void cs_mix(cs_context_t* ctx)
 			*ptr = (*ptr)->next;
 			playing->next = 0;
 			playing->active = 0;
-			playing->loaded_sound->playing_count -= 1;
-			CUTE_SOUND_ASSERT(playing->loaded_sound->playing_count >= 0);
+
+			if (playing->loaded_sound)
+			{
+				playing->loaded_sound->playing_count -= 1;
+				CUTE_SOUND_ASSERT(playing->loaded_sound->playing_count >= 0);
+			}
 
 			cs_remove_filter(playing);
 

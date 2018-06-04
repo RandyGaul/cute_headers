@@ -49,6 +49,11 @@ ca_frame_t* ca_frame_create(void* memory_chunk, size_t size);
 void* ca_frame_alloc(ca_frame_t* frame, size_t size);
 void ca_frame_free(ca_frame_t* frame);
 
+typedef struct ca_heap_t ca_heap_t;
+ca_heap_t* ca_heap_create(void* memory_chunk, size_t size);
+void* ca_heap_alloc(ca_heap_t* frame, size_t size);
+void ca_heap_free(ca_heap_t* frame);
+
 // define these to your own user definition as necessary
 #if !defined(CUTE_ALLOC_ALLOC)
 	#define CUTE_ALLOC_ALLOC(size, ctx) ca_leak_check_alloc((size), (char*)__FILE__, __LINE__)
@@ -65,22 +70,25 @@ void ca_frame_free(ca_frame_t* frame);
 // 1 - use the leak checker
 // 0 - use plain malloc/free
 #define CUTE_ALLOC_LEAK_CHECK 1
-void* ca_leak_check_alloc(size_t size, char* file, int line);
-void* ca_leak_check_calloc(size_t count, size_t element_size, char* file, int line);
+void* ca_leak_check_alloc(size_t size, const char* file, int line);
+void* ca_leak_check_calloc(size_t count, size_t element_size, const char* file, int line);
 void ca_leak_check_free(void* mem);
 int CUTE_ALLOC_CHECK_FOR_LEAKS();
 int CUTE_ALLOC_BYTES_IN_USE();
 
 // define these to your own user definition as necessary
 #if !defined(CUTE_ALLOC_MALLOC_FUNC)
+	#include <stdlib.h>
 	#define CUTE_ALLOC_MALLOC_FUNC malloc
 #endif
 
 #if !defined(CUTE_ALLOC_FREE_FUNC)
+	#include <stdlib.h>
 	#define CUTE_ALLOC_FREE_FUNC free
 #endif
 
 #if !defined(CUTE_ALLOC_CALLOC_FUNC)
+	#include <stdlib.h>
 	#define CUTE_ALLOC_CALLOC_FUNC calloc
 #endif
 
@@ -170,7 +178,12 @@ void ca_frame_free(ca_frame_t* frame)
 	frame->bytes_left = frame->capacity;
 }
 
-#include <stdlib.h> // malloc, free
+typedef struct ca_heap_header_t
+{
+	struct ca_heap_header_t* next;
+	struct ca_heap_header_t* prev;
+	size_t size;
+} ca_heap_header_t;
 
 #if CUTE_ALLOC_LEAK_CHECK
 #include <stdio.h>
@@ -178,7 +191,7 @@ void ca_frame_free(ca_frame_t* frame)
 typedef struct ca_alloc_info_t ca_alloc_info_t;
 struct ca_alloc_info_t
 {
-	char* file;
+	const char* file;
 	size_t size;
 	int line;
 
@@ -201,7 +214,7 @@ static ca_alloc_info_t* ca_alloc_head()
 	return &info;
 }
 
-void* ca_leak_check_alloc(size_t size, char* file, int line)
+void* ca_leak_check_alloc(size_t size, const char* file, int line)
 {
 	ca_alloc_info_t* mem = (ca_alloc_info_t*)CUTE_ALLOC_MALLOC_FUNC(sizeof(ca_alloc_info_t) + size);
 
@@ -224,7 +237,7 @@ void* ca_leak_check_alloc(size_t size, char* file, int line)
 	#define CUTE_ALLOC_MEMSET memset
 #endif
 
-void* ca_leak_check_calloc(size_t count, size_t element_size, char* file, int line)
+void* ca_leak_check_calloc(size_t count, size_t element_size, const char* file, int line)
 {
 	size_t size = count * element_size;
 	void* mem = ca_leak_check_alloc(size, file, line);

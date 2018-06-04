@@ -1143,6 +1143,8 @@ const char* cute_tiled_error_reason;
 	}
 #endif
 
+#include <stdlib.h>
+
 typedef struct cute_tiled_page_t cute_tiled_page_t;
 typedef struct cute_tiled_map_internal_t cute_tiled_map_internal_t;
 

@@ -282,6 +282,7 @@ void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Poly* B, const
 
 typedef enum
 {
+	C2_NONE,
 	C2_CIRCLE,
 	C2_AABB,
 	C2_CAPSULE,

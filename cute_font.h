@@ -143,12 +143,25 @@ int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x, f
 	#define CUTE_FONT_STRTOD strtod
 #endif
 
+#ifndef HASHTABLE_MEMSET
+	#define HASHTABLE_MEMSET(ptr, val, n) CUTE_FONT_MEMSET(ptr, val, n)
+#endif
 
-#define HASHTABLE_MEMSET(ptr, val, n) CUTE_FONT_MEMSET(ptr, val, n)
-#define HASHTABLE_MEMCPY(dst, src, n) CUTE_FONT_MEMCPY(dst, src, n)
-#define HASHTABLE_MALLOC(ctx, size) CUTE_FONT_ALLOC(size, ctx)
-#define HASHTABLE_FREE(ctx, ptr) CUTE_FONT_FREE(ptr, ctx)
-#define HASHTABLE_U64 CUTE_FONT_U64
+#ifndef HASHTABLE_MEMCPY
+	#define HASHTABLE_MEMCPY(dst, src, n) CUTE_FONT_MEMCPY(dst, src, n)
+#endif
+
+#ifndef HASHTABLE_MALLOC
+	#define HASHTABLE_MALLOC(ctx, size) CUTE_FONT_ALLOC(size, ctx)
+#endif HASHTABLE_MALLOC
+
+#ifndef HASHTABLE_FREE
+	#define HASHTABLE_FREE(ctx, ptr) CUTE_FONT_FREE(ptr, ctx)
+#endif 
+
+#ifndef HASHTABLE_U64
+	#define HASHTABLE_U64 CUTE_FONT_U64
+#endif
 
 
 // hashtable.h implementation by Mattias Gustavsson

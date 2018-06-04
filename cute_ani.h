@@ -71,15 +71,42 @@ typedef struct cute_ani_t
 	int current_frame;
 	float seconds;
 	int paused;
+
+	// 0 - no looping (plays animation forwards one frame at a time, then stops).
+	// positive - loop forwards by incrementing N frames.
+	// negative - loop backwards by decrementing N frames, starting on the last frame.
+	// For backwards looping make sure to call `cute_ani_reset` upon initialization to set animation to last frame.
 	int looping;
+
 	int frame_count;
 	int play_count;
 	cute_ani_frame_t frames[CUTE_ANI_MAX_FRAMES];
 } cute_ani_t;
 
+/**
+ * Resets an animation's timer and current frame. This needs to be called after loading an
+ * animation if `ani->looping` has been set to a negative value, in order for the animation
+ * to begin on the final frame.
+ */
 void cute_ani_reset(cute_ani_t* ani);
+
+/**
+ * Increments the timer of `ani`. Will increment the current frame based on `ani->looping`.
+ * 1 means normal forwards looping, -1 is backwards looping, 0 means play forwards but then stop.
+ * Other numbers will skip a number of frames. For example, `ani->looping` as 3 will play forwards
+ * and skip two frames after a frame plays.
+ */
 void cute_ani_update(cute_ani_t* ani, float dt);
+
+/**
+ * Sets the current frame of the animation to `frame_index`. Does nothing for out of bounds indices.
+ */
 void cute_ani_set_frame(cute_ani_t* ani, int frame_index);
+
+/**
+ * Returns the id of the current frame's image. This id can be passed to `cute_ani_map_cstr` to
+ * retrieve the string associated with the id.
+ */
 CUTE_ANI_U64 cute_ani_current_image(cute_ani_t* ani);
 
 typedef enum cute_ani_error_t
@@ -92,12 +119,28 @@ typedef enum cute_ani_error_t
 
 typedef struct cute_ani_map_t cute_ani_map_t;
 
+/**
+ * Loads an animation from memory. The file format is described at the top of this file.
+ */
 cute_ani_error_t cute_ani_load_from_mem(cute_ani_map_t* map, cute_ani_t* ani, const void* mem, int size, int* bytes_read);
 
+/**
+ * Creates a map object to map integer ids to strings. The strings represent the names of
+ * different animation frame images.
+ */
 cute_ani_map_t* cute_ani_map_create(void* mem_ctx);
-CUTE_ANI_U64 cute_ani_map_add(cute_ani_map_t* map, const char* unique_image_path);
-const char* cute_ani_map_cstr(cute_ani_map_t* map, CUTE_ANI_U64 unique_image_id);
 void cute_ani_map_destroy(cute_ani_map_t* map);
+
+/**
+ * Manually insert a string into the map. This is not necessary if `cute_ani_load_from_mem` is used, since
+ * `cute_ani_load_from_mem` will call this function internally.
+ */
+CUTE_ANI_U64 cute_ani_map_add(cute_ani_map_t* map, const char* unique_image_path);
+
+/**
+ * Converts an animation's frame id to a c-style nul-terminated string.
+ */
+const char* cute_ani_map_cstr(cute_ani_map_t* map, CUTE_ANI_U64 unique_image_id);
 
 #define CUTE_ANI_H
 #endif
@@ -837,7 +880,14 @@ void cute_ani_reset(cute_ani_t* ani)
 {
 	ani->play_count = 0;
 	ani->seconds = 0;
-	ani->current_frame = 0;
+	if (ani->looping >= 0) ani->current_frame = 0;
+	else ani->current_frame = ani->frame_count - 1;
+}
+
+int cute_ani_mod(int a, int b)
+{
+	int r = a % b;
+	return r * b < 0 ? r + b : r;
 }
 
 void cute_ani_update(cute_ani_t* ani, float dt)
@@ -849,15 +899,46 @@ void cute_ani_update(cute_ani_t* ani, float dt)
 
 	if (frame->seconds <= ani->seconds)
 	{
-		++current_frame;
+		int next_frame;
 
-		if (current_frame == ani->frame_count)
+		if (ani->looping)
 		{
-			if (ani->looping) current_frame = 0;
-			ani->play_count += 1;
+			// Calculate next frame.
+			next_frame = cute_ani_mod(current_frame + ani->looping, ani->frame_count);
+
+			// Increment play count.
+			int sign = ani->looping >= 0 ? 1 : -1;
+			if (ani->looping * sign >= ani->frame_count)
+			{
+				ani->play_count += ani->looping / ani->frame_count;
+			}
+
+			else if (ani->looping > 0 && next_frame < current_frame)
+			{
+				ani->play_count += 1;
+			}
+
+			else if (ani->looping < 0 && next_frame > current_frame)
+			{
+				ani->play_count += 1;
+			}
 		}
 
-		ani->current_frame = current_frame;
+		else
+		{
+			if (current_frame + 1 == ani->frame_count)
+			{
+				next_frame = current_frame;
+				ani->play_count += 1;
+			}
+
+			else
+			{
+				next_frame = current_frame + 1;
+			}
+		}
+
+		ani->current_frame = next_frame;
 		ani->seconds = 0;
 	}
 
@@ -1016,7 +1097,7 @@ cute_ani_error_t cute_ani_load_from_mem(cute_ani_map_t* map, cute_ani_t* ani, co
 	cute_ani_error_t error_code = CUTE_ANI_SUCCESS;
 	cute_ani_parse_t parse;
 	cute_ani_parse_t* p = &parse;
-	p->in = mem;
+	p->in = (const char*)mem;
 	p->end = p->in + size;
 
 	ani->current_frame = 0;
@@ -1056,7 +1137,9 @@ cute_ani_map_t* cute_ani_map_create(void* mem_ctx)
 {
 	cute_ani_map_t* map = (cute_ani_map_t*)CUTE_ANI_ALLOC(sizeof(cute_ani_map_t), mem_ctx);
 	map->mem_ctx = mem_ctx;
-	strpool_embedded_init(&map->pool, mem_ctx);
+	strpool_embedded_config_t config = strpool_embedded_default_config;
+	config.memctx = mem_ctx;
+	strpool_embedded_init(&map->pool, &config);
 	map->end_id = cute_ani_map_add(map, "end");
 	return map;
 }

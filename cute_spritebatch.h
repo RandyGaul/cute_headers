@@ -184,6 +184,10 @@ typedef void* (*get_pixels_t)(SPRITEBATCH_U64 image_id);
 typedef SPRITEBATCH_U64 (*generate_texture_handle_t)(void* pixels, int w, int h);
 typedef void (*destroy_texture_handle_t)(SPRITEBATCH_U64 texture_id);
 
+// Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
+// Useful if DLL's are reloaded, or swapped, etc.
+void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_t batch_callback, get_pixels_t get_pixels_callback, generate_texture_handle_t generate_texture_callback, destroy_texture_handle_t delete_texture_callback);
+
 // Initializes a set of good default paramaters. The users must still set
 // the four callbacks inside of `config`.
 void spritebatch_set_default_config(spritebatch_config_t* config);
@@ -290,10 +294,21 @@ struct spritebatch_sprite_t
 	#endif
 #endif
 
-#define HASHTABLE_MEMSET(ptr, val, n) SPRITEBATCH_MEMSET(ptr, val, n)
-#define HASHTABLE_MEMCPY(dst, src, n) SPRITEBATCH_MEMCPY(dst, src, n)
-#define HASHTABLE_MALLOC(ctx, size) SPRITEBATCH_MALLOC(size, ctx)
-#define HASHTABLE_FREE(ctx, ptr) SPRITEBATCH_FREE(ptr, ctx)
+#ifndef HASHTABLE_MEMSET
+	#define HASHTABLE_MEMSET(ptr, val, n) SPRITEBATCH_MEMSET(ptr, val, n)
+#endif
+
+#ifndef HASHTABLE_MEMCPY
+	#define HASHTABLE_MEMCPY(dst, src, n) SPRITEBATCH_MEMCPY(dst, src, n)
+#endif
+
+#ifndef HASHTABLE_MALLOC
+	#define HASHTABLE_MALLOC(ctx, size) SPRITEBATCH_MALLOC(size, ctx)
+#endif
+
+#ifndef HASHTABLE_FREE
+	#define HASHTABLE_FREE(ctx, ptr) SPRITEBATCH_FREE(ptr, ctx)
+#endif
 
 
 // hashtable.h implementation by Mattias Gustavsson
@@ -911,6 +926,14 @@ void spritebatch_term(spritebatch_t* sb)
 	}
 
 	SPRITEBATCH_MEMSET(sb, 0, sizeof(spritebatch_t));
+}
+
+void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_t batch_callback, get_pixels_t get_pixels_callback, generate_texture_handle_t generate_texture_callback, destroy_texture_handle_t delete_texture_callback)
+{
+	sb->batch_callback = batch_callback;
+	sb->get_pixels_callback = get_pixels_callback;
+	sb->generate_texture_callback = generate_texture_callback;
+	sb->delete_texture_callback = delete_texture_callback;
 }
 
 void spritebatch_set_default_config(spritebatch_config_t* config)
