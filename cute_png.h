@@ -85,6 +85,7 @@
 #define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF
 
 #include <stdint.h>
+#include <limits.h>
 
 typedef struct cp_pixel_t cp_pixel_t;
 typedef struct cp_image_t cp_image_t;
