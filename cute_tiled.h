@@ -1950,8 +1950,8 @@ cute_tiled_err:
 
 static CUTE_TILED_INLINE int cute_tiled_skip_curly_braces_internal(cute_tiled_map_internal_t* m)
 {
-	cute_tiled_expect(m, '{');
 	int count = 1;
+	cute_tiled_expect(m, '{');
 	while (count)
 	{
 		char c = cute_tiled_next(m);
@@ -2028,7 +2028,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			CUTE_TILED_FAIL_IF(cute_tiled_skip_curly_braces_internal(m));
 			break;
 
-		case 15569462518706435895: // tilepropertytypes
+		case 15569462518706435895U: // tilepropertytypes
 			CUTE_TILED_WARNING("`tilepropertytypes` is not currently supported. Attempting to skip.");
 			CUTE_TILED_FAIL_IF(cute_tiled_skip_curly_braces_internal(m));
 			break;
@@ -2299,6 +2299,8 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 	config.memctx = mem_ctx;
 	strpool_embedded_init(&m->strpool, &config);
 
+	cute_tiled_layer_t* layer = m->map.layers;
+	cute_tiled_tileset_t* tileset = m->map.tilesets;
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
@@ -2311,13 +2313,11 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 	cute_tiled_patch_interned_strings(m);
 	CUTE_TILED_REVERSE_LIST(cute_tiled_layer_t, m->map.layers);
 	CUTE_TILED_REVERSE_LIST(cute_tiled_tileset_t, m->map.tilesets);
-	cute_tiled_layer_t* layer = m->map.layers;
 	while (layer)
 	{
 		CUTE_TILED_REVERSE_LIST(cute_tiled_object_t, layer->objects);
 		layer = layer->next;
 	}
-	cute_tiled_tileset_t* tileset = m->map.tilesets;
 	while (tileset)
 	{
 		CUTE_TILED_REVERSE_LIST(cute_tiled_tile_descriptor_t, tileset->tiles);
