@@ -184,7 +184,7 @@ struct cute_tiled_object_t
 	int gid;                            // GID, only if object comes from a Tilemap.
 	int height;                         // Height in pixels. Ignored if using a gid.
 	int id;                             // Incremental id - unique across all objects.
-	cute_tiled_string_t name;            // String assigned to name field in editor.
+	cute_tiled_string_t name;           // String assigned to name field in editor.
 	int point;                          // 0 or 1. Used to mark an object as a point.
 
 	// Example to index each vert of a polygon/polyline:
@@ -201,16 +201,16 @@ struct cute_tiled_object_t
 	int vert_type;                      // 1 for `polygon` and 0 for `polyline`.
 
 	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;   // Array of properties.
+	cute_tiled_property_t* properties;  // Array of properties.
 	float rotation;                     // Angle in degrees clockwise.
 	/* template */                      // Not currently supported.
 	/* text */                          // Not currently supported.
-	cute_tiled_string_t type;            // String assigned to type field in editor.
+	cute_tiled_string_t type;           // String assigned to type field in editor.
 	int visible;                        // 0 or 1. Whether object is shown in editor.
 	int width;                          // Width in pixels. Ignored if using a gid.
 	float x;                            // x coordinate in pixels.
 	float y;                            // y coordinate in pixels.
-	cute_tiled_object_t* next;           // Pointer to next object. NULL if final object.
+	cute_tiled_object_t* next;          // Pointer to next object. NULL if final object.
 };
 
 /*!
@@ -259,24 +259,24 @@ struct cute_tiled_layer_t
 	/* compression; */                  // Not currently supported.
 	int data_count;                     // Number of integers in `data`.
 	int* data;                          // Array of GIDs. `tilelayer` only. Only support CSV style exports.
-	cute_tiled_string_t draworder;       // `topdown` (default) or `index`. `objectgroup` only.
+	cute_tiled_string_t draworder;      // `topdown` (default) or `index`. `objectgroup` only.
 	/* encoding; */                     // Not currently supported.
 	int height;                         // Row count. Same as map height for fixed-size maps.
-	cute_tiled_layer_t* layers;          // Linked list of layers. Only appears if `type` is `group`.
-	cute_tiled_string_t name;            // Name assigned to this layer.
-	cute_tiled_object_t* objects;        // Linked list of objects. `objectgroup` only.
+	cute_tiled_layer_t* layers;         // Linked list of layers. Only appears if `type` is `group`.
+	cute_tiled_string_t name;           // Name assigned to this layer.
+	cute_tiled_object_t* objects;       // Linked list of objects. `objectgroup` only.
 	/* offsetx */                       // Not currently supported.
 	/* offsety */                       // Not currently supported.
 	float opacity;                      // Value between 0 and 1.
 	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;   // Array of properties.
+	cute_tiled_property_t* properties;  // Array of properties.
 	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	cute_tiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
+	cute_tiled_string_t type;           // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
 	int visible;                        // 0 or 1. Whether layer is shown or hidden in editor.
 	int width;                          // Column count. Same as map width for fixed-size maps.
 	int x;                              // Horizontal layer offset in tiles. Always 0.
 	int y;                              // Vertical layer offset in tiles. Always 0.
-	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
+	cute_tiled_layer_t* next;           // Pointer to the next layer. NULL if final layer.
 };
 
 struct cute_tiled_tile_descriptor_t
@@ -286,12 +286,12 @@ struct cute_tiled_tile_descriptor_t
 	/* image */                         // Not currently supported.
 	/* imageheight */                   // Not currently supported.
 	/* imagewidth */                    // Not currently supported.
-	cute_tiled_layer_t* objectgroup;     // Linked list of layers of type `objectgroup` only. Useful for holding collision info.
+	cute_tiled_layer_t* objectgroup;    // Linked list of layers of type `objectgroup` only. Useful for holding collision info.
 	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;   // Array of properties.
+	cute_tiled_property_t* properties;  // Array of properties.
 	/* terrain */                       // Not currently supported.
 	float probability;                  // The probability used when painting with the terrain brush in `Random Mode`.
-	cute_tiled_tile_descriptor_t* next;  // Pointer to the next tile descriptor. NULL if final tile descriptor.
+	cute_tiled_tile_descriptor_t* next; // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
 struct cute_tiled_tileset_t
@@ -299,13 +299,13 @@ struct cute_tiled_tileset_t
 	int columns;                        // The number of tile columns in the tileset.
 	int firstgid;                       // GID corresponding to the first tile in the set.
 	/* grid */                          // Not currently supported.
-	cute_tiled_string_t image;           // Image used for tiles in this set (relative path from map file to source image).
+	cute_tiled_string_t image;          // Image used for tiles in this set (relative path from map file to source image).
 	int imagewidth;                     // Width of source image in pixels.
 	int imageheight;                    // Height of source image in pixels.
 	int margin;                         // Buffer between image edge and first tile (pixels).
-	cute_tiled_string_t name;            // Name given to this tileset.
+	cute_tiled_string_t name;           // Name given to this tileset.
 	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;   // Array of properties.
+	cute_tiled_property_t* properties;  // Array of properties.
 	int spacing;                        // Spacing between adjacent tiles in image (pixels).
 	/* terrains */                      // Not currently supported.
 	int tilecount;                      // The number of tiles in this tileset.
@@ -313,12 +313,12 @@ struct cute_tiled_tileset_t
 	/* tileproperties */                // Not currently supported.
 	/* tilepropertytypes */             // Not currently supported.
 	/* tileoffset */                    // Not currently supported.
-	cute_tiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
+	cute_tiled_tile_descriptor_t* tiles;// Linked list of tile descriptors. Can be NULL.
 	int tilewidth;                      // Maximum width of tiles in this set.
 	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	cute_tiled_string_t type;            // `tileset` (for tileset files, since 1.0).
-	cute_tiled_string_t source;          // Relative path to tileset, when saved externally from the map file.
-	cute_tiled_tileset_t* next;          // Pointer to next tileset. NULL if final tileset.
+	cute_tiled_string_t type;           // `tileset` (for tileset files, since 1.0).
+	cute_tiled_string_t source;         // Relative path to tileset, when saved externally from the map file.
+	cute_tiled_tileset_t* next;         // Pointer to next tileset. NULL if final tileset.
 };
 
 struct cute_tiled_map_t
@@ -327,19 +327,19 @@ struct cute_tiled_map_t
 	int height;                         // Number of tile rows.
 	/* hexsidelength */                 // Not currently supported.
 	int infinite;                       // Whether the map has infinite dimensions.
-	cute_tiled_layer_t* layers;          // Linked list of layers. Can be NULL.
+	cute_tiled_layer_t* layers;         // Linked list of layers. Can be NULL.
 	int nextobjectid;                   // Auto-increments for each placed object.
-	cute_tiled_string_t orientation;     // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
+	cute_tiled_string_t orientation;    // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
 	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;   // Array of properties.
-	cute_tiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
+	cute_tiled_property_t* properties;  // Array of properties.
+	cute_tiled_string_t renderorder;    // Rendering direction (orthogonal maps only).
 	/* staggeraxis */                   // Not currently supported.
 	/* staggerindex */                  // Not currently supported.
-	cute_tiled_string_t tiledversion;    // The Tiled version used to save the file.
+	cute_tiled_string_t tiledversion;   // The Tiled version used to save the file.
 	int tileheight;                     // Map grid height.
-	cute_tiled_tileset_t* tilesets;      // Linked list of tilesets.
+	cute_tiled_tileset_t* tilesets;     // Linked list of tilesets.
 	int tilewidth;                      // Map grid width.
-	cute_tiled_string_t type;            // `map` (since 1.0).
+	cute_tiled_string_t type;           // `map` (since 1.0).
 	int version;                        // The JSON format version.
 	int width;                          // Number of tile columns.
 };

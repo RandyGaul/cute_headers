@@ -421,7 +421,7 @@ void print_map(cute_tiled_map_t* m)
 
 void test_map()
 {
-	cute_tiled_map_t* m = cute_tiled_load_map_from_file("untitled.txt", 0);
+	cute_tiled_map_t* m = cute_tiled_load_map_from_file("leaper.json", 0);
 	if (!m) return;
 	print_map(m);
 	cute_tiled_free_map(m);
