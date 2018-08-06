@@ -596,6 +596,17 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 	} Fmt;
 	#pragma pack(pop)
 
+	Fmt fmt;
+	memset(&fmt, 0, sizeof(fmt));
+
+	int sample_size = 0;
+	int sample_count = 0;
+	int wide_count = 0;
+	int wide_offset = 0;
+
+	int16_t* samples;
+	float* sample = 0;
+
 	sound->playing_count = 0;
 
 	char* data = (char*)memory;
@@ -613,7 +624,6 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		data = cs_next(data);
 	}
 
-	Fmt fmt;
 	fmt = *(Fmt*)(data + 8);
 	CUTE_SOUND_CHECK(fmt.wFormatTag == 1, "Only PCM WAV files are supported.");
 	CUTE_SOUND_CHECK(fmt.nChannels == 1 || fmt.nChannels == 2, "Only mono or stereo supported (too many channels detected).");
@@ -629,16 +639,16 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		data = cs_next(data);
 	}
 	
-	int sample_size = *((uint32_t*)(data + 4));
-	int sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
+	sample_size = *((uint32_t*)(data + 4));
+	sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
 	sound->sample_count = sample_count;
 	sound->channel_count = fmt.nChannels;
 
-	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
+	wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
 	wide_count /= 4;
-	int wide_offset = sample_count & 3;
-	int16_t* samples = (int16_t*)(data + 8);
-	float* sample = (float*)alloca(sizeof(float) * 4 + 16);
+	wide_offset = sample_count & 3;
+	samples = (int16_t*)(data + 8);
+	sample = (float*)alloca(sizeof(float) * 4 + 16);
 	sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 
 	switch (sound->channel_count)
@@ -759,11 +769,15 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 		int channel_count;
 		int sample_count = stb_vorbis_decode_memory((const unsigned char*)memory, length, &channel_count, &sound->sample_rate, &samples);
 
+		int wide_count = 0;
+		int wide_offset = 0;
+		float* sample = 0;
+
 		CUTE_SOUND_CHECK(sample_count > 0, "stb_vorbis_decode_memory failed. Make sure your file exists and is a valid OGG file.");
 
-		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
-		int wide_offset = sample_count & 3;
-		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
+		wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
+		wide_offset = sample_count & 3;
+		sample = (float*)alloca(sizeof(float) * 4 + 16);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 		__m128* a;
 		__m128* b;
@@ -1019,10 +1033,17 @@ static void cs_remove_filter(cs_playing_sound_t* playing);
 		WAVEFORMATEX format = { 0 };
 		DSBUFFERDESC bufdesc = { 0 };
 		LPDIRECTSOUND dsound;
+		HRESULT res;
+
+		int sample_count = 0;
+		int wide_count = 0;
+		int pool_size = 0;
+		int mix_buffers_size = 0;
+		int sample_buffer_size = 0;
 
 		CUTE_SOUND_CHECK(hwnd, "Invalid hwnd passed to cs_make_context.");
 
-		HRESULT res = DirectSoundCreate(0, &dsound, 0);
+		res = DirectSoundCreate(0, &dsound, 0);
 		CUTE_SOUND_CHECK(res == DS_OK, "DirectSoundCreate failed");
 #ifdef __cplusplus
 		dsound->SetCooperativeLevel((HWND)hwnd, DSSCL_PRIORITY);
@@ -1066,11 +1087,11 @@ static void cs_remove_filter(cs_playing_sound_t* playing);
 #endif
 		CUTE_SOUND_CHECK(res == DS_OK, "Failed to set format on secondary buffer");
 
-		int sample_count = play_frequency_in_Hz * num_buffered_seconds;
-		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
-		int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
-		int mix_buffers_size = sizeof(__m128) * wide_count * 2;
-		int sample_buffer_size = sizeof(__m128i) * wide_count;
+		sample_count = play_frequency_in_Hz * num_buffered_seconds;
+		wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
+		pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
+		mix_buffers_size = sizeof(__m128) * wide_count * 2;
+		sample_buffer_size = sizeof(__m128i) * wide_count;
 		ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size);
 		ctx->latency_samples = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
 		ctx->running_index = 0;
@@ -1827,31 +1848,40 @@ void cs_mix(cs_context_t* ctx)
 {
 	cs_lock(ctx);
 
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
+	int samples_to_write = 0;
+	int wide_count = 0;
 
+	__m128* floatA = 0;
+	__m128* floatB = 0;
+	__m128 zero = _mm_set1_ps(0.0f);
+
+	cs_playing_sound_t** ptr;
+
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
+	__m128i* samples;
 	int byte_to_lock;
 	int bytes_to_write;
 	cs_position(ctx, &byte_to_lock, &bytes_to_write);
 
 	if (!bytes_to_write) goto unlock;
-	int samples_to_write = bytes_to_write / ctx->bps;
+	samples_to_write = bytes_to_write / ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
-
+	__m128i* samples = 0;
+	int bytes_to_write = 0;
 	int samples_to_write = cs_sampels_to_mix(ctx);
 	if (!samples_to_write) goto unlock;
-	int bytes_to_write = samples_to_write * ctx->bps;
+	bytes_to_write = samples_to_write * ctx->bps;
 
 #else
 #endif
 
 	// clear mixer buffers
-	int wide_count = samples_to_write / 4;
+	wide_count = samples_to_write / 4;
 	CUTE_SOUND_ASSERT(!(samples_to_write & 3));
 
-	__m128* floatA = ctx->floatA;
-	__m128* floatB = ctx->floatB;
-	__m128 zero = _mm_set1_ps(0.0f);
+	floatA = ctx->floatA;
+	floatB = ctx->floatB;
 
 	for (int i = 0; i < wide_count; ++i)
 	{
@@ -1860,41 +1890,58 @@ void cs_mix(cs_context_t* ctx)
 	}
 
 	// mix all playing sounds into the mixer buffers
-	cs_playing_sound_t** ptr = &ctx->playing;
+	ptr = &ctx->playing;
 	while (*ptr)
 	{
 		cs_playing_sound_t* playing = *ptr;
+
+		cs_loaded_sound_t* loaded = 0;
+		__m128* cA = 0;
+		__m128* cB = 0;
+		int mix_count = 0;
+		int offset = 0;
+		int remaining = 0;
+
+		float vA0 = 0.0f;
+		float vB0 = 0.0f;
+		__m128 vA = _mm_set1_ps(vA0);
+		__m128 vB = _mm_set1_ps(vB0);
+
+		int delay_offset = 0;
+
+		int mix_wide = 0;
+		int offset_wide = 0;
+		int delay_wide = 0;
+
+		float pitch = 0.0f;
 
 		// immediately remove any inactive elements
 		if (!playing->active || !ctx->running)
 			goto remove;
 
-		cs_loaded_sound_t* loaded = playing->loaded_sound;
+		loaded = playing->loaded_sound;
 		if (!loaded)
 			goto remove;
 
-		__m128* cA = (__m128*)loaded->channels[0];
-		__m128* cB = (__m128*)loaded->channels[1];
+		cA = (__m128*)loaded->channels[0];
+		cB = (__m128*)loaded->channels[1];
 
 		// Attempted to play a sound with no audio.
 		// Make sure the audio file was loaded properly. Check for
 		// error messages in cs_error_reason.
 		CUTE_SOUND_ASSERT(cA);
 
-		int mix_count = samples_to_write;
-		int offset = playing->sample_index;
-		int remaining = loaded->sample_count - offset;
+		mix_count = samples_to_write;
+		offset = playing->sample_index;
+		remaining = loaded->sample_count - offset;
 		if (remaining < mix_count) mix_count = remaining;
 		CUTE_SOUND_ASSERT(remaining > 0);
 
-		float vA0 = playing->volume0 * playing->pan0;
-		float vB0 = playing->volume1 * playing->pan1;
-		__m128 vA = _mm_set1_ps(vA0);
-		__m128 vB = _mm_set1_ps(vB0);
+		vA0 = playing->volume0 * playing->pan0;
+		vB0 = playing->volume1 * playing->pan1;
 
 		// skip sound if it's delay is longer than mix_count and
 		// handle various delay cases
-		int delay_offset = 0;
 		if (offset < 0)
 		{
 			int samples_till_positive = -offset;
@@ -1920,13 +1967,13 @@ void cs_mix(cs_context_t* ctx)
 			goto get_next_playing_sound;
 
 		// SIMD offets
-		int mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
-		int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
-		int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
+		mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
+		offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
+		delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
 
 		// use cs_pitch_shift to on-the-fly pitch shift some samples
 		// only call this function if the user set a custom pitch value
-		float pitch = playing->pitch;
+		pitch = playing->pitch;
 		if (pitch != 1.0f)
 		{
 			int sample_count = (mix_wide - 2 * delay_wide) * 4;
@@ -2024,7 +2071,7 @@ void cs_mix(cs_context_t* ctx)
 	// load all floats into 16 bit packed interleaved samples
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
-	__m128i* samples = ctx->samples;
+	samples = ctx->samples;
 	for (int i = 0; i < wide_count; ++i)
 	{
 		__m128i a = _mm_cvtps_epi32(floatA[i]);
@@ -2041,7 +2088,7 @@ void cs_mix(cs_context_t* ctx)
 	// reusing floatA to store output is a good way to temporarly store
 	// the final samples. Then a single ring buffer push can be used
 	// afterwards. Pretty hacky, but whatever :)
-	__m128i* samples = (__m128i*)floatA;
+	samples = (__m128i*)floatA;
 	for (int i = 0; i < wide_count; ++i)
 	{
 		__m128i a = _mm_cvtps_epi32(floatA[i]);
