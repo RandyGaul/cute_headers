@@ -22,38 +22,38 @@
 	Revision history:
 		1.0  (06/04/2016) initial release
 		1.01 (06/06/2016) load WAV from memory
-						  separate portable and OS-specific code in cs_mix
-						  fixed bug causing audio glitches when sounds ended
-						  added stb_vorbis loaders + demo example
+		                  separate portable and OS-specific code in cs_mix
+		                  fixed bug causing audio glitches when sounds ended
+		                  added stb_vorbis loaders + demo example
 		1.02 (06/08/2016) error checking + strings in vorbis loaders
-						  SSE2 implementation of mixer
-						  fix typos on docs/comments
-						  corrected volume bug introduced in 1.01
+		                  SSE2 implementation of mixer
+		                  fix typos on docs/comments
+		                  corrected volume bug introduced in 1.01
 		1.03 (07/05/2016) size calculation helper (to know size of sound in
-						  bytes on the heap) cs_sound_size
+		                  bytes on the heap) cs_sound_size
 		1.04 (12/06/2016) merged in Aaron Balint's contributions
-						  SFFT and pitch functions from Stephan M. Bernsee
-						  cs_mix can run on its own thread with cs_spawn_mix_thread
-						  updated documentation, typo fixes
-						  fixed typo in cs_malloc16 that caused heap corruption
+		                  SFFT and pitch functions from Stephan M. Bernsee
+		                  cs_mix can run on its own thread with cs_spawn_mix_thread
+		                  updated documentation, typo fixes
+		                  fixed typo in cs_malloc16 that caused heap corruption
 		1.05 (12/08/2016) cs_stop_all_sounds, suggested by Aaron Balint
 		1.06 (02/17/2017) port to CoreAudio for Apple machines
 		1.07 (06/18/2017) SIMD the pitch shift code; swapped out old Bernsee
-						  code for a new re-write, updated docs as necessary,
-						  support for compiling as .c and .cpp on Windows,
-						  port for SDL (for Linux, or any other platform).
-						  Special thanks to DeXP (Dmitry Hrabrov) for 90% of
-						  the work on the SDL port!
+		                  code for a new re-write, updated docs as necessary,
+		                  support for compiling as .c and .cpp on Windows,
+		                  port for SDL (for Linux, or any other platform).
+		                  Special thanks to DeXP (Dmitry Hrabrov) for 90% of
+		                  the work on the SDL port!
 		1.08 (09/06/2017) SDL_RWops support by RobLoach
 		1.09 (05/20/2018) Load wav funcs can skip all irrelevant chunks
-						  Ref counting for playing sounds
+		                  Ref counting for playing sounds
 */
 
 /*
 	Contributors:
 		Aaron Balint      1.04 - real time pitch
-						  1.04 - separate thread for cs_mix
-						  1.04 - bugfix, removed extra cs_free16 call for second channel
+		                  1.04 - separate thread for cs_mix
+		                  1.04 - bugfix, removed extra cs_free16 call for second channel
 		DeXP              1.07 - initial work on SDL port
 		RobLoach          1.08 - SDL_RWops support
 */
@@ -233,23 +233,23 @@
 
 #if defined(_WIN32)
 
-#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
 
-#if !defined _CRT_SECURE_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
-#endif
+	#if !defined _CRT_SECURE_NO_WARNINGS
+	#define _CRT_SECURE_NO_WARNINGS
+	#endif
 
 #elif defined(__APPLE__)
 
-#define CUTE_SOUND_PLATFORM CUTE_SOUND_MAC
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_MAC
 
 #else
 
-#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
 
-// please note CUTE_SOUND_UNIX is not directly support
-// instead, unix-style OSes are encouraged to use SDL
-// see: https://www.libsdl.org/
+	// please note CUTE_SOUND_UNIX is not directly support
+	// instead, unix-style OSes are encouraged to use SDL
+	// see: https://www.libsdl.org/
 
 #endif
 
@@ -257,15 +257,15 @@
 // the SDL port.
 #ifdef CUTE_SOUND_FORCE_SDL
 
-#undef CUTE_SOUND_PLATFORM
-#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+	#undef CUTE_SOUND_PLATFORM
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
 
 #endif
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
-#include <SDL2/SDL.h>
-
+	#include <SDL2/SDL.h>
+	
 #endif
 
 #include <stdint.h>
@@ -328,8 +328,8 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound);
 // some functions for dealing with OGG files.
 #ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 
-void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound);
-cs_loaded_sound_t cs_load_ogg(const char* path);
+	void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound);
+	cs_loaded_sound_t cs_load_ogg(const char* path);
 
 #endif
 
@@ -436,14 +436,14 @@ void cs_stop_all_sounds(cs_context_t* ctx);
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	// Provides the ability to use cs_load_wav with an SDL_RWops object.
-cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context);
+	cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context);
 
-#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
+	#ifdef STB_VORBIS_INCLUDE_STB_VORBIS_H
 
-// Provides the ability to use cs_load_ogg with an SDL_RWops object.
-cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw);
+		// Provides the ability to use cs_load_ogg with an SDL_RWops object.
+		cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw);
 
-#endif
+	#endif
 
 #endif
 
@@ -456,9 +456,9 @@ cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw);
 
 // Change the allocator as necessary
 #if !defined(CUTE_SOUND_ALLOC)
-#include <stdlib.h>	// malloc, free
-#define CUTE_SOUND_ALLOC(size) malloc(size)
-#define CUTE_SOUND_FREE(mem) free(mem)
+	#include <stdlib.h>	// malloc, free
+	#define CUTE_SOUND_ALLOC(size) malloc(size)
+	#define CUTE_SOUND_FREE(mem) free(mem)
 #endif
 
 #include <stdio.h>	// fopen, fclose
@@ -468,27 +468,27 @@ cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw);
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
-#ifndef _WINDOWS_
-#include <Windows.h>
-#endif
+	#ifndef _WINDOWS_
+		#include <Windows.h>
+	#endif
 
-#ifndef _WAVEFORMATEX_
-#include <mmreg.h>
-#endif
+	#ifndef _WAVEFORMATEX_
+		#include <mmreg.h>
+	#endif
 
-#include <dsound.h>
-#undef PlaySound
+	#include <dsound.h>
+	#undef PlaySound
 
-#if defined(_MSC_VER)
-#pragma comment(lib, "dsound.lib")
-#endif
+	#if defined(_MSC_VER)
+		#pragma comment(lib, "dsound.lib")
+	#endif
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
 
-#include <CoreAudio/CoreAudio.h>
-#include <AudioUnit/AudioUnit.h>
-#include <pthread.h>
-#include <mach/mach_time.h>
+	#include <CoreAudio/CoreAudio.h>
+	#include <AudioUnit/AudioUnit.h>
+	#include <pthread.h>
+	#include <mach/mach_time.h>
 
 #else
 
@@ -496,9 +496,9 @@ cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw);
 
 #define CUTE_SOUND_CHECK(X, Y) do { if (!(X)) { cs_error_reason = Y; goto ts_err; } } while (0)
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC && defined(__clang__)
-#define CUTE_SOUND_ASSERT_INTERNAL __builtin_trap()
+	#define CUTE_SOUND_ASSERT_INTERNAL __builtin_trap()
 #else
-#define CUTE_SOUND_ASSERT_INTERNAL *(int*)0 = 0
+	#define CUTE_SOUND_ASSERT_INTERNAL *(int*)0 = 0
 #endif
 #define CUTE_SOUND_ASSERT(X) do { if (!(X)) CUTE_SOUND_ASSERT_INTERNAL; } while (0)
 #define CUTE_SOUND_ALIGN(X, Y) ((((size_t)X) + ((Y) - 1)) & ~((Y) - 1))
@@ -580,7 +580,7 @@ static void cs_last_element(__m128* a, int i, int j, int16_t* samples, int offse
 
 void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 {
-#pragma pack(push, 1)
+	#pragma pack(push, 1)
 	typedef struct
 	{
 		uint16_t wFormatTag;
@@ -594,7 +594,7 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		uint32_t dwChannelMask;
 		uint8_t SubFormat[18];
 	} Fmt;
-#pragma pack(pop)
+	#pragma pack(pop)
 
 	sound->playing_count = 0;
 
