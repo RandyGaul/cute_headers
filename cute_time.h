@@ -174,7 +174,7 @@ void cs_record(ct_timer_t* timer);
 	float ct_time()
 	{
 		static int first = 1;
-		struct timespec prev;
+		static struct timespec prev;
 		
 		if (first)
 		{
