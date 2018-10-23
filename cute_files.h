@@ -261,7 +261,6 @@ void cf_traverse(const char* path, cf_callback_t* cb, void* udata)
 
 int cf_match_ext(cf_file_t* file, const char* ext)
 {
-	if (*ext == '.') ++ext;
 	return !strcmp(file->ext, ext);
 }
 
