@@ -1227,6 +1227,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 {
 	int size;
 	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
+	if (!file) CUTE_TILED_WARNING("unable to find map file.");
 	cute_tiled_map_t* map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
 	return map;
