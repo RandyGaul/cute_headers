@@ -205,7 +205,6 @@ int path_pop(const char* path, char* out, char* pop)
 static int path_strncpy(char* dst, const char* src, int n, int max)
 {
 	int c;
-	const char* original = src;
 
 	do
 	{
@@ -232,7 +231,7 @@ void path_concat(const char* path_a, const char* path_b, char* out, int max_buff
 int path_name_of_folder_im_in(const char* path, char* out)
 {
 	// return failure for empty strings and "." or ".."
-	if (!*path || *path == '.' && CUTE_PATH_STRLEN(path) < 3) return 0;
+	if (!*path || (*path == '.' && CUTE_PATH_STRLEN(path) < 3)) return 0;
 	int len = path_pop(path, out, NULL);
 	int has_slash = 0;
 	for (int i = 0; out[i]; ++i)
@@ -246,7 +245,7 @@ int path_name_of_folder_im_in(const char* path, char* out)
 
 	if (has_slash)
 	{
-		int n = path_pop(out, out, NULL) + 1;
+		int n = path_pop(out, NULL, NULL) + 1;
 		len -= n;
 		CUTE_PATH_STRNCPY(out, path + n, len);
 	}

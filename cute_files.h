@@ -225,10 +225,10 @@ static int cf_safe_strcpy_internal(char* dst, const char* src, int n, int max, c
 
 const char* cf_get_ext(cf_file_t* file)
 {
-	char* period = file->name;
-	char c;
-	while ((c = *period++)) if (c == '.') break;
-	if (c) cf_safe_strcpy(file->ext, period, 0, CUTE_FILES_MAX_EXT);
+	char* name = file->name;
+	char* period = NULL;
+	while (*name++) if (*name == '.') period = name;
+	if (period) cf_safe_strcpy(file->ext, period, 0, CUTE_FILES_MAX_EXT);
 	else file->ext[0] = 0;
 	return file->ext;
 }
@@ -261,7 +261,6 @@ void cf_traverse(const char* path, cf_callback_t* cb, void* udata)
 
 int cf_match_ext(cf_file_t* file, const char* ext)
 {
-	if (*ext == '.') ++ext;
 	return !strcmp(file->ext, ext);
 }
 

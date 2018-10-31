@@ -1,4 +1,6 @@
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #define CUTE_FILES_IMPLEMENTATION
 #include "cute_files.h"
