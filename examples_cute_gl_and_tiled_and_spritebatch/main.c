@@ -421,7 +421,7 @@ void print_map(cute_tiled_map_t* m)
 
 void test_map()
 {
-	cute_tiled_map_t* m = cute_tiled_load_map_from_file("leaper.json", 0);
+	cute_tiled_map_t* m = cute_tiled_load_map_from_file("map.json", 0);
 	if (!m) return;
 	print_map(m);
 	cute_tiled_free_map(m);
@@ -611,7 +611,7 @@ int main(int argc, char** argv)
 	CUTE_TILED_UNUSED(argc);
 	CUTE_TILED_UNUSED(argv);
 
-	//test_map();
+	test_map();
 
 	setup_SDL_and_glad();
 	setup_cute_gl();

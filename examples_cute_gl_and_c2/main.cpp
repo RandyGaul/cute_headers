@@ -391,7 +391,7 @@ void TestBoolean1()
 	c2Capsule cap = GetCapsule();
 
 	c2v a, b;
-	c2GJK(&bb, C2_AABB, 0, &cap, C2_CAPSULE, 0, &a, &b, 1);
+	c2GJK(&bb, C2_AABB, 0, &cap, C2_CAPSULE, 0, &a, &b, 1, 0, 0);
 	DrawCircle(a, 2.0f);
 	DrawCircle(b, 2.0f);
 	gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -442,7 +442,7 @@ void TestBoolean2()
 	case 0:
 	{
 		c2v a, b;
-		c2GJK(&user_circle, C2_CIRCLE, 0, &poly, C2_POLY, 0, &a, &b, 1);
+		c2GJK(&user_circle, C2_CIRCLE, 0, &poly, C2_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -472,7 +472,7 @@ void TestBoolean2()
 		bb.max = c2V(10.0f, 10.0f);
 		bb.min = c2Add(bb.min, mp);
 		bb.max = c2Add(bb.max, mp);
-		c2GJK(&bb, C2_AABB, 0, &poly, C2_POLY, 0, &a, &b, 1);
+		c2GJK(&bb, C2_AABB, 0, &poly, C2_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -489,7 +489,7 @@ void TestBoolean2()
 	{
 		c2v a, b;
 		c2Capsule cap = GetCapsule();
-		c2GJK(&cap, C2_CAPSULE, 0, &poly, C2_POLY, 0, &a, &b, 1);
+		c2GJK(&cap, C2_CAPSULE, 0, &poly, C2_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -509,7 +509,7 @@ void TestBoolean2()
 		for (int i = 0; i < poly2.count; ++i) poly3.verts[i] = c2Add(mp, poly2.verts[i]);
 		poly3.count = poly2.count;
 
-		c2GJK(&poly, C2_POLY, 0, &poly3, C2_POLY, 0, &a, &b, 1);
+		c2GJK(&poly, C2_POLY, 0, &poly3, C2_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -1004,10 +1004,66 @@ void lundmark_GJK_div_by_0_bug()
 	B = { { 1133.07214f, 1443.59570f }, { 1127.39636f, 1440.69470f }, 6.0f };
 
 	c2v a, b;
-	float d = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 1);
+	float d = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 1, 0, 0);
+}
 
-	int x;
-	x = 10;
+void gjk_make_sure_cache_helps_and_works()
+{
+	c2Circle A;
+	c2Capsule B;
+	A = { { 0, 0 }, 15.0f };
+	B = { { 100, -25 }, { 75, 100 }, 10 };
+
+	c2v a0, b0;
+	c2v a, b;
+	c2GJKCache cache;
+	cache.count = 0;
+	int iterations = -1;
+	int cached_iterations = -1;
+	float d0 = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a0, &b0, 1, &iterations, &cache);
+	float d1 = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 1, &cached_iterations, &cache);
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawCircle(A.p, A.r);
+	DrawCapsule(B.a, B.b, B.r);
+	gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
+
+	assert(iterations != -1);
+	assert(cached_iterations != -1);
+	assert(iterations > cached_iterations);
+	assert(a0.x == a.x && a0.y == a.y);
+	assert(b0.x == b.x && b0.y == b.y);
+	assert(d0 == d1);
+}
+
+void try_out_toi_via_conservative_advancment()
+{
+	c2Circle A;
+	c2Capsule B;
+	A = { { mp }, 15.0f };
+	B = { { 125, -50 }, { 75, 50 }, 20 };
+
+	static c2v vA = c2V(150, -50);
+	c2v vB = c2V(0, 0);
+	Rotate(&vA, &vA, 1);
+
+	c2v n;
+	int iterations = -1;
+	int use_radius = 1;
+	float t = c2TOI(&A, C2_CIRCLE, NULL, vA, &B, C2_CAPSULE, NULL, vB, use_radius, &n, &iterations);
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawCircle(A.p, A.r);
+	DrawCapsule(B.a, B.b, B.r);
+	
+	if (t != 1) gl_line_color(ctx, 1, 0, 0);
+	gl_line(ctx, A.p.x, A.p.y, 0, A.p.x + vA.x, A.p.y + vA.y, 0);
+
+	A.p = c2Add(A.p, c2Mulvs(vA, t));
+	B.a = c2Add(B.a, c2Mulvs(vB, t));
+	B.b = c2Add(B.b, c2Mulvs(vB, t));
+
+	DrawCircle(A.p, A.r);
 }
 
 int main()
@@ -1104,8 +1160,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 14;
-		if (arrow_pressed) code = (code + 1) % 15;
+		static int code = 16;
+		if (arrow_pressed) code = (code + 1) % 17;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1123,6 +1179,8 @@ int main()
 		case 12: circle_to_aabb_bug(); break;
 		case 13: DJLink_aabb_bug(); break;
 		case 14: lundmark_GJK_div_by_0_bug(); break;
+		case 15: gjk_make_sure_cache_helps_and_works(); break;
+		case 16: try_out_toi_via_conservative_advancment(); break;
 		}
 
 		// push a draw call to tinygl
