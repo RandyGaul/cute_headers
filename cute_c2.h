@@ -319,12 +319,11 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 // be a number from 0 to 1. To move each shape to the colliding configuration, multiply vA and vB
 // each by the return value. ax_ptr and bx_ptr are optional parameters to transforms for each shape,
 // and are typically used for polygon shapes to transform from model to world space. Set these to
-// NULL to represent identity transforms. out_normal is the axis of separation at the time of impact.
-// The out_normal for non-colliding configurations (or in other words, when the return value is 1)
-// is just the direction pointing along the closest points from shape A to shape B. out_normal can
-// be NULL. iterations is an optional parameter. use_radius will apply radii for capsules and
-// circles (if set to false, spheres are treated as points and capsules are treated as line segments
-// i.e. rays).
+// NULL to represent identity transforms. The out_normal for non-colliding configurations (or in
+// other words, when the return value is 1) is just the direction pointing along the closest points
+// from shape A to shape B. out_normal can be NULL. iterations is an optional parameter. use_radius
+// will apply radii for capsules and circles (if set to false, spheres are treated as points and
+// capsules are treated as line segments i.e. rays).
 float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, int* iterations);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
