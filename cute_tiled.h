@@ -106,6 +106,11 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx);
 
 /*!
+ * Reverses the layers order, so they appear in reverse-order from what is shown in the Tiled editor.
+ */
+void cute_tiled_reverse_layers(cute_tiled_map_t* map)
+
+/*!
  * Free all dynamic memory associated with this map.
  */
 void cute_tiled_free_map(cute_tiled_map_t* map);
@@ -2283,6 +2288,11 @@ static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 		} \
 		root = n; \
 	} while (0)
+
+void cute_tiled_reverse_layers(cute_tiled_map_t* map)
+{
+	CUTE_TILED_REVERSE_LIST(cute_tiled_layer_t, map->layers);
+}
 
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
