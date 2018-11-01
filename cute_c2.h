@@ -25,6 +25,7 @@
 		1.02 (03/21/2017) compile fixes for c on more compilers
 		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
+		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
 */
 
 /*
@@ -54,6 +55,8 @@
 	* c2***to***Manifold - construct manifold to describe how shapes hit
 	* c2GJK              - runs GJK algorithm to find closest point pair
 	                       between two shapes
+	* c2TOI              - computes the time of impact between two shapes, useful for
+	                       sweeping shapes, or doing shape casts
 	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
 	* c2Collided         - generic version of c2***to*** funcs
 	* c2Collide          - generic version of c2***to***Manifold funcs
@@ -115,6 +118,7 @@
 	* Fast boolean only result functions (hit yes/no)
 	* Slghtly slower manifold generation for collision normals + depths +points
 	* GJK implementation (finds closest points for disjoint pairs of shapes)
+	* Shape casts/sweeps with c2TOI function (time of impact)
 	* Robust 2D convex hull generator
 	* Lots of correctly implemented and tested 2D math routines
 	* Implemented in portable C, and is readily portable to other languages
