@@ -35,7 +35,7 @@
 			Bob     Well, I like mudkips :)
 
 		And here is a quick implementation as a coroutine. It looks like this when run:
-			https://github.com/RandyGaul/cute_headers/blob/master/cute_coroutine.h
+			https://twitter.com/RandyPGaul/status/1058920774973571079
 		And here's the implementation:
 
 			#include <stdio.h>
