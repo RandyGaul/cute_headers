@@ -36,7 +36,9 @@
 		Alice   <has left>
 		Bob     Well, I like mudkips :)
 
-	And here is a quick implementation as a coroutine:
+	And here is a quick implementation as a coroutine. It looks like this when run:
+		https://github.com/RandyGaul/cute_headers/blob/master/cute_coroutine.h
+	And here's the implementation:
 
 		#include <stdio.h>
 		#include <stdlib.h>
@@ -137,7 +139,7 @@
 		Properties >> C/C++ >> All Options >> Debug Information Format.
 
 	Revision history:
-		1.0  (10/22/2018) initial release
+		1.0  (11/03/2018) initial release
 */
 
 #ifndef CUTE_COROUTINE_H
