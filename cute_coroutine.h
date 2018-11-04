@@ -14,111 +14,111 @@
 
 	USE CASE EXAMPLE
 
-	Here is a quick example: Say you are implementing a dialogue system for a
-	game displaying lots of text. You want to write out some text to the screen, and
-	then pause for a short time, and then continue on to the next text until finished.
-	The "typical" way to implement this kind of thing would be to use some kind of
-	state machine and lots of little timers. This can get really cumbersome very fast.
-	As an alternative, a coroutine header like this one can look really simple, and
-	be very easy to write. Here's the dialogue (no code yet):
+		Here is a quick example: Say you are implementing a dialogue system for a
+		game displaying lots of text. You want to write out some text to the screen, and
+		then pause for a short time, and then continue on to the next text until finished.
+		The "typical" way to implement this kind of thing would be to use some kind of
+		state machine and lots of little timers. This can get really cumbersome very fast.
+		As an alternative, a coroutine header like this one can look really simple, and
+		be very easy to write. Here's the dialogue (no code yet):
 
-		Bob     Yo alice. I heard you like mudkips.
-		Alice   No Bob. Not me. Who told you such a thing?
-		Bob     Alice please, don't lie to me. We've known each other a long time.
-		Alice   We have grown apart. I barely know myself.
-		Bob     OK.
-		Alice   Good bye Bob. I wish you the best.
-		Bob     But do you like mudkips?
-		Alice   <has left>
-		Bob     Well, I like mudkips :)
+			Bob     Yo alice. I heard you like mudkips.
+			Alice   No Bob. Not me. Who told you such a thing?
+			Bob     Alice please, don't lie to me. We've known each other a long time.
+			Alice   We have grown apart. I barely know myself.
+			Bob     OK.
+			Alice   Good bye Bob. I wish you the best.
+			Bob     But do you like mudkips?
+			Alice   <has left>
+			Bob     Well, I like mudkips :)
 
-	And here is a quick implementation as a coroutine. It looks like this when run:
-		https://github.com/RandyGaul/cute_headers/blob/master/cute_coroutine.h
-	And here's the implementation:
+		And here is a quick implementation as a coroutine. It looks like this when run:
+			https://github.com/RandyGaul/cute_headers/blob/master/cute_coroutine.h
+		And here's the implementation:
 
-		#include <stdio.h>
-		#include <stdlib.h>
-		#include <cute_coroutine.h>
+			#include <stdio.h>
+			#include <stdlib.h>
+			#include <cute_coroutine.h>
 
-		#ifdef _MSC_VER
-			#include <windows.h>
-		#else
-			#include <unistd.h>
-		#endif
+			#ifdef _MSC_VER
+				#include <windows.h>
+			#else
+				#include <unistd.h>
+			#endif
 
-		void print(coroutine_t* co, float dt, const char* character_name, const char* string)
-		{
-			static index; // Not thread safe, but can easily be changed to a ptr as input param.
-			int milliseconds = rand() % 10 + 20;
-
-			COROUTINE_START(co);
-
-			index = 0;
-			printf("%-8s", character_name);
-			COROUTINE_WAIT(co, 750, dt);
-
-			COROUTINE_CASE(co, print_char);
-			if (string[index]) {
-				char c = string[index++];
-				printf("%c", c);
-				if (c == '.' || c == ',' || c == '?') COROUTINE_WAIT(co, 250, dt);
-				else COROUTINE_WAIT(co, milliseconds, dt);
-				goto print_char;
-			}
-
-			COROUTINE_END(co);
-		}
-
-		int do_coroutine(coroutine_t* co, float dt)
-		{
-			int keep_going = 1;
-			int milliseconds = 1000;
-
-			COROUTINE_START(co);
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Bob", "Yo Alice. I heard you like mudkips.\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Alice", "No Bob. Not me. Who told you such a thing?\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Bob", "Alice please, don't lie to me. We've known each other a long time.\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Alice", "We have grown apart. I barely know myself.\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Bob", "OK.\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Alice", "Good bye Bob. I wish you the best.\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Bob", "But do you like mudkips?\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Alice", "<has left>\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			COROUTINE_CALL(co, print(co, dt, "Bob", "Well, I like mudkips :)\n"));
-			COROUTINE_WAIT(co, milliseconds, dt);
-			keep_going = 0;
-			COROUTINE_END(co);
-
-			return keep_going;
-		}
-
-		int main()
-		{
-			coroutine_t co;
-			coroutine_init(&co);
-
-			while (do_coroutine(&co, 1))
+			void print(coroutine_t* co, float dt, const char* character_name, const char* string)
 			{
-				// Sleep for a second.
-				#ifdef _MSC_VER
-					Sleep(1);
-				#else
-					usleep(1000);
-				#endif
+				static index; // Not thread safe, but can easily be changed to a ptr as input param.
+				int milliseconds = rand() % 10 + 20;
+
+				COROUTINE_START(co);
+
+				index = 0;
+				printf("%-8s", character_name);
+				COROUTINE_WAIT(co, 750, dt);
+
+				COROUTINE_CASE(co, print_char);
+				if (string[index]) {
+					char c = string[index++];
+					printf("%c", c);
+					if (c == '.' || c == ',' || c == '?') COROUTINE_WAIT(co, 250, dt);
+					else COROUTINE_WAIT(co, milliseconds, dt);
+					goto print_char;
 				}
 
-			system("pause");
+				COROUTINE_END(co);
+			}
 
-			return 0;
-		}
+			int do_coroutine(coroutine_t* co, float dt)
+			{
+				int keep_going = 1;
+				int milliseconds = 1000;
+
+				COROUTINE_START(co);
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Bob", "Yo Alice. I heard you like mudkips.\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Alice", "No Bob. Not me. Who told you such a thing?\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Bob", "Alice please, don't lie to me. We've known each other a long time.\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Alice", "We have grown apart. I barely know myself.\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Bob", "OK.\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Alice", "Good bye Bob. I wish you the best.\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Bob", "But do you like mudkips?\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Alice", "<has left>\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				COROUTINE_CALL(co, print(co, dt, "Bob", "Well, I like mudkips :)\n"));
+				COROUTINE_WAIT(co, milliseconds, dt);
+				keep_going = 0;
+				COROUTINE_END(co);
+
+				return keep_going;
+			}
+
+			int main()
+			{
+				coroutine_t co;
+				coroutine_init(&co);
+
+				while (do_coroutine(&co, 1))
+				{
+					// Sleep for a second.
+					#ifdef _MSC_VER
+						Sleep(1);
+					#else
+						usleep(1000);
+					#endif
+					}
+
+				system("pause");
+
+				return 0;
+			}
 
 	SEQUENCE POINTS
 
