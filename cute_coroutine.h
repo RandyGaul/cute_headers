@@ -12,6 +12,8 @@
 		this kind of coroutine is to be able to pause a function's execution at any moment,
 		and then resume from that point later.
 
+		Idea comes from: https://www.chiark.greenend.org.uk/~sgtatham/coroutines.html
+
 	USE CASE EXAMPLE
 
 		Here is a quick example: Say you are implementing a dialogue system for a
