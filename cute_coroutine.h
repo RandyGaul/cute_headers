@@ -129,6 +129,22 @@
 		and entered again later. The idea is the sequence points store the code line number
 		inside the coroutine's state, for later resuming.
 
+	LOCAL VARIABLES
+
+		Some special care needs to be taken in order to not screw up local variables when using
+		a coroutine. Since the coroutine is implemented as a big jump table with switches/gotos,
+		local variable initialization can easily be skipped. The idea is that initialization of
+		local variables can only happen after the last sequence point, but not before (since the
+		coroutine is resumed at the last recorded sequence point).
+
+		If a real local variable is needed, it is best to store your local variable externally
+		somewhere, and then handle it inside the coroutine via pointer. This way scoping and
+		initialization of your local variables are handled externally to the coroutine, and can
+		remain unnaffected by the coroutine jumping around.
+
+		However, with some thought and familiarity, most of the instances where a local variable
+		is needed can be easily coaxed into a comfortable form (like in the above example code).
+
 	RUNNING ON WINDOWS
 
 		There's a problem with MSCV. Since MSCV does some nonstandard stuff with their
