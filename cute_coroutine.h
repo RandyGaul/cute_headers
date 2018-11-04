@@ -5,10 +5,6 @@
 
 	cute_coroutine.h - v1.00
 
-	To create implementation (the function definitions)
-		#define CUTE_SERIALIZE_IMPLEMENTATION
-	in *one* C/CPP file (translation unit) that includes this file
-
 	SUMMARY
 
 		This header implements a C-style coroutine API used to implement state machines
