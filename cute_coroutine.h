@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_serialize.h - v1.00
+	cute_coroutine.h - v1.00
 
 	To create implementation (the function definitions)
 		#define CUTE_SERIALIZE_IMPLEMENTATION
