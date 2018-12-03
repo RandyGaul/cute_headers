@@ -281,6 +281,7 @@ struct cute_tiled_layer_t
 	int width;                          // Column count. Same as map width for fixed-size maps.
 	int x;                              // Horizontal layer offset in tiles. Always 0.
 	int y;                              // Vertical layer offset in tiles. Always 0.
+	int id;								// ID of the layer
 	cute_tiled_layer_t* next;           // Pointer to the next layer. NULL if final layer.
 };
 
@@ -345,8 +346,9 @@ struct cute_tiled_map_t
 	cute_tiled_tileset_t* tilesets;     // Linked list of tilesets.
 	int tilewidth;                      // Map grid width.
 	cute_tiled_string_t type;           // `map` (since 1.0).
-	int version;                        // The JSON format version.
+	float version;                      // The JSON format version (like 1.2).
 	int width;                          // Number of tile columns.
+	int nextlayerid;					// The ID of the following layer.
 };
 
 #define CUTE_TILED_H
@@ -1890,6 +1892,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			cute_tiled_read_int(m, &layer->y);
 			break;
 
+		case 3133932603199444032U: // id
+			cute_tiled_read_int(m, &layer->id);
+		break;
+
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
 		}
@@ -2172,12 +2178,16 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		break;
 
 	case 8196820454517111669U: // version
-		cute_tiled_read_int(m, &m->map.version);
+		cute_tiled_read_float(m, &m->map.version);
 		break;
 
 	case 7400839267610537869U: // width
 		cute_tiled_read_int(m, &m->map.width);
 		break;
+
+	case 2498445529143042872U: // nextlayerid
+		cute_tiled_read_int(m, &m->map.nextlayerid);
+	break;
 
 	default:
 		CUTE_TILED_CHECK(0, "Unknown identifier found.");
