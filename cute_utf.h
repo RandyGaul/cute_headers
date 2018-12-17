@@ -41,8 +41,8 @@
 	To convert from utf8 to utf16 use cu_decode8, and pass the codepoint into the
 	cu_encode16 function.
 
-	As additional API there are cu_widen and tuNarrow funcs to operate on arrays.
-	cu_widen converts utf8 to wchar_t (utf16) and tuNarrow converts utf16 back to
+	As additional API there are cu_widen and cu_narrow funcs to operate on arrays.
+	cu_widen converts utf8 to wchar_t (utf16) and cu_shorten converts utf16 back to
 	utf8. Typically these helpers are to facilitate Windows APIs (pretty much
 	what MultiByteToWideChar was for). Each function takes as input the size of
 	the utf8 array, since this size should always be known. Just size the wide
