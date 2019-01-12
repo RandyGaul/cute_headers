@@ -22,7 +22,7 @@ Various single-file cross-platform C/C++ headers implementing self-contianed lib
 **[cute_alloc](cute_alloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
 **[cute_math2d](cute_math2d.h)** | 2d vector math and shape routines | 1.0 | C++
 **[cute_spritebatch](cute_spritebatch.h)** | run-time 2d sprite batcher | 1.01 | C/C++
-**[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.02 | C/C++
+**[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.03 | C/C++
 **[cute_filewatch](cute_filewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 **[cute_ani](cute_ani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
 **[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts | 1.0 | C/C++
