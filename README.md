@@ -1,6 +1,6 @@
 # cute_headers
 
-Various single-file cross-platform C/C++ headers implementing self-contianed libraries.
+Various single-file cross-platform C/C++ headers implementing self-contained libraries.
 
 | library | description | latest version| language(s) 
 |---------|-------------|---------------|-------------
