@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.02
+	cute_tiled.h - v1.03
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -17,8 +17,8 @@
 		is loaded up in entirety and used to fill in a set of structs. The entire
 		struct collection is then handed to the user.
 
-		This header is up to date with Tiled's documentation Revision 9bcd6a6f and
-		verified to work with Tiled stable version 1.1.5.
+		This header is up to date with Tiled's documentation Revision cb92f36d and
+		verified to work with Tiled stable version 1.2.1.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
@@ -28,11 +28,14 @@
 		1.00 (03/24/2018) initial release
 		1.01 (05/04/2018) tile descriptors in tilesets for collision geometry
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
+		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
 */
 
 /*
 	Contributors:
 		ZenToad           1.02 - Bug reports and goto statement errors for g++
+		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
+		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
 */
 
 /*
@@ -108,7 +111,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 /*!
  * Reverses the layers order, so they appear in reverse-order from what is shown in the Tiled editor.
  */
-void cute_tiled_reverse_layers(cute_tiled_map_t* map)
+void cute_tiled_reverse_layers(cute_tiled_map_t* map);
 
 /*!
  * Free all dynamic memory associated with this map.
@@ -281,7 +284,7 @@ struct cute_tiled_layer_t
 	int width;                          // Column count. Same as map width for fixed-size maps.
 	int x;                              // Horizontal layer offset in tiles. Always 0.
 	int y;                              // Vertical layer offset in tiles. Always 0.
-	int id;								// ID of the layer
+	int id;                             // ID of the layer.
 	cute_tiled_layer_t* next;           // Pointer to the next layer. NULL if final layer.
 };
 
@@ -348,7 +351,7 @@ struct cute_tiled_map_t
 	cute_tiled_string_t type;           // `map` (since 1.0).
 	float version;                      // The JSON format version (like 1.2).
 	int width;                          // Number of tile columns.
-	int nextlayerid;					// The ID of the following layer.
+	int nextlayerid;                    // The ID of the following layer.
 };
 
 #define CUTE_TILED_H
@@ -1240,7 +1243,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 	return map;
 }
 
-#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; __debugbreak(); goto cute_tiled_err; } } while (0)
+#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; goto cute_tiled_err; } } while (0)
 #define CUTE_TILED_FAIL_IF(X) do { if (X) { goto cute_tiled_err; } } while (0)
 
 static int cute_tiled_isspace(char c)
@@ -1559,22 +1562,45 @@ cute_tiled_err:
 		CUTE_TILED_FAIL_IF(!cute_tiled_read_vertex_array_internal(m, out_count, out_verts)); \
 	} while (0)
 
+int cute_tiled_skip_until_after_internal(cute_tiled_map_internal_t* m, char c)
+{
+	while (*m->in != c) m->in++;
+	cute_tiled_expect(m, c);
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_skip_until_after(m, c) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_skip_until_after_internal(m, c)); \
+	} while (0)
+
 int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled_property_t** out_properties, int* out_count)
 {
 	int count = 0;
 	int capacity = 32;
-	const char* propertytypes = "propertytypes";
 	cute_tiled_property_t* props = (cute_tiled_property_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_property_t), m->mem_ctx);
 
-	cute_tiled_expect(m, '{');
+	cute_tiled_expect(m, '[');
 
-	while (cute_tiled_peak(m) != '}')
+	while (cute_tiled_peak(m) != ']')
 	{
+		cute_tiled_expect(m, '{');
+
 		cute_tiled_property_t prop;
 		prop.type = CUTE_TILED_PROPERTY_NONE;
 
+		// Read in the property name.
+		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_intern_string(m, &prop.name);
-		cute_tiled_expect(m, ':');
+
+		// Skip the property type. This is unnecessary information since we can deduce the property type while parsing.
+		cute_tiled_skip_until_after(m, ':');
+
+		// Skip extraneous JSON information and go find the actual value data.
+		cute_tiled_skip_until_after(m, ':');
 
 		char c = cute_tiled_peak(m);
 
@@ -1665,18 +1691,12 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		}
 		props[count++] = prop;
 
+		cute_tiled_expect(m, '}');
 		cute_tiled_try(m, ',');
 	}
 
-
-	cute_tiled_expect(m, '}');
+	cute_tiled_expect(m, ']');
 	cute_tiled_expect(m, ',');
-	cute_tiled_read_string(m); // should be "properytypes"
-	for (int i = 0; i < m->scratch_len; ++i) CUTE_TILED_CHECK(m->scratch[i] == propertytypes[i], "Expected \"propertytypes\" string here.");
-	cute_tiled_expect(m, ':');
-	cute_tiled_expect(m, '{');
-	while (cute_tiled_next(m) != '}'); // skip propertytypes since it's not needed
-	cute_tiled_try(m, ',');
 
 	*out_properties = props;
 	*out_count = count;

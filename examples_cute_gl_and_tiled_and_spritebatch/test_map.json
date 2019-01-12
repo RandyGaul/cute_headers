@@ -4,6 +4,7 @@
  "layers":[
         {
          "draworder":"topdown",
+         "id":1,
          "name":"Object Layer 1",
          "objects":[
                 {
@@ -132,7 +133,7 @@
                  "type":"",
                  "visible":true,
                  "width":0,
-                 "x":-57,
+                 "x":-64,
                  "y":8
                 }],
          "opacity":1,
@@ -142,12 +143,12 @@
          "y":0
         }, 
         {
+         "id":2,
          "layers":[
                 {
-                 "compression":"gzip",
-                 "data":"H4sIAAAAAAAACmNgoC2QR8KE1DAQoQ6bHmLsp5YaYu2F6SEVAACae\/PzkAEAAA==",
-                 "encoding":"base64",
+                 "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 31, 31, 0, 0, 0, 0, 0, 0, 31, 31, 0, 31, 0, 0, 0, 0, 0, 0, 31, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 31, 31, 0, 0, 0, 0, 0, 0, 0, 31, 31, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                  "height":10,
+                 "id":3,
                  "name":"Tile Layer 1",
                  "opacity":1,
                  "type":"tilelayer",
@@ -157,10 +158,9 @@
                  "y":0
                 }, 
                 {
-                 "compression":"gzip",
-                 "data":"H4sIAAAAAAAACmNgoD7gRmLLQ\/ncaOLI6uSR1MmjqeVGU8eApA7GR7eTgYA6dLdwo6lBNwMZo5uHDxCrDhkAAE5OA2+QAQAA",
-                 "encoding":"base64",
+                 "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 31, 11, 11, 11, 0, 0, 0, 11, 0, 31, 31, 11, 31, 11, 11, 0, 11, 11, 0, 31, 0, 11, 31, 31, 0, 0, 11, 0, 0, 0, 0, 11, 31, 31, 0, 0, 11, 11, 11, 0, 0, 11, 31, 0, 0, 0, 0, 0, 11, 11, 11, 11, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                  "height":10,
+                 "id":4,
                  "name":"Copy of Tile Layer 1",
                  "opacity":1,
                  "type":"tilelayer",
@@ -170,12 +170,12 @@
                  "y":0
                 }, 
                 {
+                 "id":5,
                  "layers":[
                         {
-                         "compression":"gzip",
-                         "data":"H4sIAAAAAAAACmNgoD7gRmLzImFuHOrkkeTR1XLjUAdjY7OTgQHTPGR1yGbyYlGD7kZkc+ShmBhArDpkAAAmffuZkAEAAA==",
-                         "encoding":"base64",
+                         "data":[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 11, 0, 0, 13, 13, 13, 11, 0, 0, 0, 11, 0, 31, 13, 11, 13, 13, 11, 0, 11, 11, 0, 31, 13, 11, 31, 13, 0, 0, 11, 0, 0, 0, 13, 11, 13, 13, 0, 0, 11, 11, 11, 0, 13, 13, 13, 0, 0, 0, 0, 0, 11, 11, 13, 13, 31, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                          "height":10,
+                         "id":6,
                          "name":"Deep Copy Tile Layer 1",
                          "opacity":1,
                          "type":"tilelayer",
@@ -198,28 +198,42 @@
          "x":0,
          "y":0
         }],
+ "nextlayerid":7,
  "nextobjectid":8,
  "orientation":"orthogonal",
- "properties":
-    {
-     "55":5,
-     "asdfa oaoaoa":"..\/..\/..\/..\/..\/..\/..\/install.res.3082.dll",
-     "bool":true,
-     "custom map property":"#ff000000",
-     "float":92.32,
-     "string":"string\"\"\""
-    },
- "propertytypes":
-    {
-     "55":"int",
-     "asdfa oaoaoa":"file",
-     "bool":"bool",
-     "custom map property":"color",
-     "float":"float",
-     "string":"string"
-    },
+ "properties":[
+        {
+         "name":"55",
+         "type":"int",
+         "value":5
+        }, 
+        {
+         "name":"asdfa oaoaoa",
+         "type":"file",
+         "value":"..\/..\/..\/..\/..\/..\/..\/install.res.3082.dll"
+        }, 
+        {
+         "name":"bool",
+         "type":"bool",
+         "value":true
+        }, 
+        {
+         "name":"custom map property",
+         "type":"color",
+         "value":"#ff000000"
+        }, 
+        {
+         "name":"float",
+         "type":"float",
+         "value":92.32
+        }, 
+        {
+         "name":"string",
+         "type":"string",
+         "value":"string\"\"\""
+        }],
  "renderorder":"right-down",
- "tiledversion":"1.1.4",
+ "tiledversion":"1.2.1",
  "tileheight":32,
  "tilesets":[
         {
@@ -237,6 +251,6 @@
         }],
  "tilewidth":32,
  "type":"map",
- "version":1,
+ "version":1.2,
  "width":10
 }
