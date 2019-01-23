@@ -78,12 +78,18 @@ const char* cu_decode8(const char* text, int* cp);
 // reads text and will return text + 1..4 depending on code point
 char *cu_encode8(char *text, int cp);
 
+// returns the number of bytes needed to encode the code point as utf8
+int cu_codepoint8_size(int cp);
+
 // reads text and will return text + 1..2 depending on decoded code point
 // the code point is stored in cp
 const wchar_t* cu_decode16(const wchar_t* text, int* cp);
 
 // reads text and will return text + 1..2 depending on code point
 wchar_t* cu_encode16(wchar_t* text, int cp);
+
+// returns the number of bytes needed to encode the code point as utf16
+int cu_codepoint16_size(int cp);
 
 // converts utf8 `in` to "wide" format utf16 `out`
 void cu_widen(const char* in, wchar_t* out);
@@ -136,12 +142,22 @@ char *cu_encode8(char *text, int cp)
 {
 	if (cp < 0 || cp > 0x10FFFF) cp = 0xFFFD;
 
-#define TU_EMIT(X, Y, Z) *text++ = X | ((cp >> Y) & Z)
-	     if (cp <    0x80) { TU_EMIT(0x00,0,0x7F); }
-	else if (cp <   0x800) { TU_EMIT(0xC0,6,0x1F); TU_EMIT(0x80, 0, 0x3F); }
-	else if (cp < 0x10000) { TU_EMIT(0xE0,12,0xF); TU_EMIT(0x80, 6, 0x3F); TU_EMIT(0x80, 0, 0x3F); }
-	else                   { TU_EMIT(0xF0,18,0x7); TU_EMIT(0x80, 12, 0x3F); TU_EMIT(0x80, 6, 0x3F); TU_EMIT(0x80, 0, 0x3F); }
+#define CU_EMIT(X, Y, Z) *text++ = X | ((cp >> Y) & Z)
+	     if (cp <    0x80) { CU_EMIT(0x00,0,0x7F); }
+	else if (cp <   0x800) { CU_EMIT(0xC0,6,0x1F); CU_EMIT(0x80, 0,  0x3F); }
+	else if (cp < 0x10000) { CU_EMIT(0xE0,12,0xF); CU_EMIT(0x80, 6,  0x3F); CU_EMIT(0x80, 0, 0x3F); }
+	else                   { CU_EMIT(0xF0,18,0x7); CU_EMIT(0x80, 12, 0x3F); CU_EMIT(0x80, 6, 0x3F); CU_EMIT(0x80, 0, 0x3F); }
 	return text;
+}
+#undef CU_EMIT
+
+int cu_codepoint8_size(int cp)
+{
+	if (cp < 0 || cp > 0x10FFFF) cp = 0xFFFD;
+	     if (cp <    0x80) return 1;
+	else if (cp <   0x800) return 2;
+	else if (cp < 0x10000) return 3;
+	else                   return 4;
 }
 
 // utf16 functions created via RFC-2781
@@ -165,6 +181,12 @@ wchar_t* cu_encode16(wchar_t* text, int cp)
 		*text++ = 0xDC00 | (cp & 0x03FF);
 	}
 	return text;
+}
+
+int cu_codepoint16_size(int cp)
+{
+	if (cp < 0x10000) return 1;
+	else return 2;
 }
 
 void cu_widen(const char* in, wchar_t* out)
