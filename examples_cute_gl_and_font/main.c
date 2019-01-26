@@ -17,7 +17,7 @@
 
 SDL_Window* window;
 SDL_GLContext ctx_gl;
-gl_context_t* ctx_tg;
+gl_context_t* gfx;
 gl_shader_t font_shader;
 gl_renderable_t font_renderable;
 float projection[16];
@@ -81,12 +81,11 @@ void setup_SDL_and_glad(const char* title)
 	printf("OpenGL says : ES %s, GLSL %s\n", glGetString(GL_VERSION), glGetString(GL_SHADING_LANGUAGE_VERSION));
 }
 
-void setup_tinygl()
+void setup_cute_gl()
 {
-	// setup tinygl
 	int clear_bits = GL_COLOR_BUFFER_BIT;
 	int settings_bits = 0;
-	ctx_tg = gl_make_ctx(32, clear_bits, settings_bits);
+	gfx = gl_make_ctx(32, clear_bits, settings_bits);
 
 #define STR(x) #x
 
@@ -135,7 +134,7 @@ void setup_tinygl()
 	glViewport(0, 0, 640, 480);
 
 	gl_send_matrix(&font_shader, "u_mvp", projection);
-	gl_line_mvp(ctx_tg, projection);
+	gl_line_mvp(gfx, projection);
 
 	glEnable(GL_BLEND);
 	glBlendEquation(GL_FUNC_ADD);
@@ -168,26 +167,48 @@ static void* read_file(const char* path, int* size)
 	return data;
 }
 
-void draw_text(cute_font_t* font, const char* text, float x, float y, float line_height)
+void draw_text(cute_font_t* font, const char* text, float x, float y, float line_height, float clip_region, float wrap_x)
 {
 	float w = (float)cute_font_text_width(font, text);
 	float h = (float)cute_font_text_height(font, text);
-	cute_font_fill_vertex_buffer(font, text, x + -w / 2, y + h / 2, line_height, verts, 1024, &vert_count);
 
-	gl_draw_call_t call;
-	call.textures[0] = (uint32_t)font->atlas_id;
-	call.texture_count = 1;
-	call.r = &font_renderable;
-	call.verts = verts;
-	call.vert_count = vert_count;
+	float screen_w = 640.0f;
+	float screen_h = 480.0f;
+	cute_font_rect_t clip_rect;
+	clip_rect.left    = -screen_w / 4.0f * clip_region;
+	clip_rect.right   =  screen_w / 4.0f * clip_region + 0.5f;
+	clip_rect.top     =  screen_h / 4.0f * clip_region + 0.5f;
+	clip_rect.bottom  = -screen_h / 4.0f * clip_region;
 
-	gl_push_draw_call(ctx_tg, call);
+	// Uncomment lines to disable clip rect on one side.
+	//clip_rect.left    = -screen_w / 4.0f;
+	//clip_rect.right   =  screen_w / 4.0f;
+	//clip_rect.top     =  screen_h / 4.0f;
+	//clip_rect.bottom  = -screen_h / 4.0f;
+
+	float x0 = x + -w / 2;
+	float y0 = y + h / 2;
+	float wrap_width = wrap_x - x0;
+
+	cute_font_fill_vertex_buffer(font, text, x0, y0, wrap_width, line_height, &clip_rect, verts, 1024 * 2, &vert_count);
+
+	if (vert_count)
+	{
+		gl_draw_call_t call;
+		call.textures[0] = (uint32_t)font->atlas_id;
+		call.texture_count = 1;
+		call.r = &font_renderable;
+		call.verts = verts;
+		call.vert_count = vert_count;
+
+		gl_push_draw_call(gfx, call);
+	}
 }
 
 int main(int argc, char** argv)
 {
-	setup_SDL_and_glad("tinyfont demo");
-	setup_tinygl();
+	setup_SDL_and_glad("cute_font demo");
+	setup_cute_gl();
 
 	// Load Courier New exported from BMFont.
 	// See: http://www.angelcode.com/products/bmfont/
@@ -228,8 +249,10 @@ int main(int argc, char** argv)
 	free(mitton_memory);
 	cp_free_png(&img);
 
-	verts = malloc(sizeof(cute_font_vert_t) * 1024);
+	verts = malloc(sizeof(cute_font_vert_t) * 1024 * 2);
 	const char* sample_text = (const char*)read_file("sample_text.txt", 0);
+	float clip_region = 1.0f;
+	float wrap_width = 320.0f;
 
 	int application_running = 1;
 	int which = 0;
@@ -248,18 +271,59 @@ int main(int argc, char** argv)
 			{
 				SDL_Keycode key = event.key.keysym.sym;
 				if (key == SDLK_SPACE) which = which + 1 < 3 ? which + 1 : 0;
+
+				if (key == SDLK_z)
+				{
+					clip_region -= 0.1f;
+					if (clip_region < 0) clip_region = 0;
+				}
+
+				else if (key == SDLK_x)
+				{
+					clip_region += 0.1f;
+					if (clip_region > 1.0f) clip_region = 1.0f;
+				}
+
+				if (key == SDLK_a)
+				{
+					wrap_width -= 3.0f;
+					if (wrap_width < 0) wrap_width = 0;
+				}
+
+				else if (key == SDLK_s)
+				{
+					wrap_width += 3.0f;
+					if (wrap_width > 320.0f) wrap_width = 320.0f;
+				}
 			}	break;
 			}
 		}
 
+		float screen_w = 640.0f;
+		float screen_h = 480.0f;
+		cute_font_rect_t clip_rect;
+		clip_rect.left    = -screen_w / 4.0f * clip_region;
+		clip_rect.right   =  screen_w / 4.0f * clip_region + 0.5f;
+		clip_rect.top     =  screen_h / 4.0f * clip_region + 0.5f;
+		clip_rect.bottom  = -screen_h / 4.0f * clip_region;
+
+		gl_line(gfx, clip_rect.left, clip_rect.top, 0, clip_rect.left, clip_rect.bottom, 0);
+		gl_line(gfx, clip_rect.left, clip_rect.top, 0, clip_rect.right, clip_rect.top, 0);
+		gl_line(gfx, clip_rect.left, clip_rect.bottom, 0, clip_rect.right, clip_rect.bottom, 0);
+		gl_line(gfx, clip_rect.right, clip_rect.bottom, 0, clip_rect.right, clip_rect.top, 0);
+
+		float wrap_line_x = (wrap_width * 2.0f - screen_w / 2.0f) / 2.0f;
+		float wrap_line_y = (screen_h / 2.0f) / 2.0f;
+		gl_line(gfx, wrap_line_x, wrap_line_y, 0, wrap_line_x, -wrap_line_y, 0);
+
 		switch (which)
 		{
-		case 0: draw_text(courier_new, sample_text, 0, 0, 1); break;
-		case 1: draw_text(emerald, sample_text, 0, 0, 2); break;
-		case 2: draw_text(mitton, sample_text, 0, 0, 1); break;
+		case 0: draw_text(courier_new, sample_text, 0, 0, 1, clip_region, wrap_line_x); break;
+		case 1: draw_text(emerald, sample_text, 0, 0, 2, clip_region, wrap_line_x); break;
+		case 2: draw_text(mitton, sample_text, 0, 0, 1, clip_region, wrap_line_x); break;
 		}
 
-		gl_flush(ctx_tg, swap_buffers, 0, 640, 480);
+		gl_flush(gfx, swap_buffers, 0, 640, 480);
 		CUTE_GL_PRINT_GL_ERRORS();
 	}
 

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinyfont.h - v1.00
+	tinyfont.h - v1.01
 
 	To create implementation (the function definitions)
 		#define CUTE_FONT_IMPLEMENTATION
@@ -38,6 +38,8 @@
 
 	Revision history:
 		1.0  (05/13/2018) initial release
+		1.1  (01/25/2019) added word-wrapping and CPU-side clipping support to
+		                  the function `cute_font_fill_vertex_buffer`
 */
 
 #if !defined(CUTE_FONT_H)
@@ -75,6 +77,7 @@ void cute_font_free(cute_font_t* font);
 
 int cute_font_text_width(cute_font_t* font, const char* text);
 int cute_font_text_height(cute_font_t* font, const char* text);
+int cute_font_max_glyph_height(cute_font_t* font, const char* text);
 
 int cute_font_get_glyph_index(cute_font_t* font, int code); // returns run-time glyph index associated with a utf32 codepoint (unicode)
 cute_font_glyph_t* cute_font_get_glyph(cute_font_t* font, int index); // returns a glyph, given run-time glyph index
@@ -90,12 +93,28 @@ typedef struct cute_font_vert_t
 	float u, v;
 } cute_font_vert_t;
 
+typedef struct cute_font_rect_t
+{
+	float left;
+	float right;
+	float top;
+	float bottom;
+} cute_font_rect_t;
+
 // Fills in an array of triangles, two triangles for each quad, one quad for each text glyph.
 // Will return 0 if the function tries to overrun the vertex buffer. Quads are setup in 2D where
-// the y axis points up, x axis points right. The top left of the first glyph is placed at the
+// the y axis points up, x axis points left. The top left of the first glyph is placed at the
 // coordinate {`x`, `y`}. Newlines move quads downward by the text height added with `line_height`.
-// `count_written` contains the number of outputted vertices.
-int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x, float y, float line_height, cute_font_vert_t* buffer, int buffer_max, int* count_written);
+// `count_written` contains the number of outputted vertices. `wrap_w` is used for word wrapping if
+// positive, and ignored if negative. `clip_rect`, if not NULL, will be used to perform CPU-side
+// clipping to make sure quads are only output within the `clip_rect` bounding box. Clipping is
+// useful to implement scrollable text, and keep multiple different text instances within a single
+// vertex buffer (to reduce draw calls), as opposed to using a GPU-side scissor box, which would
+// require a different draw call for each scissor.
+int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x, float y, float wrap_w, float line_height, cute_font_rect_t* clip_rect, cute_font_vert_t* buffer, int buffer_max, int* count_written);
+
+// Decodes a utf8 codepoint and returns the advanced string pointer.
+const char* cute_font_decode_utf8(const char* text, int* cp);
 
 #define CUTE_FONT_H
 #endif
@@ -141,6 +160,11 @@ int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x, f
 #if !defined(CUTE_FONT_STRTOD)
 	#include <stdlib.h>
 	#define CUTE_FONT_STRTOD strtod
+#endif
+
+#if !defined(CUTE_FONT_STRCHR)
+	#include <string.h>
+	#define CUTE_FONT_STRCHR strchr
 #endif
 
 #ifndef HASHTABLE_MEMSET
@@ -1221,6 +1245,21 @@ int cute_font_text_height(cute_font_t* font, const char* text)
 	return h;
 }
 
+int cute_font_max_glyph_height(cute_font_t* font, const char* text)
+{
+	int max_height = 0;
+
+	while (*text)
+	{
+		int c;
+		text = cute_font_decode_utf8(text, &c);
+		int h = (int)cute_font_get_glyph(font, cute_font_get_glyph_index(font, c))->h;
+		if (h > max_height) max_height = h;
+	}
+
+	return max_height;
+}
+
 int cute_font_get_glyph_index(cute_font_t* font, int code)
 {
 	int lo = 0;
@@ -1271,78 +1310,250 @@ void cute_font_add_kerning_pair(cute_font_t* font, int code0, int code1, int ker
 	hashtable_insert(&font->kern->table, key, (void*)(size_t)kerning);
 }
 
-int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x0, float y0, float line_height, cute_font_vert_t* buffer, int buffer_max, int* count_written)
+static int s_is_space(int c)
+{
+	switch (c)
+	{
+	case ' ':
+	case '\n':
+	case '\t':
+	case '\v':
+	case '\f':
+	case '\r':
+		return 1;
+	}
+	return 0;
+}
+
+static const char* s_find_end_of_line(cute_font_t* font, const char* text, float wrap_width)
+{
+	float x = 0;
+	const char* start_of_word = 0;
+	float word_w = 0;
+
+	while (*text)
+	{
+		int cp;
+		const char* text_prev = text;
+		text = cute_font_decode_utf8(text, &cp);
+		cute_font_glyph_t* glyph = cute_font_get_glyph(font, cute_font_get_glyph_index(font, cp));
+
+		if (cp == '\n')
+		{
+			x = 0;
+			word_w = 0;
+			start_of_word = 0;
+			continue;
+		}
+		else if (cp == '\r') continue;
+		else
+		{
+			if (s_is_space(cp))
+			{
+				x += word_w + glyph->xadvance;
+				word_w = 0;
+				start_of_word = 0;
+			}
+			else
+			{
+				if (!start_of_word) start_of_word = text_prev;
+
+				if (x + word_w + glyph->xadvance < wrap_width)
+				{
+					word_w += glyph->xadvance;
+				}
+				else
+				{
+					// Put entire word on the next line.
+					if (word_w + glyph->xadvance < wrap_width)
+					{
+						return start_of_word;
+					}
+
+					// Word itself does not fit on one line, so just cut it here.
+					else
+					{
+						return text;
+					}
+				}
+			}
+		}
+	}
+
+	return text;
+}
+
+static inline float s_dist_to_plane(float v, float d)
+{
+	return v - d;
+}
+
+static inline float s_intersect(float a, float b, float u0, float u1, float plane_d)
+{
+	float da = s_dist_to_plane(a, plane_d);
+	float db = s_dist_to_plane(b, plane_d);
+	return u0 + (u1 - u0) * (da / (da - db));
+}
+
+int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x0, float y0, float wrap_w, float line_height, cute_font_rect_t* clip_rect, cute_font_vert_t* buffer, int buffer_max, int* count_written)
 {
 	float x = x0;
 	float y = y0;
 	float font_height = (float)font->font_height;
 	int i = 0;
+	const char* end_of_line = 0;
+	int wrap_enabled = wrap_w >= 0;
+	cute_font_rect_t rect;
+	if (clip_rect) rect = *clip_rect;
 
 	while (*text)
 	{
-		cute_font_vert_t v;
-		int c;
-		text = cute_font_decode_utf8(text, &c);
+		int cp;
+		const char* prev_text = text;
+		text = cute_font_decode_utf8(text, &cp);
 
-		if (c == '\n')
+		// Word wrapping logic.
+		if (wrap_enabled)
+		{
+			if (!end_of_line)
+			{
+				end_of_line = s_find_end_of_line(font, prev_text, wrap_w);
+			}
+
+			int finished_rendering_line = !(text < end_of_line);
+			if (finished_rendering_line)
+			{
+				end_of_line = 0;
+				x = x0;
+				y -= font_height + line_height;
+
+				// Skip whitespace at the beginning of new lines.
+				while (cp)
+				{
+					cp = *text;
+					if (s_is_space(cp)) ++text;
+					else if (cp == '\n') { text++; break; }
+					else break;
+				}
+
+				continue;
+			}
+		}
+
+		if (cp == '\n')
 		{
 			x = x0;
 			y -= font_height + line_height;
 			continue;
 		}
-		else if (c == '\r') continue;
+		else if (cp == '\r') continue;
 
-		cute_font_glyph_t* glyph = cute_font_get_glyph(font, cute_font_get_glyph_index(font, c));
+		cute_font_glyph_t* glyph = cute_font_get_glyph(font, cute_font_get_glyph_index(font, cp));
 		float x0 = (float)glyph->xoffset;
 		float y0 = -(float)glyph->yoffset;
 
-		// top left
-		v.x = x + x0;
-		v.y = y + y0;
-		v.u = glyph->minx;
-		v.v = glyph->miny;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+		// Bottom left (min).
+		float ax = x + x0;
+		float ay = y - glyph->h + y0;
+		float au = glyph->minx;
+		float av = glyph->maxy;
 
-		// bottom left
-		v.x = x + x0;
-		v.y = y - glyph->h + y0;
-		v.u = glyph->minx;
-		v.v = glyph->maxy;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+		// Top right (max).
+		float bx = x + glyph->w + x0;
+		float by = y + y0;
+		float bu = glyph->maxx;
+		float bv = glyph->miny;
 
-		// top right
-		v.x = x + glyph->w + x0;
-		v.y = y + y0;
-		v.u = glyph->maxx;
-		v.v = glyph->miny;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+		int clipped_away = 0;
 
-		// bottom right
-		v.x = x + glyph->w + x0;
-		v.y = y - glyph->h + y0;
-		v.u = glyph->maxx;
-		v.v = glyph->maxy;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+		if (clip_rect)
+		{
+			int inside_clip_x_axis = ((x + x0) < rect.right) | (x + glyph->w + x0 > rect.left);
+			clipped_away = !inside_clip_x_axis;
 
-		// top right
-		v.x = x + glyph->w + x0;
-		v.y = y + y0;
-		v.u = glyph->maxx;
-		v.v = glyph->miny;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+			if (inside_clip_x_axis)
+			{
+				if (ax < rect.left)
+				{
+					au = s_intersect(ax, bx, au, bu, rect.left);
+					ax = rect.left;
+				}
 
-		// bottom left
-		v.x = x + x0;
-		v.y = y - glyph->h + y0;
-		v.u = glyph->minx;
-		v.v = glyph->maxy;
-		CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
-		buffer[i++] = v;
+				if (bx > rect.right)
+				{
+					bu = s_intersect(ax, bx, au, bu, rect.right);
+					bx = rect.right;
+				}
+
+				if (ay < rect.bottom)
+				{
+					av = s_intersect(ay, by, av, bv, rect.bottom);
+					ay = rect.bottom;
+				}
+
+				if (by > rect.top)
+				{
+					bv = s_intersect(ay, by, av, bv, rect.top);
+					by = rect.top;
+				}
+
+				clipped_away = (ax >= bx) | (ay >= by);
+			}
+		}
+
+		if (!clipped_away)
+		{
+			// Quad is set up as:
+			//
+			// a----d
+			// |   /|
+			// |  / |
+			// | /  |
+			// |/   |
+			// b----c
+
+			cute_font_vert_t a;
+			a.x = ax;
+			a.y = by;
+			a.u = au;
+			a.v = bv;
+
+			cute_font_vert_t b;
+			b.x = ax;
+			b.y = ay;
+			b.u = au;
+			b.v = av;
+
+			cute_font_vert_t c;
+			c.x = bx;
+			c.y = ay;
+			c.u = bu;
+			c.v = av;
+
+			cute_font_vert_t d;
+			d.x = bx;
+			d.y = by;
+			d.u = bu;
+			d.v = bv;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = a;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = b;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = d;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = d;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = b;
+
+			CUTE_FONT_CHECK(i < buffer_max, "`buffer_max` is too small.");
+			buffer[i++] = c;
+		}
 
 		x += glyph->xadvance;
 	}
