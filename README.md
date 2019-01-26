@@ -25,7 +25,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.03 | C/C++
 **[cute_filewatch](cute_filewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 **[cute_ani](cute_ani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
-**[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts | 1.0 | C/C++
+**[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts, word wrapping, CPU-side clipping, kerning | 1.01 | C/C++
 **[cute_sync](cute_sync.h)** | Collection of practical syncronization primitives, including read/write lock and threadpool/task system | 1.0 | C/C++
 
 &ast; Not yet hit first release
