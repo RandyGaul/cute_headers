@@ -38,7 +38,7 @@
 
 	Revision history:
 		1.0  (05/13/2018) initial release
-		1.1  (01/25/2019) added word-wrapping and CPU-side clipping support to
+		1.01 (01/25/2019) added word-wrapping and CPU-side clipping support to
 		                  the function `cute_font_fill_vertex_buffer`
 */
 
