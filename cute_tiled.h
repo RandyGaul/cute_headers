@@ -1182,6 +1182,7 @@ struct cute_tiled_map_internal_t
 
 void* cute_tiled_alloc(cute_tiled_map_internal_t* m, int size)
 {
+	if (size > m->page_size) return NULL; // Should never happen.
 	if (m->bytes_left_on_page < size)
 	{
 		cute_tiled_page_t* page = (cute_tiled_page_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_page_t) + m->page_size, m->mem_ctx);
@@ -2292,9 +2293,56 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 	cute_tiled_deintern_layer(m, layer);
 }
 
+static void cute_tiled_free_objects(cute_tiled_object_t* objects, void* mem_ctx)
+{
+	CUTE_TILED_UNUSED(mem_ctx);
+	cute_tiled_object_t* object = objects;
+	while (object)
+	{
+		if (object->properties) CUTE_TILED_FREE(object->properties, mem_ctx);
+		if (object->vertices) CUTE_TILED_FREE(object->vertices, mem_ctx);
+		object = object->next;
+	}
+}
+
+static void cute_tiled_free_layers(cute_tiled_layer_t* layers, void* mem_ctx)
+{
+	CUTE_TILED_UNUSED(mem_ctx);
+	cute_tiled_layer_t* layer = layers;
+	while (layer)
+	{
+		if (layer->data) CUTE_TILED_FREE(layer->data, mem_ctx);
+		if (layer->properties) CUTE_TILED_FREE(layer->properties, mem_ctx);
+		cute_tiled_free_layers(layer->layers, mem_ctx);
+		cute_tiled_free_objects(layer->objects, mem_ctx);
+		layer = layer->next;
+	}
+}
+
 static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 {
 	strpool_embedded_term(&m->strpool);
+
+	cute_tiled_free_layers(m->map.layers, m->mem_ctx);
+	if (m->map.properties) CUTE_TILED_FREE(m->map.properties, m->mem_ctx);
+
+	cute_tiled_tileset_t* tileset = m->map.tilesets;
+	while (tileset)
+	{
+		if (tileset->properties) CUTE_TILED_FREE(tileset->properties, m->mem_ctx);
+		cute_tiled_tile_descriptor_t* desc = tileset->tiles;
+		while (desc)
+		{
+			if (desc->properties) CUTE_TILED_FREE(desc->properties, m->mem_ctx);
+			cute_tiled_free_layers(desc->objectgroup, m->mem_ctx);
+			desc = desc->next;
+		}
+		tileset = tileset->next;
+	}
+
+	// cute_tiled_read_csv_integers
+	// cute_tiled_read_vertex_array
+	// cute_tiled_read_properties
 
 	cute_tiled_page_t* page = m->pages;
 	while (page)
