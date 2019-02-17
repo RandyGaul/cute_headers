@@ -942,6 +942,8 @@ cp_image_t cp_load_png_mem(const void* png_data, int png_length)
 	// +1 for filter byte (which is dumb! just stick this at file header...)
 	w = cp_make32(ihdr) + 1;
 	h = cp_make32(ihdr + 4);
+	CUTE_PNG_CHECK(w >= 1, "invalid IHDR chunk found, image width was less than 1");
+	CUTE_PNG_CHECK(h >= 1, "invalid IHDR chunk found, image height was less than 1");
 	pix_bytes = w * h * sizeof(cp_pixel_t);
 	img.w = w - 1;
 	img.h = h;
