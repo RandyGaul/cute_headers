@@ -993,6 +993,10 @@ cp_image_t cp_load_png_mem(const void* png_data, int png_length)
 	CUTE_PNG_CHECK((data[0] & 0xf0) <= 0x70, "innapropriate window size detected");
 	CUTE_PNG_CHECK(!(data[1] & 0x20), "preset dictionary is present and not supported");
 
+	// check for integer overflow
+	CUTE_PNG_CHECK(cp_out_size(&img, 4) >= 1, "invalid image size found");
+	CUTE_PNG_CHECK(cp_out_size(&img, bpp) >= 1, "invalid image size found");
+
 	out = (uint8_t*)img.pix + cp_out_size(&img, 4) - cp_out_size(&img, bpp);
 	CUTE_PNG_CHECK(cp_inflate(data + 2, datalen - 6, out, pix_bytes), "DEFLATE algorithm failed");
 	CUTE_PNG_CHECK(cp_unfilter(img.w, img.h, bpp, out), "invalid filter byte found");
