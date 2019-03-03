@@ -56,8 +56,11 @@ int sprite_verts_count;
 vertex_t sprite_verts[SPRITE_VERTS_MAX];
 
 // callbacks for cute_spritebatch.h
-void batch_report(spritebatch_sprite_t* sprites, int count)
+void batch_report(spritebatch_sprite_t* sprites, int count, int texture_w, int texture_h, void* udata)
 {
+	(void)texture_w;
+	(void)texture_h;
+	(void)udata;
 	// build the draw call
 	gl_draw_call_t call;
 	call.r = &sprite_renderable;
@@ -155,13 +158,15 @@ void batch_report(spritebatch_sprite_t* sprites, int count)
 	gl_push_draw_call(ctx_tg, call);
 }
 
-void* get_pixels(SPRITEBATCH_U64 image_id)
+void get_pixels(SPRITEBATCH_U64 image_id, void* buffer, int bytes_to_fill, void* udata)
 {
-	return images[image_id];
+	(void)udata;
+	memcpy(buffer, images[image_id], bytes_to_fill);
 }
 
-SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h)
+SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h, void* udata)
 {
+	(void)udata;
 	GLuint location;
 	glGenTextures(1, &location);
 	glBindTexture(GL_TEXTURE_2D, location);
@@ -172,8 +177,9 @@ SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h)
 	return (SPRITEBATCH_U64)location;
 }
 
-void destroy_texture_handle(SPRITEBATCH_U64 texture_id)
+void destroy_texture_handle(SPRITEBATCH_U64 texture_id, void* udata)
 {
+	(void)udata;
 	GLuint id = (GLuint)texture_id;
 	glDeleteTextures(1, &id);
 }
@@ -636,7 +642,7 @@ int main(int argc, char** argv)
 	config.delete_texture_callback = destroy_texture_handle;    // used to destroy a texture handle from `spritebatch_defrag`
 
 	// initialize cute_spritebatch
-	int failed = spritebatch_init(&sb, &config);
+	int failed = spritebatch_init(&sb, &config, NULL);
 	if (failed)
 	{
 		printf("spritebatch_init failed due to bad configuration values, or out of memory error.");

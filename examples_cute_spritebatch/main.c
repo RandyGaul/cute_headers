@@ -92,8 +92,11 @@ sprite_t make_sprite(SPRITEBATCH_U64 image_id, float x, float y, float scale, fl
 }
 
 // callbacks for cute_spritebatch.h
-void batch_report(spritebatch_sprite_t* sprites, int count)
+void batch_report(spritebatch_sprite_t* sprites, int count, int texture_w, int texture_h, void* udata)
 {
+	(void)udata;
+	(void)texture_w;
+	(void)texture_h;
 	//printf("begin batch\n");
 	//for (int i = 0; i < count; ++i) printf("\t%llu\n", sprites[i].texture_id);
 	//printf("end batch\n");
@@ -189,13 +192,15 @@ void batch_report(spritebatch_sprite_t* sprites, int count)
 	gl_push_draw_call(ctx_tg, call);
 }
 
-void* get_pixels(SPRITEBATCH_U64 image_id)
+void get_pixels(SPRITEBATCH_U64 image_id, void* buffer, int bytes_to_fill, void* udata)
 {
-	return images[image_id].pix;
+	(void)udata;
+	memcpy(buffer, images[image_id].pix, bytes_to_fill);
 }
 
-SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h)
+SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h, void* udata)
 {
+	(void)udata;
 	GLuint location;
 	glGenTextures(1, &location);
 	glBindTexture(GL_TEXTURE_2D, location);
@@ -206,8 +211,9 @@ SPRITEBATCH_U64 generate_texture_handle(void* pixels, int w, int h)
 	return (SPRITEBATCH_U64)location;
 }
 
-void destroy_texture_handle(SPRITEBATCH_U64 texture_id)
+void destroy_texture_handle(SPRITEBATCH_U64 texture_id, void* udata)
 {
+	(void)udata;
 	GLuint id = (GLuint)texture_id;
 	glDeleteTextures(1, &id);
 }
@@ -330,9 +336,11 @@ void swap_buffers()
 spritebatch_config_t get_demo_config()
 {
 	spritebatch_config_t config;
+	spritebatch_set_default_config(&config);
 	config.pixel_stride = sizeof(uint8_t) * 4; // RGBA uint8_t from cute_png.h
 	config.atlas_width_in_pixels = 1024;
 	config.atlas_height_in_pixels = 1024;
+	config.atlas_use_border_pixels = 0;
 	config.ticks_to_decay_texture = 3;
 	config.lonely_buffer_count_till_flush = 1;
 	config.ratio_to_decay_atlas = 0.5f;
@@ -449,7 +457,7 @@ int main(int argc, char** argv)
 	config.delete_texture_callback = destroy_texture_handle;    // used to destroy a texture handle from `spritebatch_defrag`
 
 	// initialize cute_spritebatch
-	spritebatch_init(&sb, &config);
+	spritebatch_init(&sb, &config, NULL);
 
 	void (*scenes[])() = {
 		scene0,

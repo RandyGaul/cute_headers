@@ -114,6 +114,10 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 cp_image_t cp_load_png(const char *file_name);
 cp_image_t cp_load_png_mem(const void *png_data, int png_length);
 void cp_free_png(cp_image_t* img);
+void cp_flip_image_horizontal(cp_image_t* img);
+
+// Reads the w/h of the png without doing any other decompression or parsing.
+void cp_load_png_wh(const void* png_data, int png_length, int* w, int* h);
 
 // loads indexed (paletted) pngs, but does not depalette the image into RGBA pixels
 // these two functions return cp_indexed_image_t::pix as 0 in event of errors
@@ -877,7 +881,7 @@ static uint8_t cp_get_alpha_for_indexed_image(int index, const uint8_t* trns, ui
 	else return trns[index];
 }
 
-static void tpDepalette(int w, int h, uint8_t* src, cp_pixel_t* dst, const uint8_t* plte, const uint8_t* trns, uint32_t trns_len)
+static void cp_depalette(int w, int h, uint8_t* src, cp_pixel_t* dst, const uint8_t* plte, const uint8_t* trns, uint32_t trns_len)
 {
 	for (int y = 0; y < h; ++y)
 	{
@@ -1005,7 +1009,7 @@ cp_image_t cp_load_png_mem(const void* png_data, int png_length)
 	{
 		CUTE_PNG_CHECK(plte, "color type of indexed requires a PLTE chunk");
 		uint32_t trns_len = trns ? cp_get_chunk_byte_length(trns) : 0;
-		tpDepalette(img.w, img.h, out, img.pix, plte, trns, trns_len);
+		cp_depalette(img.w, img.h, out, img.pix, plte, trns, trns_len);
 	}
 	else cp_convert(bpp, img.w, img.h, out, img.pix);
 
@@ -1036,6 +1040,54 @@ void cp_free_png(cp_image_t* img)
 	CUTE_PNG_FREE(img->pix);
 	img->pix = 0;
 	img->w = img->h = 0;
+}
+
+void cp_flip_image_horizontal(cp_image_t* img)
+{
+	cp_pixel_t* pix = img->pix;
+	int w = img->w;
+	int h = img->h;
+	int flips = h / 2;
+	for (int i = 0; i < flips; ++i)
+	{
+		cp_pixel_t* a = pix + w * i;
+		cp_pixel_t* b = pix + w * (h - i - 1);
+		for (int j = 0; j < w; ++j)
+		{
+			cp_pixel_t t = *a;
+			*a = *b;
+			*b = t;
+			++a;
+			++b;
+		}
+	}
+}
+
+void cp_load_png_wh(const void* png_data, int png_length, int* w_out, int* h_out)
+{
+	const char* sig = "\211PNG\r\n\032\n";
+	const uint8_t* ihdr;
+	cp_raw_png_t png;
+	int w, h;
+	png.p = (uint8_t*)png_data;
+	png.end = (uint8_t*)png_data + png_length;
+
+	if (w_out) *w_out = 0;
+	if (h_out) *h_out = 0;
+
+	CUTE_PNG_CHECK(!memcmp(png.p, sig, 8), "incorrect file signature (is this a png file?)");
+	png.p += 8;
+
+	ihdr = cp_chunk(&png, "IHDR", 13);
+	CUTE_PNG_CHECK(ihdr, "unable to find IHDR chunk");
+
+	// +1 for filter byte (which is dumb! just stick this at file header...)
+	w = cp_make32(ihdr) + 1;
+	h = cp_make32(ihdr + 4);
+	if (w_out) *w_out = w - 1;
+	if (h_out) *h_out = h;
+
+	cp_err:;
 }
 
 cp_indexed_image_t cp_load_indexed_png(const char* file_name)

@@ -2372,14 +2372,18 @@ void filewatch_actual_path_to_virtual_path(filewatch_t* filewatch, const char* a
 {
 	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
 	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
-	filewatch_path_concat_internal(mount_as, actual_path + CUTE_FILEWATCH_STRLEN(mount_path), virtual_path, virtual_path_capacity);
+	const char* offset_actual_path = actual_path + CUTE_FILEWATCH_STRLEN(mount_as);
+	offset_actual_path = *offset_actual_path == '/' ? offset_actual_path + 1 : offset_actual_path;
+	filewatch_path_concat_internal(mount_as, offset_actual_path, virtual_path, virtual_path_capacity);
 }
 
 void filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity)
 {
 	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
 	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
-	filewatch_path_concat_internal(mount_path, virtual_path + CUTE_FILEWATCH_STRLEN(mount_as), actual_path, actual_path_capacity);
+	const char* offset_virtual_path = virtual_path + CUTE_FILEWATCH_STRLEN(mount_as);
+	offset_virtual_path = *offset_virtual_path == '/' ? offset_virtual_path + 1 : offset_virtual_path;
+	filewatch_path_concat_internal(mount_path, offset_virtual_path, actual_path, actual_path_capacity);
 }
 
 #endif // CUTE_FILEWATCH_IMPLEMENTATION_ONCE
