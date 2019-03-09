@@ -324,7 +324,7 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 // from shape A to shape B. out_normal can be NULL. iterations is an optional parameter. use_radius
 // will apply radii for capsules and circles (if set to false, spheres are treated as points and
 // capsules are treated as line segments i.e. rays).
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, int* iterations);
+float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
@@ -390,6 +390,7 @@ C2_INLINE float c2Hmin(c2v a) { return c2Min(a.x, a.y); }
 C2_INLINE float c2Hmax(c2v a) { return c2Max(a.x, a.y); }
 C2_INLINE float c2Len(c2v a) { return c2Sqrt(c2Dot(a, a)); }
 C2_INLINE c2v c2Norm(c2v a) { return c2Div(a, c2Len(a)); }
+C2_INLINE c2v c2SafeNorm(c2v a) { float sq = c2Dot(a, a); return sq ? c2Div(a, c2Len(a)) : c2V(0, 0); }
 C2_INLINE c2v c2Neg(c2v a) { return c2V(-a.x, -a.y); }
 C2_INLINE c2v c2Lerp(c2v a, c2v b, float t) { return c2Add(a, c2Mulvs(c2Sub(b, a), t)); }
 C2_INLINE int c2Parallel(c2v a, c2v b, float kTol)
@@ -922,7 +923,12 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 		int iB = c2Support(pB.verts, pB.count, c2MulrvT(bx.r, d));
 		c2v sB = c2Mulxv(bx, pB.verts[iB]);
 
-		++iter;
+		c2sv* v = verts + s.count;
+		v->iA = iA;
+		v->sA = sA;
+		v->iB = iB;
+		v->sB = sB;
+		v->p = c2Sub(v->sB, v->sA);
 
 		int dup = 0;
 		for (int i = 0; i < save_count; ++i)
@@ -935,13 +941,8 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 		}
 		if (dup) break;
 
-		c2sv* v = verts + s.count;
-		v->iA = iA;
-		v->sA = sA;
-		v->iB = iB;
-		v->sB = sB;
-		v->p = c2Sub(v->sB, v->sA);
 		++s.count;
+		++iter;
 	}
 
 	c2v a, b;
@@ -965,6 +966,7 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 			c2v n = c2Norm(c2Sub(b, a));
 			a = c2Add(a, c2Mulvs(n, rA));
 			b = c2Sub(b, c2Mulvs(n, rB));
+			if (a.x == b.x && a.y == b.y) dist = 0;
 		}
 
 		else
@@ -1005,7 +1007,7 @@ static C2_INLINE float c2Step(float t, const void* A, C2_TYPE typeA, const c2x* 
 	return d;
 }
 
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, int* iterations)
+float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations)
 {
 	float t = 0;
 	c2x ax;
@@ -1014,23 +1016,34 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 	else ax = *ax_ptr;
 	if (!bx_ptr) bx = c2xIdentity();
 	else bx = *bx_ptr;
-	c2v a, b;
+	c2v a, b, n;
 	c2GJKCache cache;
 	cache.count = 0;
 	float d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
 	c2v v = c2Sub(vB, vA);
+	n = c2SafeNorm(c2Sub(b, a));
 
 	int iter = 0;
-	while (c2Abs(d) > 1.0e-5f && t < 1)
+	while (d > 1.0e-5f && t < 1)
 	{
-		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
-		float delta = c2Abs(d) / velocity_bound;
-		t += delta;
-		d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
 		++iter;
+		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
+		if (!velocity_bound) return 1;
+		float delta = d / velocity_bound;
+		t += delta;
+		c2v a0, b0;
+		d = c2Step(t, A, typeA, &ax, vA, &a0, B, typeB, &bx, vB, &b0, use_radius, &cache);
+		if (d)
+		{
+			a = a0;
+			b = b0;
+			n = c2Sub(b, a);
+		}
+		else break;
 	}
 
-	if (out_normal) *out_normal = c2Norm(c2Sub(b, a));
+	if (out_normal) *out_normal = c2SafeNorm(n);
+	if (out_contact_point) *out_contact_point = c2Mulvs(c2Add(a, b), 0.5f);
 	if (iterations) *iterations = iter;
 	return t >= 1 ? 1 : t;
 }
@@ -1486,6 +1499,7 @@ void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m)
 	p.count = 4;
 	c2Norms(p.verts, p.norms, 4);
 	c2CapsuletoPolyManifold(B, &p, 0, m);
+	m->n = c2Neg(m->n);
 }
 
 void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m)
@@ -1586,7 +1600,10 @@ static int c2Clip(c2v* seg, c2h h)
 	float d0, d1;
 	if ((d0 = c2Dist(h, seg[0])) < 0) out[sp++] = seg[0];
 	if ((d1 = c2Dist(h, seg[1])) < 0) out[sp++] = seg[1];
-	if (d0 * d1 <= 0) out[sp++] = c2Intersect(seg[0], seg[1], d0, d1);
+	if (d0 == 0 && d1 == 0) {
+		out[sp++] = seg[0];
+		out[sp++] = seg[1];
+	} else if (d0 * d1 <= 0) out[sp++] = c2Intersect(seg[0], seg[1], d0, d1);
 	seg[0] = out[0]; seg[1] = out[1];
 	return sp;
 }
@@ -1676,10 +1693,12 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		c2v n;
 		int index;
 		c2AntinormalFace(A, B, bx, &index, &n);
-		c2v seg[2] = { c2Add(A.a, c2Mulvs(n, A.r)), c2Add(A.b, c2Mulvs(n, A.r)) };
+		c2v seg[2] = { A.a, A.b };
 		c2h h;
 		if (!c2SidePlanes(seg, bx, B, index, &h)) return;
 		c2KeepDeep(seg, h, m);
+		for (int i = 0; i < m->count; ++i) m->contact_points[i] = c2Add(m->contact_points[i], c2Mulvs(n, A.r));
+		m->n = c2Neg(m->n);
 	}
 
 	// shallow, use GJK results a and b to define manifold
@@ -1692,7 +1711,7 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		for (int i = 0; i < B->count; ++i)
 		{
 			c2v n = c2Mulrv(bx.r, B->norms[i]);
-			if (c2Parallel(ab, n, 5.0e-3f))
+			if (c2Parallel(c2Neg(ab), n, 5.0e-3f))
 			{
 				face_case = 1;
 				break;
@@ -1702,10 +1721,11 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		// 1 contact
 		if (!face_case)
 		{
+			one_contact:
 			m->count = 1;
-			m->contact_points[0] = b;
+			m->n = c2Norm(ab);
+			m->contact_points[0] = c2Add(a, c2Mulvs(m->n, A.r));
 			m->depths[0] = A.r - d;
-			m->n = c2Mulvs(ab, 1.0f / d);
 		}
 
 		// 2 contacts if laying on a polygon face nicely
@@ -1716,8 +1736,9 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 			c2AntinormalFace(A, B, bx, &index, &n);
 			c2v seg[2] = { c2Add(A.a, c2Mulvs(n, A.r)), c2Add(A.b, c2Mulvs(n, A.r)) };
 			c2h h;
-			if (!c2SidePlanes(seg, bx, B, index, &h)) return;
+			if (!c2SidePlanes(seg, bx, B, index, &h)) goto one_contact;
 			c2KeepDeep(seg, h, m);
+			m->n = c2Neg(m->n);
 		}
 	}
 }
