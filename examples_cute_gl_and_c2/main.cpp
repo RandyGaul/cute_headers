@@ -1048,9 +1048,10 @@ void try_out_toi_via_conservative_advancment()
 	Rotate(&vA, &vA, 1);
 
 	c2v n;
+	c2v contact;
 	int iterations = -1;
 	int use_radius = 1;
-	float t = c2TOI(&A, C2_CIRCLE, NULL, vA, &B, C2_CAPSULE, NULL, vB, use_radius, &n, &iterations);
+	float t = c2TOI(&A, C2_CIRCLE, NULL, vA, &B, C2_CAPSULE, NULL, vB, use_radius, &n, &contact, &iterations);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(A.p, A.r);
