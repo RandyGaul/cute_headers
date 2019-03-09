@@ -42,8 +42,6 @@ struct v2
 	float y;
 };
 
-using vec2 = v2;
-
 // 2d rotation composed of cos/sin pair
 struct rotation_t
 {
@@ -112,7 +110,7 @@ CUTE_MATH2D_INLINE float invert_safe(float a) { return a != 0 ? a / 1.0f : 0; }
 CUTE_MATH2D_INLINE int min(int a, int b) { return a < b ? a : b; }
 CUTE_MATH2D_INLINE int max(int a, int b) { return b < a ? a : b; }
 CUTE_MATH2D_INLINE int clamp(int a, int lo, int hi) { return max(lo, min(a, hi)); }
-CUTE_MATH2D_INLINE int sign(int a) { return a < 0 ? -1.0f : 1.0f; }
+CUTE_MATH2D_INLINE int sign(int a) { return a < 0 ? -1 : 1; }
 
 // vector ops
 CUTE_MATH2D_INLINE v2 operator+(v2 a, v2 b) { return v2(a.x + b.x, a.y + b.y); }
@@ -138,6 +136,7 @@ CUTE_MATH2D_INLINE float hmax(v2 a ) { return max(a.x, a.y); }
 CUTE_MATH2D_INLINE float len(v2 a) { return sqrt(dot(a, a)); }
 CUTE_MATH2D_INLINE float distance(v2 a, v2 b) { return sqrt(powf((a.x - b.x), 2) + powf((a.y - b.y), 2)); }
 CUTE_MATH2D_INLINE v2 norm(v2 a) { return a / len(a); }
+CUTE_MATH2D_INLINE v2 safe_norm(v2 a) { float sq = dot(a, a); return sq ? a / sqrt(sq) : v2(0, 0); }
 CUTE_MATH2D_INLINE v2 operator-(v2 a) { return v2(-a.x, -a.y); }
 CUTE_MATH2D_INLINE v2 lerp(v2 a, v2 b, float t) { return a + (b - a) * t; }
 CUTE_MATH2D_INLINE int operator<(v2 a, v2 b) { return a.x < b.x && a.y < b.y; }
@@ -196,7 +195,7 @@ CUTE_MATH2D_INLINE float width(aabb_t bb) { return bb.max.x - bb.min.x; }
 CUTE_MATH2D_INLINE float height(aabb_t bb) { return bb.max.y - bb.min.y; }
 CUTE_MATH2D_INLINE float half_width(aabb_t bb) { return width(bb) * 0.5f; }
 CUTE_MATH2D_INLINE float half_height(aabb_t bb) { return height(bb) * 0.5f; }
-CUTE_MATH2D_INLINE v2 half_extents(aabb_t bb) { return (bb.max - bb.min) * 0.5f; };
+CUTE_MATH2D_INLINE v2 half_extents(aabb_t bb) { return (bb.max - bb.min) * 0.5f; }
 CUTE_MATH2D_INLINE v2 extents(aabb_t aabb) { return aabb.max - aabb.min; }
 CUTE_MATH2D_INLINE aabb_t expand(aabb_t aabb, v2 v) { return make_aabb(aabb.min - v, aabb.max + v); }
 CUTE_MATH2D_INLINE aabb_t expand(aabb_t aabb, float v) { v2 factor(v, v); return make_aabb(aabb.min - factor, aabb.max + factor); }
