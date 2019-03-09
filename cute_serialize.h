@@ -413,7 +413,7 @@ int serialize_bits(serialize_t* io, SERIALIZE_UINT32* bits, unsigned num_bits)
 			SERIALIZE_ASSERT(io->bit_count <= 64);
 			if (io->bit_count >= 32) {
 				SERIALIZE_UINT64 bits = SERIALIZE_HOST_TO_IO_UINT64(io->bits);
-				int bytes_written = fwrite(&bits, 1, 4, io->file);
+				int bytes_written = (int)fwrite(&bits, 1, 4, io->file);
 				if (bytes_written != 4) {
 					return SERIALIZE_FAILURE;
 				}
@@ -428,13 +428,13 @@ int serialize_bits(serialize_t* io, SERIALIZE_UINT32* bits, unsigned num_bits)
 		case SERIALIZE_READ:
 			if (io->bit_count < 32) {
 				SERIALIZE_UINT32 a = 0;
-				int bytes_read = fread(&a, 1, 4, io->file);
+				int bytes_read = (int)fread(&a, 1, 4, io->file);
 				a = SERIALIZE_IO_TO_HOST_UINT32(a);
 				io->bits |= (SERIALIZE_UINT64)a << io->bit_count;
 				io->bit_count += bytes_read * 8;
 				io->measure_bytes += bytes_read;
 				SERIALIZE_ASSERT(io->bit_count <= 64);
-				if (io->bit_count < num_bits) {
+				if (io->bit_count < (int)num_bits) {
 					return SERIALIZE_FAILURE;
 				}
 			}
@@ -471,7 +471,7 @@ int serialize_bits(serialize_t* io, SERIALIZE_UINT32* bits, unsigned num_bits)
 		case SERIALIZE_READ:
 		{
 			int bits_to_read = num_bits;
-			while (io->bit_count < num_bits) {
+			while (io->bit_count < (int)num_bits) {
 				SERIALIZE_ASSERT(io->bit_count <= 64);
 				SERIALIZE_ASSERT(io->buffer < io->end);
 				SERIALIZE_UINT64 bits = (SERIALIZE_UINT64)(*io->buffer++);
@@ -560,7 +560,7 @@ int serialize_uint64(serialize_t* io, SERIALIZE_UINT64* val, SERIALIZE_UINT64 mi
 		SERIALIZE_UINT32 a = (SERIALIZE_UINT32)*val;
 		SERIALIZE_UINT32 b = (SERIALIZE_UINT32)(*val >> 32);
 		if (serialize_bits(io, &a, 32) == SERIALIZE_FAILURE) return SERIALIZE_FAILURE;
-		if (serialize_bits(io, &b, bits_required - 32) == SERIALIZE_FAILURE) return SERIALIZE_FAILURE;
+		if (serialize_bits(io, &b, (unsigned)(bits_required - 32ULL)) == SERIALIZE_FAILURE) return SERIALIZE_FAILURE;
 		if (io->type == SERIALIZE_READ) {
 			*val = ((SERIALIZE_UINT64)a) | (SERIALIZE_UINT64)b << 32;
 		}
@@ -667,7 +667,7 @@ int serialize_flush(serialize_t* io)
 		if (io->file) {
 			if (io->bit_count) {
 				int bytes_to_write = (io->bit_count + 7) / 8;
-				int bytes_written = fwrite(&io->bits, 1, bytes_to_write, io->file);
+				int bytes_written = (int)fwrite(&io->bits, 1, bytes_to_write, io->file);
 				io->bit_count = 0;
 				io->bits = 0;
 				if (bytes_to_write != bytes_written) {
@@ -721,6 +721,7 @@ serialize_type_t serialize_get_type(serialize_t* io)
 	return io->type;
 }
 
+#ifndef SERIALIZE_NO_UNIT_TESTS
 #define SERIALIZE_UNIT_TEST_ASSERT(x) do { if (!(x)) { errors = SERIALIZE_FAILURE; goto end; } } while (0)
 
 int serialize_do_unit_tests()
@@ -1022,6 +1023,8 @@ end:
 
 	return errors;
 }
+
+#endif // SERIALIZE_NO_UNIT_TESTS
 
 #endif // CUTE_SERIALIZE_IMPLEMENTATION_ONCE
 #endif // CUTE_SERIALIZE_IMPLEMENTATION
