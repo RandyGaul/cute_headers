@@ -403,6 +403,8 @@ static int cp_build(cp_state_t* s, uint32_t* tree, uint8_t* lens, int sym_count)
 
 static int cp_stored(cp_state_t* s)
 {
+	char* p;
+
 	// 3.2.3
 	// skip any remaining bits in current partially processed byte
 	cp_read_bits(s, s->count & 7);
@@ -413,7 +415,7 @@ static int cp_stored(cp_state_t* s)
 	uint16_t NLEN = (uint16_t)cp_read_bits(s, 16);
 	CUTE_PNG_CHECK(LEN == (uint16_t)(~NLEN), "Failed to find LEN and NLEN as complements within stored (uncompressed) stream.");
 	CUTE_PNG_CHECK(s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream.");
-	char* p = cp_ptr(s);
+	p = cp_ptr(s);
 	CUTE_PNG_MEMCPY(s->out, p, LEN);
 	s->out += LEN;
 	return 1;
@@ -1135,6 +1137,7 @@ cp_indexed_image_t cp_load_indexed_png_mem(const void *png_data, int png_length)
 	int bit_depth, color_type, bpp, w, h, pix_bytes;
 	int compression, filter, interlace;
 	int datalen, offset;
+	int plte_len;
 	uint8_t* out;
 	cp_indexed_image_t img = { 0 };
 	uint8_t* data = 0;
@@ -1210,7 +1213,7 @@ cp_indexed_image_t cp_load_indexed_png_mem(const void *png_data, int png_length)
 	CUTE_PNG_CHECK(cp_unfilter(img.w, img.h, bpp, out), "invalid filter byte found");
 	cp_unpack_indexed_rows(img.w, img.h, out, img.pix);
 
-	int plte_len = cp_get_chunk_byte_length(plte) / 3;
+	plte_len = cp_get_chunk_byte_length(plte) / 3;
 	cp_unpack_palette(img.palette, plte, plte_len, trns, cp_get_chunk_byte_length(trns));
 	img.palette_len = (uint8_t)plte_len;
 
