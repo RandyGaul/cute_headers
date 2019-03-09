@@ -211,7 +211,7 @@ void gl_make_frame_buffer(gl_framebuffer_t* fb, gl_shader_t* shader, int w, int 
 void gl_free_frame_buffer(gl_framebuffer_t* fb);
 
 void gl_make_vertex_data(gl_vertex_data_t* vd, uint32_t buffer_size, uint32_t primitive, uint32_t vertex_stride, uint32_t usage);
-void gl_add_attribute(gl_vertex_data_t* vd, char* name, uint32_t size, uint32_t type, uint32_t offset);
+void gl_add_attribute(gl_vertex_data_t* vd, const char* name, uint32_t size, uint32_t type, uint32_t offset);
 void gl_make_renderable(gl_renderable_t* r, gl_vertex_data_t* vd);
 
 // Must be called after gl_make_renderable
@@ -221,15 +221,15 @@ void gl_free_shader(gl_shader_t* s);
 
 void gl_set_active_shader(gl_shader_t* s);
 void gl_deactivate_shader();
-void gl_send_f32(gl_shader_t* s, char* uniform_name, uint32_t size, float* floats, uint32_t count);
-void gl_send_matrix(gl_shader_t* s, char* uniform_name, float* floats);
-void gl_send_texture(gl_shader_t* s, char* uniform_name, uint32_t index);
+void gl_send_f32(gl_shader_t* s, const char* uniform_name, uint32_t size, float* floats, uint32_t count);
+void gl_send_matrix(gl_shader_t* s, const char* uniform_name, float* floats);
+void gl_send_texture(gl_shader_t* s, const char* uniform_name, uint32_t index);
 
 void gl_push_draw_call(void* ctx, gl_draw_call_t call);
 
 typedef void (gl_func_t)();
 void gl_flush(void* ctx, gl_func_t* swap, gl_framebuffer_t* fb, int w, int h);
-int gl_draw_call_tCount(void* ctx);
+int gl_draw_call_count(void* ctx);
 
 // 4x4 matrix helper functions
 void gl_ortho_2d(float w, float h, float x, float y, float* m);
@@ -241,7 +241,7 @@ void gl_copy(float* dst, float* src);
 #if CUTE_GL_DEBUG_CHECKS
 
 	#define CUTE_GL_PRINT_GL_ERRORS() gl_print_errors_internal(__FILE__, __LINE__)
-	void gl_print_errors_internal(char* file, uint32_t line);
+	void gl_print_errors_internal(const char* file, uint32_t line);
 
 #endif
 
@@ -319,8 +319,8 @@ gl_context_t* gl_make_ctx(uint32_t max_draw_calls, uint32_t clear_bits, uint32_t
 	gl_add_attribute(&vd, "in_pos", 3, CUTE_GL_FLOAT, 0);
 	gl_add_attribute(&vd, "in_col", 3, CUTE_GL_FLOAT, CUTE_GL_LINE_STRIDE / 2);
 	gl_make_renderable(&ctx->line_r, &vd);
-	const char* vs = "#version 300 es\nuniform mat4 u_mvp;in vec3 in_pos;in vec3 in_col;out vec3 v_col;void main(){v_col = in_col;gl_Position = u_mvp * vec4(in_pos, 1);}";
-	const char* ps = "#version 300 es\nprecision mediump float;in vec3 v_col;out vec4 out_col;void main(){out_col = vec4(v_col, 1);}";
+	const char* vs = "#version 330\nuniform mat4 u_mvp;in vec3 in_pos;in vec3 in_col;out vec3 v_col;void main(){v_col = in_col;gl_Position = u_mvp * vec4(in_pos, 1);}";
+	const char* ps = "#version 330\nprecision mediump float;in vec3 v_col;out vec4 out_col;void main(){out_col = vec4(v_col, 1);}";
 	gl_load_shader(&ctx->line_s, vs, ps);
 	gl_set_shader(&ctx->line_r, &ctx->line_s);
 	gl_line_color(ctx, 1.0f, 1.0f, 1.0f);
@@ -468,13 +468,13 @@ void gl_free_frame_buffer(gl_framebuffer_t* fb)
 
 uint64_t gl_FNV1a(const char* str)
 {
-	uint64_t h = (uint64_t)14695981039346656037;
+	uint64_t h = (uint64_t)14695981039346656037ULL;
 	char c;
 
-	while (c = *str++)
+	while ((c = *str++))
 	{
 		h = h ^ (uint64_t)c;
-		h = h * (uint64_t)1099511628211;
+		h = h * (uint64_t)1099511628211ULL;
 	}
 
 	return h;
@@ -527,7 +527,7 @@ static uint32_t gl_get_gl_type_internal(uint32_t type)
 	}
 }
 
-void gl_add_attribute(gl_vertex_data_t* vd, char* name, uint32_t size, uint32_t type, uint32_t offset)
+void gl_add_attribute(gl_vertex_data_t* vd, const char* name, uint32_t size, uint32_t type, uint32_t offset)
 {
 	gl_vertex_attribute_t va;
 	va.name = name;
@@ -786,7 +786,7 @@ void gl_free_shader(gl_shader_t* s)
 	memset(s, 0, sizeof(gl_shader_t));
 }
 
-gl_uniform_t* gl_find_uniform_internal(gl_shader_t* s, char* name)
+gl_uniform_t* gl_find_uniform_internal(gl_shader_t* s, const char* name)
 {
 	uint32_t uniform_count = s->uniform_count;
 	gl_uniform_t* uniforms = s->uniforms;
@@ -815,7 +815,7 @@ void gl_deactivate_shader()
 	glUseProgram(0);
 }
 
-void gl_send_f32(gl_shader_t* s, char* uniform_name, uint32_t size, float* floats, uint32_t count)
+void gl_send_f32(gl_shader_t* s, const char* uniform_name, uint32_t size, float* floats, uint32_t count)
 {
 	gl_uniform_t* u = gl_find_uniform_internal(s, uniform_name);
 
@@ -854,7 +854,7 @@ void gl_send_f32(gl_shader_t* s, char* uniform_name, uint32_t size, float* float
 	gl_deactivate_shader();
 }
 
-void gl_send_matrix(gl_shader_t* s, char* uniform_name, float* floats)
+void gl_send_matrix(gl_shader_t* s, const char* uniform_name, float* floats)
 {
 	gl_uniform_t* u = gl_find_uniform_internal(s, uniform_name);
 
@@ -872,7 +872,7 @@ void gl_send_matrix(gl_shader_t* s, char* uniform_name, float* floats)
 	gl_deactivate_shader();
 }
 
-void gl_send_texture(gl_shader_t* s, char* uniform_name, uint32_t index)
+void gl_send_texture(gl_shader_t* s, const char* uniform_name, uint32_t index)
 {
 	gl_uniform_t* u = gl_find_uniform_internal(s, uniform_name);
 
@@ -1085,7 +1085,7 @@ void gl_flush(void* ctx, gl_func_t* swap, gl_framebuffer_t* fb, int w, int h)
 	swap();
 }
 
-int gl_draw_call_tCount(void* ctx)
+int gl_draw_call_count(void* ctx)
 {
 	gl_context_t* context = (gl_context_t*)ctx;
 	return context->count;
@@ -1223,13 +1223,13 @@ const char* gl_get_error_description(GLenum error_code)
 	}
 }
 
-void gl_print_errors_internal(char* file, uint32_t line)
+void gl_print_errors_internal(const char* file, uint32_t line)
 {
 	GLenum code = glGetError();
 
 	if (code != GL_NO_ERROR)
 	{
-		char* last_slash = file;
+		const char* last_slash = file;
 
 		while (*file)
 		{
