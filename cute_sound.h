@@ -1839,8 +1839,7 @@ void cs_mix(cs_context_t* ctx)
 	cs_position(ctx, &byte_to_lock, &bytes_to_write);
 
 	if (!bytes_to_write) goto unlock;
-	{
-		int samples_to_write = bytes_to_write / ctx->bps;
+	int samples_to_write = bytes_to_write / ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
@@ -2064,10 +2063,8 @@ void cs_mix(cs_context_t* ctx)
 
 #else
 #endif
-	}
-
-unlock:
-cs_unlock(ctx);
+	unlock:
+	cs_unlock(ctx);
 }
 
 // TODO:
