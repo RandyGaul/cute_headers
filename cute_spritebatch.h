@@ -140,7 +140,7 @@
 
 #ifndef SPRITEBATCH_U64
 	#define SPRITEBATCH_U64 unsigned long long
-#endif SPRITEBATCH_U64
+#endif // SPRITEBATCH_U64
 
 typedef struct spritebatch_t spritebatch_t;
 typedef struct spritebatch_config_t spritebatch_config_t;
@@ -1579,7 +1579,6 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 			float min_y = (float)min.y * h0 + hTol;
 			float max_x = (float)max.x * w0 - wTol;
 			float max_y = (float)max.y * h0 - hTol;
-
 
 			// flip image on y axis
 			if (SPRITEBATCH_ATLAS_FLIP_Y_AXIS_FOR_UV)
