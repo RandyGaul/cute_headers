@@ -226,8 +226,8 @@ void setup_SDL_and_glad()
 
 	// Request OpenGL 3.2 context.
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
 	// set double buffer
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -249,7 +249,7 @@ void setup_SDL_and_glad()
 	window = SDL_CreateWindow("cute_spritebatch example", centered_x, centered_y, screen_w, screen_h, SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);
 	ctx_gl = SDL_GL_CreateContext(window);
 
-	gladLoadGLES2Loader(SDL_GL_GetProcAddress);
+	gladLoadGLLoader(SDL_GL_GetProcAddress);
 
 	int major, minor;
 	SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &major);
@@ -281,7 +281,7 @@ void setup_cute_gl()
 #define STR(x) #x
 
 	const char* vs = STR(
-		#version 300 es\n
+		#version 330\n
 
 		uniform mat4 u_mvp;
 
@@ -298,7 +298,7 @@ void setup_cute_gl()
 	);
 
 	const char* ps = STR(
-		#version 300 es\n
+		#version 330\n
 		precision mediump float;
 	
 		uniform sampler2D u_sprite_texture;
