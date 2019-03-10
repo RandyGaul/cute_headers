@@ -1584,7 +1584,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 	for (int i = 0; i < img_count; ++i)
 	{
 		const cp_atlas_image_t* image = imgs + i;
-		const char* name = names ? names[i] : 0;
+		const char* name = names ? names[image->img_index] : 0;
 
 		if (image->fit)
 		{
@@ -1595,7 +1595,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 			float max_x = image->maxx;
 			float max_y = image->maxy;
 
-			if (name) fprintf(fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", names[i], width, height, min_x, min_y, max_x, max_y);
+			if (name) fprintf(fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", name, width, height, min_x, min_y, max_x, max_y);
 			else fprintf(fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y);
 		}
 	}
