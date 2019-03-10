@@ -10,7 +10,7 @@
 	in *one* C/CPP file (translation unit) that includes this file
 
 	Summary:
-	Wrapper for OpenGL 3.3 for vertex attributes, shader creation, draw calls,
+	Wrapper for OpenGL 3.2 for vertex attributes, shader creation, draw calls,
 	and post-processing FX. The API was carefully designed to facilitate trying out
 	one-off techniques or experiments, of which are critical for certain kinds
 	of development styles (i.e. fast iteration). Credit goes to thatgamecompany
@@ -73,7 +73,7 @@
 		* No index support. Adding indices would not be too hard and come down to a
 			matter of adding in some more triple buffer/single buffer code for
 			GL_STATIC_DRAW vs GL_DYNAMIC_DRAW.
-		* GLES 3.3 support only
+		* GLES 3.2 support only
 		* Full support for array uniforms is not quite tested and hammered out.
 */
 
