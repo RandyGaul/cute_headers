@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_serialize.h - v1.01
+	cute_serialize.h - v1.02
 
 	To create implementation (the function definitions)
 		#define CUTE_SERIALIZE_IMPLEMENTATION
@@ -78,10 +78,10 @@
 
 		The `serialize_enemy` can be called with different initializations of `io`. If `io` had been initialized
 		with the `serialize_buffer_create`, then the routine will perform in-memory io. If it had been setup with the
-		`serialize_file_create`, then file io will be performed (via `fread` and `fwrite`). Additionally, the `io` can
-		be setup to do read/write/measure operations depending on the `type` flag used during construction. The routine
-		`serialize_enemy` need not be written more than once, and performs polymorphism depending on the type of `io`
-		provided.
+		`serialize_file_create`, then file io will be performed (via `SERIALIZE_FREAD` and `SERIALIZE_FWRITE`).
+		Additionally, the `io` can be setup to do read/write/measure operations depending on the `type` flag used
+		during construction. The routine `serialize_enemy` need not be written more than once, and performs
+		polymorphism depending on the type of `io` provided.
 
 		Be sure to call `serialize_flush(io);` whenever serialization is completed, and you want to "finish" up all of
 		your io. For example, before calling `fclose`, or before sending a buffer across the net.
@@ -97,6 +97,8 @@
 			SERIALIZE_ALLOC
 			SERIALIZE_FREE
 			SERIALIZE_ASSERT
+			SERIALIZE_FREAD
+			SERIALIZE_FWRITE
 			SERIALIZE_HOST_TO_IO_UINT32
 			SERIALIZE_HOST_TO_IO_UINT64
 			SERIALIZE_IO_TO_HOST_UINT32
@@ -126,6 +128,7 @@
 	Revision history:
 		1.00 (10/22/2018) initial release
 		1.01 (02/05/2019) added many convenience functions, and fixed bug in serialize cstr
+		1.02 (03/20/2019) added SERIALIZE_FREAD and SERIALIZE_FWRITE, and disabled compiling unit tests by default
 */
 
 #if !defined(CUTE_SERIALIZE_H)
@@ -298,8 +301,10 @@ void* serialize_get_file(serialize_t* io);
  */
 serialize_type_t serialize_get_type(serialize_t* io);
 
+#ifdef SERIALIZE_UNIT_TESTS
 int serialize_do_unit_tests();
 int serialize_do_file_unit_test(const char* path);
+#endif
 
 #define CUTE_SERIALIZE_H
 #endif
@@ -327,6 +332,12 @@ int serialize_do_file_unit_test(const char* path);
 	#define SERIALIZE_ASSERT assert
 #endif
 
+#if !defined(SERIALIZE_FREAD)
+	#include <stdio.h>
+	#define SERIALIZE_FREAD(buffer, element_size, element_count, stream) fread(buffer, element_size, element_count, stream)
+	#define SERIALIZE_FWRITE(buffer, element_size, element_count, stream) fwrite(buffer, element_size, element_count, stream)
+#endif
+
 #if !defined(SERIALIZE_HOST_TO_IO_UINT32)
 	#define SERIALIZE_HOST_TO_IO_UINT32(x) x
 #endif
@@ -342,8 +353,6 @@ int serialize_do_file_unit_test(const char* path);
 #if !defined(SERIALIZE_IO_TO_HOST_UINT64)
 	#define SERIALIZE_IO_TO_HOST_UINT64(x) x
 #endif
-
-#include <stdio.h>
 
 struct serialize_t
 {
@@ -413,7 +422,7 @@ int serialize_bits(serialize_t* io, SERIALIZE_UINT32* bits, unsigned num_bits)
 			SERIALIZE_ASSERT(io->bit_count <= 64);
 			if (io->bit_count >= 32) {
 				SERIALIZE_UINT64 bits = SERIALIZE_HOST_TO_IO_UINT64(io->bits);
-				int bytes_written = (int)fwrite(&bits, 1, 4, io->file);
+				int bytes_written = (int)SERIALIZE_FWRITE(&bits, 1, 4, io->file);
 				if (bytes_written != 4) {
 					return SERIALIZE_FAILURE;
 				}
@@ -428,7 +437,7 @@ int serialize_bits(serialize_t* io, SERIALIZE_UINT32* bits, unsigned num_bits)
 		case SERIALIZE_READ:
 			if (io->bit_count < 32) {
 				SERIALIZE_UINT32 a = 0;
-				int bytes_read = (int)fread(&a, 1, 4, io->file);
+				int bytes_read = (int)SERIALIZE_FREAD(&a, 1, 4, io->file);
 				a = SERIALIZE_IO_TO_HOST_UINT32(a);
 				io->bits |= (SERIALIZE_UINT64)a << io->bit_count;
 				io->bit_count += bytes_read * 8;
@@ -667,7 +676,7 @@ int serialize_flush(serialize_t* io)
 		if (io->file) {
 			if (io->bit_count) {
 				int bytes_to_write = (io->bit_count + 7) / 8;
-				int bytes_written = (int)fwrite(&io->bits, 1, bytes_to_write, io->file);
+				int bytes_written = (int)SERIALIZE_FWRITE(&io->bits, 1, bytes_to_write, io->file);
 				io->bit_count = 0;
 				io->bits = 0;
 				if (bytes_to_write != bytes_written) {
@@ -721,7 +730,7 @@ serialize_type_t serialize_get_type(serialize_t* io)
 	return io->type;
 }
 
-#ifndef SERIALIZE_NO_UNIT_TESTS
+#ifdef SERIALIZE_UNIT_TESTS
 #define SERIALIZE_UNIT_TEST_ASSERT(x) do { if (!(x)) { errors = SERIALIZE_FAILURE; goto end; } } while (0)
 
 int serialize_do_unit_tests()
