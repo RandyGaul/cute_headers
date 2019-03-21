@@ -123,7 +123,8 @@
 
 	DEPENDENCIES
 
-		The implementation depends on <winnt.h> on windows (for `_BitScanReverse64`), and <stdio.h> for file IO.
+		The implementation depends on <winnt.h> on windows (for `_BitScanReverse64`).
+
 
 	Revision history:
 		1.00 (10/22/2018) initial release
@@ -186,11 +187,15 @@ serialize_t* serialize_buffer_create(serialize_type_t type, void* buffer, int si
 
 /**
  * Creates a serialize object using a file (FILE*) as the underlying io.
+ * IMPORTANT NOTE:
+ *   If you do not define `SERIALIZE_FREAD` and `SERIALIZE_FWRITE` yourself, this header will assume you want
+ *   to use `fread` and `fwrite` respectively, which means you must pass in a `FILE*` to `serialize_file_create`
+ *   as the `file` parameter.
  */
 serialize_t* serialize_file_create(serialize_type_t type, void* file, void* user_allocator_ctx_can_be_null);
 
 /**
- * Cleans up all resources for `io`.
+ * Cleans up all resources for `io`. Does *not* close the file.
  */
 void serialize_destroy(serialize_t* io);
 
@@ -278,7 +283,7 @@ int serialize_flush(serialize_t* io);
  * purpose is to re-use the `io` object without performing allocation/deallocation via `create` and
  * `destroy` functions.
  */
-void serialize_reset_buffer(serialize_t* io, void* buffer, int size);
+void serialize_reset_buffer(serialize_t* io, serialize_type_t type, void* buffer, int size);
 
 /**
  * Resets the serialize object's state, ready to start measuring. The main purpose is to re-use the
@@ -334,8 +339,8 @@ int serialize_do_file_unit_test(const char* path);
 
 #if !defined(SERIALIZE_FREAD)
 	#include <stdio.h>
-	#define SERIALIZE_FREAD(buffer, element_size, element_count, stream) fread(buffer, element_size, element_count, stream)
-	#define SERIALIZE_FWRITE(buffer, element_size, element_count, stream) fwrite(buffer, element_size, element_count, stream)
+	#define SERIALIZE_FREAD(buffer, element_size, element_count, stream) fread((FILE*)buffer, element_size, element_count, stream)
+	#define SERIALIZE_FWRITE(buffer, element_size, element_count, stream) fwrite((FILE*)buffer, element_size, element_count, stream)
 #endif
 
 #if !defined(SERIALIZE_HOST_TO_IO_UINT32)
@@ -357,7 +362,7 @@ int serialize_do_file_unit_test(const char* path);
 struct serialize_t
 {
 	serialize_type_t type;
-	FILE* file;
+	void* file;
 	unsigned char* buffer;
 	unsigned char* end;
 	int size;
@@ -400,9 +405,6 @@ serialize_t* serialize_file_create(serialize_type_t type, void* file, void* user
 
 void serialize_destroy(serialize_t* io)
 {
-	if (io->file) {
-		fclose(io->file);
-	}
 	SERIALIZE_FREE(io, io->ctx);
 }
 
@@ -694,9 +696,10 @@ int serialize_flush(serialize_t* io)
 	return SERIALIZE_SUCCESS;
 }
 
-void serialize_reset_buffer(serialize_t* io, void* buffer, int size)
+void serialize_reset_buffer(serialize_t* io, serialize_type_t type, void* buffer, int size)
 {
 	SERIALIZE_ASSERT(io->file == NULL);
+	io->type = type;
 	io->buffer = (unsigned char*)buffer;
 	io->end = io->buffer + size;
 	io->size = size;
@@ -747,8 +750,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_bits(read_io, &b, 2);
 	SERIALIZE_UNIT_TEST_ASSERT(a == b);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	a = ~0;
 	b = 0;
@@ -756,8 +759,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_bits(read_io, &b, 32);
 	SERIALIZE_UNIT_TEST_ASSERT(a == b);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	a = 1;
 	for (int i = 0; i < 10; ++i)
@@ -769,8 +772,8 @@ int serialize_do_unit_tests()
 		serialize_bits(read_io, &b, 2);
 		SERIALIZE_UNIT_TEST_ASSERT(a == b);
 	}
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	a = 2;
 	for (int i = 0; i < 10; ++i)
@@ -782,8 +785,8 @@ int serialize_do_unit_tests()
 		serialize_bits(read_io, &b, 3);
 		SERIALIZE_UNIT_TEST_ASSERT(a == b);
 	}
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	a = 17;
 	b = 0;
@@ -791,8 +794,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint32(read_io, &b, 0, 255);
 	SERIALIZE_UNIT_TEST_ASSERT(a == b);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	a = 1025;
 	b = 0;
@@ -800,8 +803,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint32(read_io, &b, 1000, 1500);
 	SERIALIZE_UNIT_TEST_ASSERT(a == b);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	srand(0);
 	for (int i = 0; i < 10; ++i)
@@ -838,8 +841,8 @@ int serialize_do_unit_tests()
 		serialize_uint32(read_io, &b, lo, hi);
 		SERIALIZE_UNIT_TEST_ASSERT(a == b);
 	}
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	SERIALIZE_UINT64 c = 17;
 	SERIALIZE_UINT64 d;
@@ -847,8 +850,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint64(read_io, &d, 0, 17);
 	SERIALIZE_UNIT_TEST_ASSERT(c == d);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	c = 0xFFFFFFFFFFFFFFFFULL;
 	d;
@@ -856,8 +859,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint64(read_io, &d, 0, ~0ULL);
 	SERIALIZE_UNIT_TEST_ASSERT(c == d);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	c = 0x00000000FFFFFFFFULL;
 	d;
@@ -865,8 +868,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint64(read_io, &d, 0, ~0UL);
 	SERIALIZE_UNIT_TEST_ASSERT(c == d);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	c = 0xFFFFFFFF00000000ULL;
 	d;
@@ -874,8 +877,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint64(read_io, &d, 0, ~0ULL);
 	SERIALIZE_UNIT_TEST_ASSERT(c == d);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	c = 0x0000FFFFFFFF0000ULL;
 	d;
@@ -883,8 +886,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_uint64(read_io, &d, 0, ~0ULL);
 	SERIALIZE_UNIT_TEST_ASSERT(c == d);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	float e = 1.23f;
 	float f;
@@ -892,8 +895,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_float(read_io, &f);
 	SERIALIZE_UNIT_TEST_ASSERT(e == f);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	double g = 1013.1293881;
 	double h;
@@ -901,8 +904,8 @@ int serialize_do_unit_tests()
 	serialize_flush(write_io);
 	serialize_double(read_io, &h);
 	SERIALIZE_UNIT_TEST_ASSERT(g == h);
-	serialize_reset_buffer(write_io, buf, 1024);
-	serialize_reset_buffer(read_io, buf, 1024);
+	serialize_reset_buffer(write_io, SERIALIZE_WRITE, buf, 1024);
+	serialize_reset_buffer(read_io, SERIALIZE_READ, buf, 1024);
 
 	serialize_t* measure_io = serialize_buffer_create(SERIALIZE_MEASURE, NULL, 0, NULL);
 	serialize_bits(measure_io, NULL, 13);
