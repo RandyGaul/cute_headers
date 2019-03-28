@@ -673,7 +673,11 @@ int serialize_fourcc(serialize_t* io, const char fourcc[4])
 
 int serialize_serialized_bytes(serialize_t* io)
 {
-	return io->measure_bytes + (io->bit_count + 7) / 8;
+	if (io->type == SERIALIZE_WRITE) {
+		return io->measure_bytes + (io->bit_count + 7) / 8;
+	} else {
+		return io->measure_bytes;
+	}
 }
 
 int serialize_flush(serialize_t* io)
