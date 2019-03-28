@@ -1,5 +1,5 @@
 #define CUTE_NET_IMPLEMENTATION
-#include "../cute_net.h"
+#include "../cute_net_io.h"
 
 #define CUTE_TIME_IMPLEMENTATION
 #include "../cute_time.h"
