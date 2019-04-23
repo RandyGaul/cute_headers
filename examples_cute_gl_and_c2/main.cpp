@@ -1131,6 +1131,39 @@ void prime31_bad_toi_normal_animated()
 	}
 }
 
+void prime31_bad_toi_normal_animated_aabb()
+{
+	c2AABB aabb_top;
+	aabb_top.min = c2V(-25, 150);
+	aabb_top.max = c2V(25, 200);
+	
+	c2AABB aabb;
+	aabb.min = c2V(-100, -100);
+	aabb.max = c2V(100, 100);
+
+	static uint64_t frame_count;
+	frame_count++;
+	int i = (frame_count / 3) % 75;
+	{
+		aabb_top.min.x += 2 * i;
+		aabb_top.max.x += 2 * i;
+		c2v normal;
+		c2v contact_point;
+		c2v vel = c2V(0, -500);
+		float toi = c2TOI(&aabb_top, C2_AABB, NULL, vel, &aabb, C2_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+
+		gl_line_color(ctx, 1, 1, 1);
+		draw_point_normal(contact_point, normal, 10.0f);
+		DrawAABB(aabb_top.min, aabb_top.max);
+		DrawAABB(aabb.min, aabb.max);
+
+		gl_line_color(ctx, 1, 0, 0);
+		aabb_top.min = c2Add(aabb_top.min, c2Mulvs(vel, toi));
+		aabb_top.max = c2Add(aabb_top.max, c2Mulvs(vel, toi));
+		DrawAABB(aabb_top.min, aabb_top.max);
+	}
+}
+
 void prime31_cap_to_aabb_bug()
 {
 	c2Capsule capsule;
@@ -1249,8 +1282,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 19;
-		if (arrow_pressed) code = (code + 1) % 20;
+		static int code = 18;
+		if (arrow_pressed) code = (code + 1) % 21;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1272,7 +1305,8 @@ int main()
 		case 16: try_out_toi_via_conservative_advancment(); break;
 		case 17: prime31_bad_toi_normal(); break;
 		case 18: prime31_bad_toi_normal_animated(); break;
-		case 19: prime31_cap_to_aabb_bug(); break;
+		case 19: prime31_bad_toi_normal_animated_aabb(); break;
+		case 20: prime31_cap_to_aabb_bug(); break;
 		}
 
 		// push a draw call to tinygl

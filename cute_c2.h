@@ -1024,38 +1024,30 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 	n = c2SafeNorm(c2Sub(b, a));
 
 	int iter = 0;
-	while (d > 1.0e-5f && t < 1)
+	float eps = 1.0e-5f;
+	while (d > eps && t < 1)
 	{
 		++iter;
 		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
 		if (!velocity_bound) return 1;
 		float delta = d / velocity_bound;
-		t += delta;
+		t += delta * 0.95f;
 		c2v a0, b0;
 		d = c2Step(t, A, typeA, &ax, vA, &a0, B, typeB, &bx, vB, &b0, use_radius, &cache);
-		if (d)
+		if (d * d >= eps)
 		{
 			a = a0;
 			b = b0;
 			n = c2Sub(b, a);
 		}
-		else break;
 	}
 
 	n = c2SafeNorm(n);
 	t = t >= 1 ? 1 : t;
+	c2v p = c2Mulvs(c2Add(a, b), 0.5f);
 
 	if (out_normal) *out_normal = n;
-	if (out_contact_point)
-	{
-		c2Proxy proxy;
-		c2MakeProxy(A, typeA, &proxy);
-		ax.p = c2Add(ax.p, c2Mulvs(vA, t));
-		int index = c2Support(proxy.verts, proxy.count, c2MulrvT(ax.r, c2Neg(n)));
-		c2v support = c2Mulxv(ax, proxy.verts[index]);
-		support = c2Add(support, c2Mulvs(n, proxy.radius));
-		*out_contact_point = support;
-	}
+	if (out_contact_point) *out_contact_point = p;
 	if (iterations) *iterations = iter;
 	return t;
 }
