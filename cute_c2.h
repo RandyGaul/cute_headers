@@ -1042,10 +1042,22 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 		else break;
 	}
 
-	if (out_normal) *out_normal = c2SafeNorm(n);
-	if (out_contact_point) *out_contact_point = c2Mulvs(c2Add(a, b), 0.5f);
+	n = c2SafeNorm(n);
+	t = t >= 1 ? 1 : t;
+
+	if (out_normal) *out_normal = n;
+	if (out_contact_point)
+	{
+		c2Proxy proxy;
+		c2MakeProxy(A, typeA, &proxy);
+		ax.p = c2Add(ax.p, c2Mulvs(vA, t));
+		int index = c2Support(proxy.verts, proxy.count, c2MulrvT(ax.r, c2Neg(n)));
+		c2v support = c2Mulxv(ax, proxy.verts[index]);
+		support = c2Add(support, c2Mulvs(n, proxy.radius));
+		*out_contact_point = support;
+	}
 	if (iterations) *iterations = iter;
-	return t >= 1 ? 1 : t;
+	return t;
 }
 
 int c2Hull(c2v* verts, int count)
@@ -1639,7 +1651,7 @@ static void c2KeepDeep(c2v* seg, c2h h, c2Manifold* m)
 	{
 		c2v p = seg[i];
 		float d = c2Dist(h, p);
-		if (d < 0)
+		if (d <= 0)
 		{
 			m->contact_points[cp] = p;
 			m->depths[cp] = -d;

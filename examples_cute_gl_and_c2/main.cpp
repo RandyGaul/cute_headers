@@ -1067,6 +1067,94 @@ void try_out_toi_via_conservative_advancment()
 	DrawCircle(A.p, A.r);
 }
 
+void draw_point_normal(c2v p, c2v n, float len)
+{
+	n.x *= len;
+	n.y *= len;
+	gl_line(ctx, p.x, p.y, 0, p.x + n.x, p.y + n.y, 0);
+	DrawCircle(p, 5.0f);
+}
+
+void prime31_bad_toi_normal()
+{
+	c2Circle circle;
+	circle.p = c2V(-300, 100);
+	circle.r = 50;
+
+	c2AABB aabb;
+	aabb.min = c2V(-100, -100);
+	aabb.max = c2V(100, 100);
+
+	c2v normal;
+	c2v contact_point;
+	c2v vel = c2V(5000, 0);
+	float toi = c2TOI(&circle, C2_CIRCLE, NULL, vel, &aabb, C2_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+
+	gl_line_color(ctx, 1, 1, 1);
+	draw_point_normal(contact_point, normal, 10.0f);
+	DrawCircle(circle.p, circle.r);
+	DrawAABB(aabb.min, aabb.max);
+
+	gl_line_color(ctx, 1, 0, 0);
+	circle.p = c2Add(circle.p, c2Mulvs(vel, toi));
+	DrawCircle(circle.p, circle.r);
+}
+
+void prime31_bad_toi_normal_animated()
+{
+	c2Circle circle;
+	circle.p = c2V(0, 200);
+	circle.r = 25;
+	
+	c2AABB aabb;
+	aabb.min = c2V(-100, -100);
+	aabb.max = c2V(100, 100);
+
+	static uint64_t frame_count;
+	frame_count++;
+	int i = (frame_count / 3) % 75;
+	{
+		circle.p.x += 2 * i;
+		c2v normal;
+		c2v contact_point;
+		c2v vel = c2V(0, -500);
+		float toi = c2TOI(&circle, C2_CIRCLE, NULL, vel, &aabb, C2_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+
+		gl_line_color(ctx, 1, 1, 1);
+		draw_point_normal(contact_point, normal, 10.0f);
+		DrawCircle(circle.p, circle.r);
+		DrawAABB(aabb.min, aabb.max);
+
+		gl_line_color(ctx, 1, 0, 0);
+		circle.p = c2Add(circle.p, c2Mulvs(vel, toi));
+		DrawCircle(circle.p, circle.r);
+	}
+}
+
+void prime31_cap_to_aabb_bug()
+{
+	c2Capsule capsule;
+	capsule.r = 25;
+	capsule.a = c2V(0, 0);
+	capsule.b = c2V(0, 50);
+
+	c2AABB aabb;
+	aabb.min = c2V(0, 0);
+	aabb.max = c2V(100, 10);
+
+	if (c2Collided(&capsule, NULL, C2_CAPSULE, &aabb, NULL, C2_AABB))
+	{
+		c2Manifold mc;
+		c2AABBtoCapsuleManifold(aabb, capsule, &mc);
+		gl_line_color(ctx, 1, 0, 0);
+		DrawManifold(mc);
+	}
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawCapsule(capsule.a, capsule.b, capsule.r);
+	DrawAABB(aabb.min, aabb.max);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1161,8 +1249,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 16;
-		if (arrow_pressed) code = (code + 1) % 17;
+		static int code = 19;
+		if (arrow_pressed) code = (code + 1) % 20;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1182,6 +1270,9 @@ int main()
 		case 14: lundmark_GJK_div_by_0_bug(); break;
 		case 15: gjk_make_sure_cache_helps_and_works(); break;
 		case 16: try_out_toi_via_conservative_advancment(); break;
+		case 17: prime31_bad_toi_normal(); break;
+		case 18: prime31_bad_toi_normal_animated(); break;
+		case 19: prime31_cap_to_aabb_bug(); break;
 		}
 
 		// push a draw call to tinygl
