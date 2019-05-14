@@ -1188,6 +1188,55 @@ void prime31_cap_to_aabb_bug()
 	DrawAABB(aabb.min, aabb.max);
 }
 
+void prime31_cap_to_aabb_bug2()
+{
+	c2AABB bb;
+	bb.min = c2V(-100.0f, -30.0f);
+	bb.max = c2V(-50.0f, 30.0f);
+
+#if 0
+	c2Capsule capsule;
+	capsule.r = 10;
+	capsule.a = c2V(0, -25);
+	capsule.b = c2V(0, 25);
+
+	static uint64_t frame_count;
+	frame_count++;
+	int i = (frame_count / 3) % 60;
+	capsule.a.x -= i * 1.0f;
+	capsule.b.x -= i * 1.0f;
+#else
+	c2Capsule capsule;
+	capsule.r = 10;
+	capsule.a = c2V(-75, 50);
+	capsule.b = c2V(25, 50);
+
+	static uint64_t frame_count;
+	frame_count++;
+	int i = (frame_count / 3) % 60;
+	capsule.a.y -= i * 1.0f;
+	capsule.b.y -= i * 1.0f;
+#endif
+
+	c2Manifold m;
+#if 0
+	c2Collide(&bb, NULL, C2_AABB, &capsule, NULL, C2_CAPSULE, &m);
+#else
+	c2Collide(&capsule, NULL, C2_CAPSULE, &bb, NULL, C2_AABB, &m);
+#endif
+
+	if (m.count)
+	{
+		DrawManifold(m);
+		gl_line_color(ctx, 1.0f, 0.0f, 0.0f);
+	}
+	else gl_line_color(ctx, 5.0f, 7.0f, 9.0f);
+	DrawAABB(bb.min, bb.max);
+
+	gl_line_color(ctx, 0.5f, 0.7f, 0.9f);
+	DrawCapsule(capsule.a, capsule.b, capsule.r);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1203,7 +1252,7 @@ int main()
 
 	int width = 640;
 	int height = 480;
-	window = glfwCreateWindow(width, height, "tinyc2 and tinygl", NULL, NULL);
+	window = glfwCreateWindow(width, height, "cute_c2 and cute_gl", NULL, NULL);
 
 	if (!window)
 	{
@@ -1282,8 +1331,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 18;
-		if (arrow_pressed) code = (code + 1) % 21;
+		static int code = 21;
+		if (arrow_pressed) code = (code + 1) % 22;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1307,6 +1356,7 @@ int main()
 		case 18: prime31_bad_toi_normal_animated(); break;
 		case 19: prime31_bad_toi_normal_animated_aabb(); break;
 		case 20: prime31_cap_to_aabb_bug(); break;
+		case 21: prime31_cap_to_aabb_bug2(); break;
 		}
 
 		// push a draw call to tinygl

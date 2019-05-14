@@ -1701,7 +1701,11 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		c2h h;
 		if (!c2SidePlanes(seg, bx, B, index, &h)) return;
 		c2KeepDeep(seg, h, m);
-		for (int i = 0; i < m->count; ++i) m->contact_points[i] = c2Add(m->contact_points[i], c2Mulvs(n, A.r));
+		for (int i = 0; i < m->count; ++i)
+		{
+			m->depths[i] += c2Sign(m->depths) * A.r;
+			m->contact_points[i] = c2Add(m->contact_points[i], c2Mulvs(n, A.r));
+		}
 		m->n = c2Neg(m->n);
 	}
 
