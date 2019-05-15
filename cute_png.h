@@ -373,7 +373,7 @@ static int cp_build(cp_state_t* s, uint32_t* tree, uint8_t* lens, int sym_count)
 		first[n] = first[n - 1] + counts[n - 1];
 	}
 
-	if (s) CUTE_PNG_MEMSET(s->lookup, 0, sizeof(512 * sizeof(uint32_t)));
+	if (s) CUTE_PNG_MEMSET(s->lookup, 0, sizeof(s->lookup));
 	for (int i = 0; i < sym_count; ++i)
 	{
 		int len = lens[i];
