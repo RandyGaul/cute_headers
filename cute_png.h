@@ -82,7 +82,7 @@
 
 #define CUTE_PNG_ATLAS_MUST_FIT           1 // returns error from cp_make_atlas if *any* input image does not fit
 #define CUTE_PNG_ATLAS_FLIP_Y_AXIS_FOR_UV 1 // flips output uv coordinate's y. Can be useful to "flip image on load"
-#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF
+#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF // the fill color for empty areas in a texture atlas (RGBA)
 
 #include <stdint.h>
 #include <limits.h>
@@ -1383,6 +1383,13 @@ static void cp_qsort(cp_integer_image_t* items, int count)
 	cp_qsort(items + low + 1, count - 1 - low);
 }
 
+static void cp_write_pixel(char* mem, long color) {
+	mem[0] = (color >> 24) & 0xFF;
+	mem[1] = (color >> 16) & 0xFF;
+	mem[2] = (color >>  8) & 0xFF;
+	mem[3] = (color >>  0) & 0xFF;
+}
+
 cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pngs, int png_count, cp_atlas_image_t* imgs_out)
 {
 	float w0, h0, div, wTol, hTol;
@@ -1495,8 +1502,11 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 	atlas_stride = atlas_width * sizeof(cp_pixel_t);
 	atlas_image_size = atlas_width * atlas_height * sizeof(cp_pixel_t);
 	atlas_pixels = CUTE_PNG_ALLOC(atlas_image_size);
-	CUTE_PNG_CHECK(atlas_image_size, "out of mem");
-	CUTE_PNG_MEMSET(atlas_pixels, CUTE_PNG_ATLAS_EMPTY_COLOR, atlas_image_size);
+	CUTE_PNG_CHECK(atlas_pixels, "out of mem");
+	
+	for(int i = 0; i < atlas_image_size; i += sizeof(cp_pixel_t)) {
+		cp_write_pixel((char*)atlas_pixels + i, CUTE_PNG_ATLAS_EMPTY_COLOR);
+	}
 
 	for (int i = 0; i < png_count; ++i)
 	{
