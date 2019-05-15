@@ -1443,6 +1443,11 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 		int height = png->h;
 		cp_atlas_node_t *best_fit = cp_best_fit(sp, png, nodes);
 		if (CUTE_PNG_ATLAS_MUST_FIT) CUTE_PNG_CHECK(best_fit, "Not enough room to place image in atlas.");
+		else if (!best_fit) 
+		{
+			image->fit = 0;
+			continue;
+		}
 
 		image->min = best_fit->min;
 		image->max = cp_add(image->min, image->size);
@@ -1465,7 +1470,7 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 			CUTE_PNG_CHECK(new_nodes, "out of mem");
 			memcpy(new_nodes, nodes, sizeof(cp_atlas_node_t) * sp);
 			CUTE_PNG_FREE(nodes);
-			// best_fit becamse a dangling pointer, so relocate it
+			// best_fit became a dangling pointer, so relocate it
 			best_fit = new_nodes + (best_fit - nodes);
 			nodes = new_nodes;
 			atlas_node_capacity = new_capacity;
