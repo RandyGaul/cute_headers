@@ -82,7 +82,7 @@
 
 #define CUTE_PNG_ATLAS_MUST_FIT           1 // returns error from cp_make_atlas if *any* input image does not fit
 #define CUTE_PNG_ATLAS_FLIP_Y_AXIS_FOR_UV 1 // flips output uv coordinate's y. Can be useful to "flip image on load"
-#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF
+#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF // the fill color for empty areas in a texture atlas (RGBA)
 
 #include <stdint.h>
 #include <limits.h>
