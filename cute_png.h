@@ -254,8 +254,7 @@ typedef struct cp_state_t
 	int word_index;
 	int bits_left;
 
-	char* final_bytes;
-	int last_bits;
+	uint32_t final_word;
 
 	char* out;
 	char* out_end;
@@ -270,9 +269,9 @@ typedef struct cp_state_t
 	uint32_t nlen;
 } cp_state_t;
 
-static int cp_would_overflow(int64_t bits_left, int num_bits)
+static int cp_would_overflow(cp_state_t* s, int num_bits)
 {
-	return bits_left - num_bits < 0;
+	return (s->bits_left + s->count) - num_bits < 0;
 }
 
 static char* cp_ptr(cp_state_t* s)
@@ -285,21 +284,10 @@ static uint64_t cp_peak_bits(cp_state_t* s, int num_bits_to_read)
 {
 	if (s->count < num_bits_to_read)
 	{
-		if (s->bits_left > s->last_bits)
-		{
-			s->bits |= (uint64_t)s->words[s->word_index] << s->count;
-			s->count += 32;
-			s->word_index += 1;
-		}
-
-		else
-		{
-			CUTE_PNG_ASSERT(s->bits_left <= 3 * 8);
-			int bytes = s->bits_left / 8;
-			for (int i = 0; i < bytes; ++i)
-				s->bits |= (uint64_t)(s->final_bytes[i]) << (i * 8);
-			s->count += s->bits_left;
-		}
+		uint32_t word = (s->word_index < s->word_count) ? s->words[s->word_index++] : s->final_word;
+		s->bits |= (uint64_t) word << s->count;
+		s->count += 32;
+		CUTE_PNG_ASSERT(s->word_index <= s->word_count);
 	}
 
 	return s->bits;
@@ -321,7 +309,7 @@ static uint32_t cp_read_bits(cp_state_t* s, int num_bits_to_read)
 	CUTE_PNG_ASSERT(num_bits_to_read >= 0);
 	CUTE_PNG_ASSERT(s->bits_left > 0);
 	CUTE_PNG_ASSERT(s->count <= 64);
-	CUTE_PNG_ASSERT(!cp_would_overflow(s->bits_left, num_bits_to_read));
+	CUTE_PNG_ASSERT(!cp_would_overflow(s, num_bits_to_read));
 	cp_peak_bits(s, num_bits_to_read);
 	uint32_t bits = cp_consume_bits(s, num_bits_to_read);
 	return bits;
@@ -434,6 +422,7 @@ static int cp_fixed(cp_state_t* s)
 
 static int cp_decode(cp_state_t* s, uint32_t* tree, int hi)
 {
+	CUTE_PNG_ASSERT(!cp_would_overflow(s, 16));
 	uint64_t bits = cp_peak_bits(s, 16);
 	uint32_t search = (cp_rev16((uint32_t)bits) << 16) | 0xFFFF;
 	int lo = 0;
@@ -536,17 +525,22 @@ int cp_inflate(void* in, int in_bytes, void* out, int out_bytes)
 	cp_state_t* s = (cp_state_t*)CUTE_PNG_CALLOC(1, sizeof(cp_state_t));
 	s->bits = 0;
 	s->count = 0;
-	s->word_count = in_bytes / 4;
 	s->word_index = 0;
 	s->bits_left = in_bytes * 8;
 
-	int first_bytes = (int)((size_t)in & 3);
+	// s->words is the in-pointer rounded up to a multiple of 4
+	int first_bytes = (int) ((( (size_t) in + 3) & ~3) - (size_t) in);
 	s->words = (uint32_t*)((char*)in + first_bytes);
-	s->last_bits = ((in_bytes - first_bytes) & 3) * 8;
-	s->final_bytes = (char*)in + in_bytes - s->last_bits;
+	s->word_count = (in_bytes - first_bytes) / 4;
+	int last_bytes = ((in_bytes - first_bytes) & 3);
 
 	for (int i = 0; i < first_bytes; ++i)
 		s->bits |= (uint64_t)(((uint8_t*)in)[i]) << (i * 8);
+	
+	s->final_word = 0;
+	for(int i = 0; i < last_bytes; i++) 
+		s->final_word |= ((uint8_t*)in)[in_bytes - last_bytes+i] << (i * 8);
+
 	s->count = first_bytes * 8;
 
 	s->out = (char*)out;
