@@ -68,6 +68,7 @@
 /*
 	Contributors:
 		Zachary Carter    1.01 - bug catch for tRNS chunk in paletted images
+		Dennis Korpel     1.03 - fix some pointer/memory related bugs
 */
 
 #if !defined(CUTE_PNG_H)
