@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_png.h - v1.02
+	cute_png.h - v1.03
 
 	To create implementation (the function definitions)
 		#define CUTE_PNG_IMPLEMENTATION
@@ -68,6 +68,7 @@
 /*
 	Contributors:
 		Zachary Carter    1.01 - bug catch for tRNS chunk in paletted images
+		Dennis Korpel     1.03 - fix some pointer/memory related bugs
 */
 
 #if !defined(CUTE_PNG_H)
@@ -82,7 +83,7 @@
 
 #define CUTE_PNG_ATLAS_MUST_FIT           1 // returns error from cp_make_atlas if *any* input image does not fit
 #define CUTE_PNG_ATLAS_FLIP_Y_AXIS_FOR_UV 1 // flips output uv coordinate's y. Can be useful to "flip image on load"
-#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF
+#define CUTE_PNG_ATLAS_EMPTY_COLOR        0x000000FF // the fill color for empty areas in a texture atlas (RGBA)
 
 #include <stdint.h>
 #include <limits.h>
@@ -254,8 +255,7 @@ typedef struct cp_state_t
 	int word_index;
 	int bits_left;
 
-	char* final_bytes;
-	int last_bits;
+	uint32_t final_word;
 
 	char* out;
 	char* out_end;
@@ -270,9 +270,9 @@ typedef struct cp_state_t
 	uint32_t nlen;
 } cp_state_t;
 
-static int cp_would_overflow(int64_t bits_left, int num_bits)
+static int cp_would_overflow(cp_state_t* s, int num_bits)
 {
-	return bits_left - num_bits < 0;
+	return (s->bits_left + s->count) - num_bits < 0;
 }
 
 static char* cp_ptr(cp_state_t* s)
@@ -285,21 +285,10 @@ static uint64_t cp_peak_bits(cp_state_t* s, int num_bits_to_read)
 {
 	if (s->count < num_bits_to_read)
 	{
-		if (s->bits_left > s->last_bits)
-		{
-			s->bits |= (uint64_t)s->words[s->word_index] << s->count;
-			s->count += 32;
-			s->word_index += 1;
-		}
-
-		else
-		{
-			CUTE_PNG_ASSERT(s->bits_left <= 3 * 8);
-			int bytes = s->bits_left / 8;
-			for (int i = 0; i < bytes; ++i)
-				s->bits |= (uint64_t)(s->final_bytes[i]) << (i * 8);
-			s->count += s->bits_left;
-		}
+		uint32_t word = (s->word_index < s->word_count) ? s->words[s->word_index++] : s->final_word;
+		s->bits |= (uint64_t) word << s->count;
+		s->count += 32;
+		CUTE_PNG_ASSERT(s->word_index <= s->word_count);
 	}
 
 	return s->bits;
@@ -321,7 +310,7 @@ static uint32_t cp_read_bits(cp_state_t* s, int num_bits_to_read)
 	CUTE_PNG_ASSERT(num_bits_to_read >= 0);
 	CUTE_PNG_ASSERT(s->bits_left > 0);
 	CUTE_PNG_ASSERT(s->count <= 64);
-	CUTE_PNG_ASSERT(!cp_would_overflow(s->bits_left, num_bits_to_read));
+	CUTE_PNG_ASSERT(!cp_would_overflow(s, num_bits_to_read));
 	cp_peak_bits(s, num_bits_to_read);
 	uint32_t bits = cp_consume_bits(s, num_bits_to_read);
 	return bits;
@@ -373,7 +362,7 @@ static int cp_build(cp_state_t* s, uint32_t* tree, uint8_t* lens, int sym_count)
 		first[n] = first[n - 1] + counts[n - 1];
 	}
 
-	if (s) CUTE_PNG_MEMSET(s->lookup, 0, sizeof(512 * sizeof(uint32_t)));
+	if (s) CUTE_PNG_MEMSET(s->lookup, 0, sizeof(s->lookup));
 	for (int i = 0; i < sym_count; ++i)
 	{
 		int len = lens[i];
@@ -434,6 +423,7 @@ static int cp_fixed(cp_state_t* s)
 
 static int cp_decode(cp_state_t* s, uint32_t* tree, int hi)
 {
+	CUTE_PNG_ASSERT(!cp_would_overflow(s, 16));
 	uint64_t bits = cp_peak_bits(s, 16);
 	uint32_t search = (cp_rev16((uint32_t)bits) << 16) | 0xFFFF;
 	int lo = 0;
@@ -536,17 +526,22 @@ int cp_inflate(void* in, int in_bytes, void* out, int out_bytes)
 	cp_state_t* s = (cp_state_t*)CUTE_PNG_CALLOC(1, sizeof(cp_state_t));
 	s->bits = 0;
 	s->count = 0;
-	s->word_count = in_bytes / 4;
 	s->word_index = 0;
 	s->bits_left = in_bytes * 8;
 
-	int first_bytes = (int)((size_t)in & 3);
+	// s->words is the in-pointer rounded up to a multiple of 4
+	int first_bytes = (int) ((( (size_t) in + 3) & ~3) - (size_t) in);
 	s->words = (uint32_t*)((char*)in + first_bytes);
-	s->last_bits = ((in_bytes - first_bytes) & 3) * 8;
-	s->final_bytes = (char*)in + in_bytes - s->last_bits;
+	s->word_count = (in_bytes - first_bytes) / 4;
+	int last_bytes = ((in_bytes - first_bytes) & 3);
 
 	for (int i = 0; i < first_bytes; ++i)
 		s->bits |= (uint64_t)(((uint8_t*)in)[i]) << (i * 8);
+	
+	s->final_word = 0;
+	for(int i = 0; i < last_bytes; i++) 
+		s->final_word |= ((uint8_t*)in)[in_bytes - last_bytes+i] << (i * 8);
+
 	s->count = first_bytes * 8;
 
 	s->out = (char*)out;
@@ -1383,6 +1378,13 @@ static void cp_qsort(cp_integer_image_t* items, int count)
 	cp_qsort(items + low + 1, count - 1 - low);
 }
 
+static void cp_write_pixel(char* mem, long color) {
+	mem[0] = (color >> 24) & 0xFF;
+	mem[1] = (color >> 16) & 0xFF;
+	mem[2] = (color >>  8) & 0xFF;
+	mem[3] = (color >>  0) & 0xFF;
+}
+
 cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pngs, int png_count, cp_atlas_image_t* imgs_out)
 {
 	float w0, h0, div, wTol, hTol;
@@ -1436,6 +1438,11 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 		int height = png->h;
 		cp_atlas_node_t *best_fit = cp_best_fit(sp, png, nodes);
 		if (CUTE_PNG_ATLAS_MUST_FIT) CUTE_PNG_CHECK(best_fit, "Not enough room to place image in atlas.");
+		else if (!best_fit) 
+		{
+			image->fit = 0;
+			continue;
+		}
 
 		image->min = best_fit->min;
 		image->max = cp_add(image->min, image->size);
@@ -1458,6 +1465,8 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 			CUTE_PNG_CHECK(new_nodes, "out of mem");
 			memcpy(new_nodes, nodes, sizeof(cp_atlas_node_t) * sp);
 			CUTE_PNG_FREE(nodes);
+			// best_fit became a dangling pointer, so relocate it
+			best_fit = new_nodes + (best_fit - nodes);
 			nodes = new_nodes;
 			atlas_node_capacity = new_capacity;
 		}
@@ -1495,8 +1504,11 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 	atlas_stride = atlas_width * sizeof(cp_pixel_t);
 	atlas_image_size = atlas_width * atlas_height * sizeof(cp_pixel_t);
 	atlas_pixels = CUTE_PNG_ALLOC(atlas_image_size);
-	CUTE_PNG_CHECK(atlas_image_size, "out of mem");
-	CUTE_PNG_MEMSET(atlas_pixels, CUTE_PNG_ATLAS_EMPTY_COLOR, atlas_image_size);
+	CUTE_PNG_CHECK(atlas_pixels, "out of mem");
+	
+	for(int i = 0; i < atlas_image_size; i += sizeof(cp_pixel_t)) {
+		cp_write_pixel((char*)atlas_pixels + i, CUTE_PNG_ATLAS_EMPTY_COLOR);
+	}
 
 	for (int i = 0; i < png_count; ++i)
 	{
