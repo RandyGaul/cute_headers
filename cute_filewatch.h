@@ -2362,9 +2362,8 @@ int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, f
 {
 	filewatch_watched_dir_internal_t* watch;
 	int success;
-	CUTE_FILEWATCH_CHECK(filewatch->mount_count, "`filewatch_t` must be mounted before called `filewatch_update`.");
-
 	STRPOOL_EMBEDDED_U64 virtual_id = CUTE_FILEWATCH_INJECT(filewatch, virtual_path, CUTE_FILEWATCH_STRLEN(virtual_path));
+	CUTE_FILEWATCH_CHECK(filewatch->mount_count, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	for (int i = 0; i < filewatch->mount_count; ++i)
 	{
