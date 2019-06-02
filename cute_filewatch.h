@@ -19,7 +19,7 @@
 		The reason assetsys.h is used, is to provide access to virtual paths. assetsys.h
 		works by mounting a directory or zip file under a virtual path. The rest of the
 		application can interface through the virtual path via assetsys. This abstraction
-		is important to decouple in-game file paths from on-disk paths. In this way
+		is important to decouple in-game file paths from on-disk mount_paths. In this way
 		zipped up archives can replace typical files and folders once an application is
 		ready to ship, without changing any code.
 
@@ -125,9 +125,13 @@ filewatch_t* filewatch_create(struct assetsys_t* assetsys, void* mem_ctx);
  */
 void filewatch_free(filewatch_t* filewatch);
 
+#define FILEWATCH_MAX_MOUNTS (128)
+
 /**
  * Loads up a directory for watching. Also mounts `assetsys` provided by the `filewatch_create`
  * function. In this way, `filewatch_mount` becomes the temporary replacement of `assetsys_mount`.
+ * Can not mount more than `FILEWATCH_MAX_MOUNTS` directories simultaneously.
+ * Returns 0 on failure, 1 on success.
  */
 int filewatch_mount(filewatch_t* filewatch, const char* actual_path, const char* mount_as_virtual_path);
 
@@ -135,12 +139,13 @@ int filewatch_mount(filewatch_t* filewatch, const char* actual_path, const char*
  * Unmounts a directory and stops watches on this directory. Also unmounts the underlying
  * `assetsys` mount.
  */
-void filewatch_dismount(filewatch_t* filewatch);
+void filewatch_dismount(filewatch_t* filewatch, const char* actual_path, const char* virtual_path);
 
 /**
  * Searches all watched directories and stores up notifications internally. This function is often
  * stuck into a separate thread to wake periodically and scan the watched directories. Does not do
  * any notification reporting, and instead only queues up notifications.
+ * Returns 0 on failure, 1 on success.
  */
 int filewatch_update(filewatch_t* filewatch);
 
@@ -173,6 +178,7 @@ typedef void (filewatch_callback_t)(filewatch_update_t change, const char* virtu
 /**
  * Start watching a specific directory. Does not recursively register sub-directories. The user is
  * expected to provide a valid callback to `cb`. `virtual_path` is directory within an `assetsys` mount.
+ * Returns 0 on failure, 1 on success.
  */
 int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, filewatch_callback_t* cb, void* udata);
 
@@ -184,14 +190,22 @@ void filewatch_stop_watching(filewatch_t* filewatch, const char* virtual_path);
 /**
  * Helper function for user-convenience. These can be useful when certain files need to be preprocessed
  * when changed or added.
+ * This function searches the internal mounted path and will return the first result found. This can cause
+ * unintended effects if the search path is not carefully constructed. The search path is searched by
+ * the mount order (meaning mounts which are created first will be searched first).
+ * Returns 0 on failure, 1 on success.
  */
-void filewatch_actual_path_to_virtual_path(filewatch_t* filewatch, const char* actual_path, char* virtual_path, int virtual_path_capacity);
+int filewatch_actual_path_to_virtual_path(filewatch_t* filewatch, const char* actual_path, char* virtual_path, int virtual_path_capacity);
 
 /**
  * Helper function for user-convenience. These can be useful when certain files need to be preprocessed
  * when changed or added.
+ * This function searches the internal mounted path and will return the first result found. This can cause
+ * unintended effects if the search path is not carefully constructed. The search path is searched by
+ * the mount order (meaning mounts which are created first will be searched first).
+ * Returns 0 on failure, 1 on success.
  */
-void filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity);
+int filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity);
 
 #define CUTE_FILEWATCH_H
 #endif
@@ -2012,8 +2026,8 @@ typedef struct filewatch_notification_internal_t
 struct filewatch_t
 {
 	assetsys_t* assetsys;
-	filewatch_path_t mount_path;
-	int mounted;
+	int mount_count;
+	filewatch_path_t mount_paths[FILEWATCH_MAX_MOUNTS];
 
 	int watch_count;
 	int watch_capacity;
@@ -2061,23 +2075,24 @@ void filewatch_free(filewatch_t* filewatch)
 
 #define CUTE_FILEWATCH_INJECT(filewatch, str, len) strpool_embedded_inject(&filewatch->strpool, str, len)
 #define CUTE_FILEWATCH_CSTR(filewatch, id) strpool_embedded_cstr(&filewatch->strpool, id)
-#define CUTE_FILEWATCH_CHECK(X, Y) do { if (!X) { filewatch_error_reason = Y; goto cute_filewatch_err; } } while (0)
+#define CUTE_FILEWATCH_CHECK(X, Y) do { if (!(X)) { filewatch_error_reason = Y; goto cute_filewatch_err; } } while (0)
 
 int filewatch_mount(filewatch_t* filewatch, const char* actual_path, const char* mount_as_virtual_path)
 {
 	STRPOOL_EMBEDDED_U64 actual_id;
 	STRPOOL_EMBEDDED_U64 virtual_id;
 	assetsys_error_t ret;
+	filewatch_path_t path;
 
-	CUTE_FILEWATCH_CHECK(!filewatch->mounted, "`filewatch_t` is already mounted. Please call `filewatch_dismount` before calling `filewatch_mount` again.");
+	CUTE_FILEWATCH_CHECK(filewatch->mount_count < FILEWATCH_MAX_MOUNTS, "Can not mount more than `FILEWATCH_MAX_MOUNTS` times simultaneously.");
 
 	actual_id = CUTE_FILEWATCH_INJECT(filewatch, actual_path, CUTE_FILEWATCH_STRLEN(actual_path));
 	virtual_id = CUTE_FILEWATCH_INJECT(filewatch, mount_as_virtual_path, CUTE_FILEWATCH_STRLEN(mount_as_virtual_path));
-	filewatch->mount_path.virtual_id = virtual_id;
-	filewatch->mount_path.actual_id = actual_id;
+	path.actual_id = actual_id;
+	path.virtual_id = virtual_id;
+	filewatch->mount_paths[filewatch->mount_count++] = path;
 	ret = assetsys_mount(filewatch->assetsys, actual_path, mount_as_virtual_path);
 	CUTE_FILEWATCH_CHECK(ret == ASSETSYS_SUCCESS, "assetsys failed to initialize.");
-	filewatch->mounted = 1;
 
 	return 1;
 
@@ -2085,14 +2100,41 @@ cute_filewatch_err:
 	return 0;
 }
 
-void filewatch_dismount(filewatch_t* filewatch)
+void filewatch_dismount(filewatch_t* filewatch, const char* actual_path, const char* virtual_path)
 {
-	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
-	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
-	assetsys_dismount(filewatch->assetsys, mount_path, mount_as);
-	filewatch->mounted = 0;
+	int found = 0;
+	filewatch_path_t* mount_paths = filewatch->mount_paths;
+	STRPOOL_EMBEDDED_U64 actual_id = CUTE_FILEWATCH_INJECT(filewatch, actual_path, CUTE_FILEWATCH_STRLEN(actual_path));
+	STRPOOL_EMBEDDED_U64 virtual_id = CUTE_FILEWATCH_INJECT(filewatch, virtual_path, CUTE_FILEWATCH_STRLEN(virtual_path));
 
-	// remove all watches
+	for (int i = 0; i < filewatch->mount_count; ++i)
+	{
+		filewatch_path_t path = mount_paths[i];
+		if (path.actual_id == actual_id && path.virtual_id == virtual_id)
+		{
+			const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, path.virtual_id);
+			const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, path.actual_id);
+			assetsys_dismount(filewatch->assetsys, mount_path, mount_as);
+			mount_paths[i] = mount_paths[--filewatch->mount_count];
+			break;
+		}
+	}
+
+	// Remove all watches for this virtual path if no other mount_paths are mounted on this virtual path.
+	for (int i = 0; i < filewatch->mount_count; ++i)
+	{
+		filewatch_path_t path = mount_paths[i];
+		if (path.virtual_id == virtual_id)
+		{
+			found = 1;
+			break;
+		}
+	}
+
+	if (!found)
+	{
+		filewatch_stop_watching(filewatch, virtual_path);
+	}
 }
 
 static int filewatch_strncpy_internal(char* dst, const char* src, int n, int max)
@@ -2158,12 +2200,14 @@ void filewatch_add_entry_internal(filewatch_watched_dir_internal_t* watch, filew
 
 int filewatch_update(filewatch_t* filewatch)
 {
-	int remount_needed = 0;
-	CUTE_FILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
+	int remount_count = 0;
+	filewatch_path_t remount_paths[FILEWATCH_MAX_MOUNTS];
+	CUTE_FILEWATCH_CHECK(filewatch->mount_count, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
 	for (int i = 0; i < filewatch->watch_count; ++i)
 	{
 		filewatch_watched_dir_internal_t* watch = filewatch->watches + i;
+		filewatch_path_t watch_path = watch->dir_path;
 
 		// look for removed entries
 		int entry_count = hashtable_count(&watch->entries);
@@ -2180,14 +2224,16 @@ int filewatch_update(filewatch_t* filewatch)
 				if (entry->is_dir)
 				{
 					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_DIR_REMOVED);
-					remount_needed = 1;
+					CUTE_FILEWATCH_CHECK(remount_count < FILEWATCH_MAX_MOUNTS, "Tried to remount too many mounts in one update. Try using less mounts, or increase `FILEWATCH_MAX_MOUNTS`.");
+					remount_paths[remount_count++] = watch_path;
 				}
 
 				// file removed
 				else
 				{
 					filewatch_add_notification_internal(filewatch, watch, entry->path, FILEWATCH_FILE_REMOVED);
-					remount_needed = 1;
+					CUTE_FILEWATCH_CHECK(remount_count < FILEWATCH_MAX_MOUNTS, "Tried to remount too many mounts in one update. Try using less mounts, or increase `FILEWATCH_MAX_MOUNTS`.");
+					remount_paths[remount_count++] = watch_path;
 				}
 
 				// remove entry from table
@@ -2204,7 +2250,8 @@ int filewatch_update(filewatch_t* filewatch)
 			filewatch_add_notification_internal(filewatch, watch, watch->dir_path, FILEWATCH_DIR_REMOVED);
 			hashtable_term(&watch->entries);
 			filewatch->watches[i--] = filewatch->watches[--filewatch->watch_count];
-			remount_needed = 1;
+			CUTE_FILEWATCH_CHECK(remount_count < FILEWATCH_MAX_MOUNTS, "Tried to remount too many mounts in one update. Try using less mounts, or increase `FILEWATCH_MAX_MOUNTS`.");
+			remount_paths[remount_count++] = watch_path;
 			continue;
 		}
 
@@ -2244,7 +2291,8 @@ int filewatch_update(filewatch_t* filewatch)
 				{
 					filewatch_add_entry_internal(watch, path, name_id, file.path, 0);
 					filewatch_add_notification_internal(filewatch, watch, path, FILEWATCH_FILE_ADDED);
-					remount_needed = 1;
+					CUTE_FILEWATCH_CHECK(remount_count < FILEWATCH_MAX_MOUNTS, "Tried to remount too many mounts in one update. Try using less mounts, or increase `FILEWATCH_MAX_MOUNTS`.");
+					remount_paths[remount_count++] = watch_path;
 				}
 			}
 
@@ -2255,7 +2303,8 @@ int filewatch_update(filewatch_t* filewatch)
 				{
 					filewatch_add_entry_internal(watch, path, name_id, file.path, 1);
 					filewatch_add_notification_internal(filewatch, watch, path, FILEWATCH_DIR_ADDED);
-					remount_needed = 1;
+					CUTE_FILEWATCH_CHECK(remount_count < FILEWATCH_MAX_MOUNTS, "Tried to remount too many mounts in one update. Try using less mounts, or increase `FILEWATCH_MAX_MOUNTS`.");
+					remount_paths[remount_count++] = watch_path;
 				}
 			}
 
@@ -2265,10 +2314,11 @@ int filewatch_update(filewatch_t* filewatch)
 		cf_dir_close(&dir);
 	}
 
-	if (remount_needed)
+	for (int i = 0; i < remount_count; ++i)
 	{
-		const char* actual_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
-		const char* virtual_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
+		filewatch_path_t path = remount_paths[i];
+		const char* actual_path = CUTE_FILEWATCH_CSTR(filewatch, path.actual_id);
+		const char* virtual_path = CUTE_FILEWATCH_CSTR(filewatch, path.virtual_id);
 		assetsys_dismount(filewatch->assetsys, actual_path, virtual_path);
 		assetsys_mount(filewatch->assetsys, actual_path, virtual_path);
 	}
@@ -2290,50 +2340,75 @@ void filewatch_notify(filewatch_t* filewatch)
 	filewatch->notification_count = 0;
 }
 
+void filewatch_actual_path_to_virtual_path_internal(filewatch_t* filewatch, const char* actual_path, char* virtual_path, int virtual_path_capacity, filewatch_path_t path)
+{
+	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, path.actual_id);
+	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, path.virtual_id);
+	const char* offset_actual_path = actual_path + CUTE_FILEWATCH_STRLEN(mount_as);
+	offset_actual_path = *offset_actual_path == '/' ? offset_actual_path + 1 : offset_actual_path;
+	filewatch_path_concat_internal(mount_as, offset_actual_path, virtual_path, virtual_path_capacity);
+}
+
+void filewatch_virtual_path_to_actual_path_internal(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity, filewatch_path_t path)
+{
+	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, path.actual_id);
+	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, path.virtual_id);
+	const char* offset_virtual_path = virtual_path + CUTE_FILEWATCH_STRLEN(mount_as);
+	offset_virtual_path = *offset_virtual_path == '/' ? offset_virtual_path + 1 : offset_virtual_path;
+	filewatch_path_concat_internal(mount_path, offset_virtual_path, actual_path, actual_path_capacity);
+}
+
 int filewatch_start_watching(filewatch_t* filewatch, const char* virtual_path, filewatch_callback_t* cb, void* udata)
 {
 	filewatch_watched_dir_internal_t* watch;
 	int success;
-	CUTE_FILEWATCH_CHECK(filewatch->mounted, "`filewatch_t` must be mounted before called `filewatch_update`.");
+	CUTE_FILEWATCH_CHECK(filewatch->mount_count, "`filewatch_t` must be mounted before called `filewatch_update`.");
 
-	CUTE_FILEWATCH_CHECK_BUFFER_GROW(filewatch, watch_count, watch_capacity, watches, filewatch_watched_dir_internal_t);
-	watch = filewatch->watches + filewatch->watch_count++;
-	watch->cb = cb;
-	watch->udata = udata;
-	hashtable_init(&watch->entries, sizeof(filewatch_entry_internal_t), 32, filewatch->mem_ctx);
+	STRPOOL_EMBEDDED_U64 virtual_id = CUTE_FILEWATCH_INJECT(filewatch, virtual_path, CUTE_FILEWATCH_STRLEN(virtual_path));
 
-	filewatch_path_t path;
-	char actual_path[260];
-	filewatch_virtual_path_to_actual_path(filewatch, virtual_path, actual_path, 260);
-	path.actual_id = CUTE_FILEWATCH_INJECT(filewatch, actual_path, CUTE_FILEWATCH_STRLEN(actual_path));
-	path.virtual_id = CUTE_FILEWATCH_INJECT(filewatch, virtual_path, CUTE_FILEWATCH_STRLEN(virtual_path));
-	watch->dir_path = path;
-
-	cf_dir_t dir;
-	success = cf_dir_open(&dir, actual_path);
-	CUTE_FILEWATCH_CHECK(success, "`virtual_path` is not a valid directory.");
-
-	while (dir.has_next)
+	for (int i = 0; i < filewatch->mount_count; ++i)
 	{
-		cf_file_t file;
-		cf_read_file(&dir, &file);
-		STRPOOL_EMBEDDED_U64 name_id = CUTE_FILEWATCH_INJECT(filewatch, file.name, CUTE_FILEWATCH_STRLEN(file.name));
-		filewatch_path_t file_path = filewatch_build_path_internal(filewatch, watch, file.path, file.name);
+		filewatch_path_t path = filewatch->mount_paths[i];
+		if (path.virtual_id != virtual_id) continue;
 
-		if (!file.is_dir && file.is_reg)
+		CUTE_FILEWATCH_CHECK_BUFFER_GROW(filewatch, watch_count, watch_capacity, watches, filewatch_watched_dir_internal_t);
+		watch = filewatch->watches + filewatch->watch_count++;
+		watch->cb = cb;
+		watch->udata = udata;
+		hashtable_init(&watch->entries, sizeof(filewatch_entry_internal_t), 32, filewatch->mem_ctx);
+
+		char actual_path[260];
+		filewatch_virtual_path_to_actual_path_internal(filewatch, virtual_path, actual_path, 260, path);
+		path.actual_id = CUTE_FILEWATCH_INJECT(filewatch, actual_path, CUTE_FILEWATCH_STRLEN(actual_path));
+		path.virtual_id = virtual_id;
+		watch->dir_path = path;
+
+		cf_dir_t dir;
+		success = cf_dir_open(&dir, actual_path);
+		CUTE_FILEWATCH_CHECK(success, "`virtual_path` is not a valid directory.");
+
+		while (dir.has_next)
 		{
-			filewatch_add_entry_internal(watch, file_path, name_id, file.path, 0);
+			cf_file_t file;
+			cf_read_file(&dir, &file);
+			STRPOOL_EMBEDDED_U64 name_id = CUTE_FILEWATCH_INJECT(filewatch, file.name, CUTE_FILEWATCH_STRLEN(file.name));
+			filewatch_path_t file_path = filewatch_build_path_internal(filewatch, watch, file.path, file.name);
+
+			if (!file.is_dir && file.is_reg)
+			{
+				filewatch_add_entry_internal(watch, file_path, name_id, file.path, 0);
+			}
+
+			else if (file.is_dir && file.name[0] != '.')
+			{
+				filewatch_add_entry_internal(watch, file_path, name_id, file.path, 1);
+			}
+
+			cf_dir_next(&dir);
 		}
 
-		else if (file.is_dir && file.name[0] != '.')
-		{
-			filewatch_add_entry_internal(watch, file_path, name_id, file.path, 1);
-		}
-
-		cf_dir_next(&dir);
+		cf_dir_close(&dir);
 	}
-
-	cf_dir_close(&dir);
 
 	return 1;
 
@@ -2362,28 +2437,45 @@ void filewatch_stop_watching(filewatch_t* filewatch, const char* virtual_path)
 				}
 			}
 
-			filewatch->watches[i] = filewatch->watches[--filewatch->watch_count];
-			break;
+			filewatch->watches[i--] = filewatch->watches[--filewatch->watch_count];
 		}
 	}
 }
 
-void filewatch_actual_path_to_virtual_path(filewatch_t* filewatch, const char* actual_path, char* virtual_path, int virtual_path_capacity)
+int filewatch_actual_path_to_virtual_path(filewatch_t* filewatch, const char* actual_path, char* virtual_path, int virtual_path_capacity)
 {
-	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
-	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
-	const char* offset_actual_path = actual_path + CUTE_FILEWATCH_STRLEN(mount_as);
-	offset_actual_path = *offset_actual_path == '/' ? offset_actual_path + 1 : offset_actual_path;
-	filewatch_path_concat_internal(mount_as, offset_actual_path, virtual_path, virtual_path_capacity);
+	filewatch_path_t* mount_paths = filewatch->mount_paths;
+	STRPOOL_EMBEDDED_U64 actual_id = CUTE_FILEWATCH_INJECT(filewatch, actual_path, CUTE_FILEWATCH_STRLEN(actual_path));
+
+	for (int i = 0; i < filewatch->mount_count; ++i)
+	{
+		filewatch_path_t path = mount_paths[i];
+		if (path.actual_id == actual_id)
+		{
+			filewatch_actual_path_to_virtual_path_internal(filewatch, actual_path, virtual_path, virtual_path_capacity, path);
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
-void filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity)
+int filewatch_virtual_path_to_actual_path(filewatch_t* filewatch, const char* virtual_path, char* actual_path, int actual_path_capacity)
 {
-	const char* mount_path = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.actual_id);
-	const char* mount_as = CUTE_FILEWATCH_CSTR(filewatch, filewatch->mount_path.virtual_id);
-	const char* offset_virtual_path = virtual_path + CUTE_FILEWATCH_STRLEN(mount_as);
-	offset_virtual_path = *offset_virtual_path == '/' ? offset_virtual_path + 1 : offset_virtual_path;
-	filewatch_path_concat_internal(mount_path, offset_virtual_path, actual_path, actual_path_capacity);
+	filewatch_path_t* mount_paths = filewatch->mount_paths;
+	STRPOOL_EMBEDDED_U64 virtual_id = CUTE_FILEWATCH_INJECT(filewatch, virtual_path, CUTE_FILEWATCH_STRLEN(virtual_path));
+
+	for (int i = 0; i < filewatch->mount_count; ++i)
+	{
+		filewatch_path_t path = mount_paths[i];
+		if (path.virtual_id == virtual_id)
+		{
+			filewatch_virtual_path_to_actual_path_internal(filewatch, virtual_path, actual_path, actual_path_capacity, path);
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 #endif // CUTE_FILEWATCH_IMPLEMENTATION_ONCE

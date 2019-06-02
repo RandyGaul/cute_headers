@@ -25,6 +25,7 @@ int main()
 	filewatch_t* filewatch = filewatch_create(assetsys, 0);
 
 	filewatch_mount(filewatch, "./watch_me", "/data");
+	filewatch_mount(filewatch, "./also_watch_me", "/data");
 	filewatch_start_watching(filewatch, "/data", watch_callback, 0);
 
 	while (!GetAsyncKeyState(VK_ESCAPE))
@@ -33,6 +34,8 @@ int main()
 		filewatch_notify(filewatch);
 		Sleep(100);
 	}
+
+	filewatch_stop_watching(filewatch, "/data");
 
 	filewatch_free(filewatch);
 	assetsys_destroy(assetsys);

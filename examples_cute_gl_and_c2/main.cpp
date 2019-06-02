@@ -1194,11 +1194,11 @@ void prime31_cap_to_aabb_bug2()
 	bb.min = c2V(-100.0f, -30.0f);
 	bb.max = c2V(-50.0f, 30.0f);
 
-#if 0
+#if 1
 	c2Capsule capsule;
 	capsule.r = 10;
-	capsule.a = c2V(0, -25);
-	capsule.b = c2V(0, 25);
+	capsule.a = c2V(-25, 0);
+	capsule.b = c2V(25, 0);
 
 	static uint64_t frame_count;
 	frame_count++;
@@ -1219,7 +1219,7 @@ void prime31_cap_to_aabb_bug2()
 #endif
 
 	c2Manifold m;
-#if 0
+#if 1
 	c2Collide(&bb, NULL, C2_AABB, &capsule, NULL, C2_CAPSULE, &m);
 #else
 	c2Collide(&capsule, NULL, C2_CAPSULE, &bb, NULL, C2_AABB, &m);
