@@ -23,16 +23,6 @@
 	SUMMARY
 
 		A professional level implementation of SSE intrinsics.
-
-	MATRIX/TRANSFORM FORMAT
-
-		This header is not particularly customized for general graphics programming since
-		there are no functions implemented here for 4x4 matrices. Personally I never use
-		4x4 matrices and instead prefer to represent affine transormations in block form:
-		Ax + b, where A is a 3x3 rotation matrix (and possibly scale), and b performs the
-		affine translation. A 4x4 matrix would store an additional row of { 0, 0, 0, 1 },
-		so in most cases this bottom row is wasted anyways. This is all my own preference
-		so feel free to adjust the header and add in 4x4 matrix routines as desired.
 */
 
 #include <stdint.h>
@@ -55,14 +45,34 @@
 #ifdef _WIN32
 #	define CUTE_MATH_INLINE __forceinline
 #	define CUTE_MATH_SELECTANY extern const __declspec(selectany)
+#	define CUTE_MATH_RESTRICT __restrict
 #else
+// Just assume a g++-like compiler.
 #	define CUTE_MATH_INLINE __attribute__((always_inline))
 #	define CUTE_MATH_SELECTANY extern const __attribute__((selectany))
+#	define CUTE_MATH_RESTRICT __restrict__
 #endif
 
 #define CUTE_MATH_PI 3.14159265358979323846f
 #define CUTE_MATH_DEG2RAD(X) ((X) * CUTE_MATH_PI / 180.0f)
 #define CUTE_MATH_RAD2DEG(X) ((X) * 180.0f / CUTE_MATH_PI)
+#define CUTE_MATH_FLT_MAX 3.402823466e+38F
+#define CUTE_MATH_FLT_EPSILON 1.19209290E-07f
+
+// -------------------------------------------------------------------------------------------------
+// Scalar operations.
+
+CUTE_MATH_INLINE float min(float a, float b) { return a < b ? a : b; }
+CUTE_MATH_INLINE float max(float a, float b) { return b < a ? a : b; }
+CUTE_MATH_INLINE float clamp(float a, float lo, float hi) { return max(lo, min(a, hi)); }
+CUTE_MATH_INLINE float sign(float a) { return a < 0 ? -1.0f : 1.0f; }
+CUTE_MATH_INLINE float intersect(float da, float db) { return da / (da - db); }
+CUTE_MATH_INLINE float invert_safe(float a) { return a != 0 ? a / 1.0f : 0; }
+
+CUTE_MATH_INLINE int min(int a, int b) { return a < b ? a : b; }
+CUTE_MATH_INLINE int max(int a, int b) { return b < a ? a : b; }
+CUTE_MATH_INLINE int clamp(int a, int lo, int hi) { return max(lo, min(a, hi)); }
+CUTE_MATH_INLINE int sign(int a) { return a < 0 ? -1 : 1; }
 
 // -------------------------------------------------------------------------------------------------
 // 3-Vector definition.
@@ -87,6 +97,17 @@ struct v3
 		default: CUTE_MATH_ASSERT(0); return 0;
 		}
 	}
+
+	CUTE_MATH_INLINE float x() { return _mm_cvtss_f32(CUTE_MATH_SHUFFLE(this->m, this->m, 0, 0, 0)); }
+	CUTE_MATH_INLINE float y() { return _mm_cvtss_f32(CUTE_MATH_SHUFFLE(this->m, this->m, 1, 1, 1)); }
+	CUTE_MATH_INLINE float z() { return _mm_cvtss_f32(CUTE_MATH_SHUFFLE(this->m, this->m, 2, 2, 2)); }
+
+	CUTE_MATH_INLINE v3 xyz() { return *this; }
+	CUTE_MATH_INLINE v3 xzy() { return v3(CUTE_MATH_SHUFFLE(this->m, this->m, 0, 2, 1)); }
+	CUTE_MATH_INLINE v3 yxz() { return v3(CUTE_MATH_SHUFFLE(this->m, this->m, 1, 0, 2)); }
+	CUTE_MATH_INLINE v3 yzx() { return v3(CUTE_MATH_SHUFFLE(this->m, this->m, 1, 2, 0)); }
+	CUTE_MATH_INLINE v3 zxy() { return v3(CUTE_MATH_SHUFFLE(this->m, this->m, 2, 0, 1)); }
+	CUTE_MATH_INLINE v3 zyx() { return v3(CUTE_MATH_SHUFFLE(this->m, this->m, 2, 1, 0)); }
 
 	__m128 m;
 };
@@ -232,11 +253,42 @@ CUTE_MATH_INLINE float CUTE_MATH_CALL hmax(v3 a)
 }
 
 CUTE_MATH_INLINE v3 CUTE_MATH_CALL norm(v3 a)
-{ 
+{
 	float t0 = dot(a, a);
 	float t1 = sqrtf(t0);
 	v3 t2 = v3(_mm_div_ps(a, v3(t1)));
 	return v3(_mm_and_ps(t2, cute_math_mask_all_bits));
+}
+
+// Optimize me.
+CUTE_MATH_INLINE v3 CUTE_MATH_CALL safe_norm(v3 a)
+{
+	float t0 = dot(a, a);
+	if (t0 == 0) {
+		return v3(0, 0, 0);
+	} else {
+		float t1 = sqrtf(t0);
+		v3 t2 = v3(_mm_div_ps(a, v3(t1)));
+		return v3(_mm_and_ps(t2, cute_math_mask_all_bits));
+	}
+}
+
+CUTE_MATH_INLINE v3 CUTE_MATH_CALL invert(v3 a)
+{
+	return v3(_mm_div_ps(v3(1.0f), a));
+}
+
+// Optimize me.
+CUTE_MATH_INLINE v3 CUTE_MATH_CALL invert_safe(v3 a)
+{
+	float x = a.x();
+	float y = a.y();
+	float z = a.z();
+	return v3(
+		x == 0 ? 0 : 1.0f / x,
+		y == 0 ? 0 : 1.0f / y,
+		z == 0 ? 0 : 1.0f / z
+	);
 }
 
 CUTE_MATH_INLINE v3 CUTE_MATH_CALL clamp(v3 a, v3 vmin, v3 vmax)
@@ -361,7 +413,7 @@ CUTE_MATH_INLINE m3 CUTE_MATH_CALL m3_from_quat(float x, float y, float z, float
 	);
 }
 
-CUTE_MATH_INLINE m3 CUTE_MATH_CALL m3_axis_angle(v3 axis, float angle)
+CUTE_MATH_INLINE m3 CUTE_MATH_CALL m3_from_axis_angle(v3 axis, float angle)
 {
 	float s = sinf(angle * 0.5f);
 	float c = cosf(angle * 0.5f);
@@ -405,7 +457,7 @@ CUTE_MATH_INLINE v3 CUTE_MATH_CALL mul(m3 a, v3 b)
 }
 
 // a^T * b
-CUTE_MATH_INLINE v3 CUTE_MATH_CALL mul_transpose(m3 a, v3 b) { mul(transpose(a), b); }
+CUTE_MATH_INLINE v3 CUTE_MATH_CALL mul_transpose(m3 a, v3 b) { return mul(transpose(a), b); }
 
 // a * b
 CUTE_MATH_INLINE m3 CUTE_MATH_CALL mul(m3 a, m3 b)
@@ -570,7 +622,7 @@ struct q4
 	__m128 m;
 };
 
-CUTE_MATH_INLINE q4 CUTE_MATH_CALL q4_axis_angle(v3 axis_normalized, float angle)
+CUTE_MATH_INLINE q4 CUTE_MATH_CALL q4_from_axis_angle(v3 axis_normalized, float angle)
 {
 	float s = sinf(angle * 0.5f);
 	float c = cosf(angle * 0.5f);
@@ -582,7 +634,7 @@ CUTE_MATH_INLINE float CUTE_MATH_CALL gety(q4 a) { return _mm_cvtss_f32(CUTE_MAT
 CUTE_MATH_INLINE float CUTE_MATH_CALL getz(q4 a) { return _mm_cvtss_f32(CUTE_MATH_SHUFFLE(a, a, 2, 2, 2)); }
 CUTE_MATH_INLINE float CUTE_MATH_CALL getw(q4 a) { return _mm_cvtss_f32(CUTE_MATH_SHUFFLE(a, a, 3, 3, 3)); }
 
-// un-optimized
+// Optimize me.
 CUTE_MATH_INLINE q4 CUTE_MATH_CALL norm(q4 q)
 {
 	float x = getx(q);
@@ -605,7 +657,7 @@ CUTE_MATH_INLINE q4 CUTE_MATH_CALL norm(q4 q)
 	return q4(x, y, z, w);
 }
 
-// un-optimized
+// Optimize me.
 CUTE_MATH_INLINE q4 CUTE_MATH_CALL operator*(q4 a, q4 b)
 {
 	return q4(
@@ -616,7 +668,7 @@ CUTE_MATH_INLINE q4 CUTE_MATH_CALL operator*(q4 a, q4 b)
 	);
 }
 
-// un-optimized
+// Optimize me.
 CUTE_MATH_INLINE q4 CUTE_MATH_CALL integrate(q4 q, v3 w, float h)
 {
 	q4 wq(getx(w) * h, gety(w) * h, getz(w) * h, 0.0f);
@@ -633,7 +685,7 @@ CUTE_MATH_INLINE q4 CUTE_MATH_CALL integrate(q4 q, v3 w, float h)
 	return norm(q0);
 }
 
-// un-optimized
+// Optimize me.
 CUTE_MATH_INLINE m3 CUTE_MATH_CALL m3_from_q4(q4 q)
 {
 	return m3_from_quat(getx(q), gety(q), getz(q), getw(q));
@@ -646,10 +698,21 @@ CUTE_MATH_INLINE float CUTE_MATH_CALL trace(m3 m)
 
 // -------------------------------------------------------------------------------------------------
 // Globals.
+
 CUTE_MATH_SELECTANY m3 identity_m3 = rows(v3(1.0f, 0.0f, 0.0f), v3(0.0f, 1.0f, 0.0f), v3(0.0f, 0.0f, 1.0f));
 CUTE_MATH_SELECTANY m3 zero_m3 = rows(v3(0.0f, 0.0f, 0.0f), v3(0.0f, 0.0f, 0.0f), v3(0.0f, 0.0f, 0.0f));
 CUTE_MATH_SELECTANY v3 zero_v3 = v3(0.0f, 0.0f, 0.0f);
 CUTE_MATH_SELECTANY q4 identity_q4 = q4(0.0f, 0.0f, 0.0f, 1.0f);
+CUTE_MATH_SELECTANY transform identity_transform = { zero_v3, identity_m3 };
+
+// -------------------------------------------------------------------------------------------------
+// Larger utility functions, defined in the `CUTE_MATH_IMPLEMENTATION` section.
+
+void CUTE_MATH_CALL look_at(float* world_to_cam, v3 eye, v3 target, v3 up, float* cam_to_world = NULL);
+void CUTE_MATH_CALL mul_vector4_by_matrix4x4(float* a_matrix4x4, float* b_vector4, float* out_vector);
+void CUTE_MATH_CALL mul_matrix4x4_by_matrix4x4(float* a, float* b, float* out);
+void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, float viewport_w, float viewport_h, float* cam_inv, float near_plane_dist, v3* mouse_pos, v3* mouse_dir);
+void CUTE_MATH_CALL axis_angle_from_m3(m3 m, v3* axis, float* angle_radians);
 
 #define CUTE_MATH_H
 #endif
@@ -658,7 +721,7 @@ CUTE_MATH_SELECTANY q4 identity_q4 = q4(0.0f, 0.0f, 0.0f, 1.0f);
 #ifndef CUTE_MATH_IMPLEMENTATION_ONCE
 #define CUTE_MATH_IMPLEMENTATION_ONCE
 
-void CUTE_MATH_CALL look_at(float* world_to_cam, v3 eye, v3 target, v3 up, float* cam_to_world = 0)
+void CUTE_MATH_CALL look_at(float* world_to_cam, v3 eye, v3 target, v3 up, float* cam_to_world)
 {
 	v3 front = norm(target - eye);
 	v3 side = norm(cross(front, up));
@@ -711,19 +774,31 @@ void CUTE_MATH_CALL look_at(float* world_to_cam, v3 eye, v3 target, v3 up, float
 	}
 }
 
-void CUTE_MATH_CALL mul_vector_by_matrix4x4(float* a, float* b)
+void CUTE_MATH_CALL mul_vector4_by_matrix4x4(float* a_matrix4x4, float* b_vector4, float* out_vector)
 {
 	float result[4];
 
-	result[0] = a[0] * b[0] + a[4] * b[1] + a[8] * b[2] + a[12] * b[3];
-	result[1] = a[1] * b[0] + a[5] * b[1] + a[9] * b[2] + a[13] * b[3];
-	result[2] = a[2] * b[0] + a[6] * b[1] + a[10] * b[2] + a[14] * b[3];
-	result[3] = a[3] * b[0] + a[7] * b[1] + a[11] * b[2] + a[15] * b[3];
+	result[0] = a_matrix4x4[0] * b_vector4[0] + a_matrix4x4[4] * b_vector4[1] + a_matrix4x4[8]  * b_vector4[2] + a_matrix4x4[12] * b_vector4[3];
+	result[1] = a_matrix4x4[1] * b_vector4[0] + a_matrix4x4[5] * b_vector4[1] + a_matrix4x4[9]  * b_vector4[2] + a_matrix4x4[13] * b_vector4[3];
+	result[2] = a_matrix4x4[2] * b_vector4[0] + a_matrix4x4[6] * b_vector4[1] + a_matrix4x4[10] * b_vector4[2] + a_matrix4x4[14] * b_vector4[3];
+	result[3] = a_matrix4x4[3] * b_vector4[0] + a_matrix4x4[7] * b_vector4[1] + a_matrix4x4[11] * b_vector4[2] + a_matrix4x4[15] * b_vector4[3];
 
-	b[0] = result[0];
-	b[1] = result[1];
-	b[2] = result[2];
-	b[3] = result[3];
+	out_vector[0] = result[0];
+	out_vector[1] = result[1];
+	out_vector[2] = result[2];
+	out_vector[3] = result[3];
+}
+
+void CUTE_MATH_CALL mul_matrix4x4_by_matrix4x4(float* a, float* b, float* out)
+{
+	float result[16];
+
+	mul_vector4_by_matrix4x4(a, b, result);
+	mul_vector4_by_matrix4x4(a, b + 4, result + 4);
+	mul_vector4_by_matrix4x4(a, b + 8, result + 8);
+	mul_vector4_by_matrix4x4(a, b + 12, result + 12);
+
+	for (int i = 0; i < 16; ++i) out[i] = result[i];
 }
 
 void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, float viewport_w, float viewport_h, float* cam_inv, float near_plane_dist, v3* mouse_pos, v3* mouse_dir)
@@ -736,7 +811,7 @@ void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, f
 
 	v3 cam_pos(cam_inv[12], cam_inv[13], cam_inv[14]);
 	float pf[4] = { getx(point_in_view_space), gety(point_in_view_space), getz(point_in_view_space), 1.0f };
-	mul_vector_by_matrix4x4(cam_inv, pf);
+	mul_matrix4x4_by_matrix4x4(cam_inv, pf, pf);
 	v3 point_on_clipping_plane(pf[0] , pf[1], pf[2]);
 	v3 dir_in_world_space = point_on_clipping_plane - cam_pos;
 
