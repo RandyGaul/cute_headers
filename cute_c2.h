@@ -1268,8 +1268,8 @@ int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out)
 	c2v n = c2Skew(ab);
 	c2v abs_n = c2Absv(n);
 	c2v half_extents = c2Mulvs(c2Sub(B.max, B.min), 0.5f);
-	c2v center_of_a_box = c2Mulvs(c2Add(B.min, B.max), 0.5f);
-	float d = c2Abs(c2Dot(n, c2Sub(p0, center_of_a_box))) - c2Dot(abs_n, half_extents);
+	c2v center_of_b_box = c2Mulvs(c2Add(B.min, B.max), 0.5f);
+	float d = c2Abs(c2Dot(n, c2Sub(p0, center_of_b_box))) - c2Dot(abs_n, half_extents);
 	if (d > 0) return 0;
 
 	// Calculate intermediate values up-front.
