@@ -1235,27 +1235,100 @@ int c2RaytoCircle(c2Ray A, c2Circle B, c2Raycast* out)
 	return 0;
 }
 
+static inline float c2SignedDistPointToPlane_OneDimensional(float p, float n, float d)
+{
+	return p * n - d * n;
+}
+
+static inline float c2RayToPlane_OneDimensional(float da, float db)
+{
+	if (da < 0) return 0; // Ray started behind plane.
+	else if (da * db >= 0) return 1.0f; // Ray starts and ends on the same of the plane.
+	else // Ray starts and ends on opposite sides of the plane (or directly on the plane).
+	{
+		float d = da - db;
+		if (d != 0) return da / d;
+		else return 0; // Special case for super tiny ray, or AABB.
+	}
+}
+
 int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out)
 {
-	c2v inv = c2V(1.0f / A.d.x, 1.0f / A.d.y);
-	c2v d0 = c2Mulvv(c2Sub(B.min, A.p), inv);
-	c2v d1 = c2Mulvv(c2Sub(B.max, A.p), inv);
-	c2v v0 = c2Minv(d0, d1);
-	c2v v1 = c2Maxv(d0, d1);
-	float lo = c2Hmax(v0);
-	float hi = c2Hmin(v1);
+	c2v p0 = A.p;
+	c2v p1 = c2Impact(A, A.t);
+	c2AABB a_box;
+	a_box.min = c2Minv(p0, p1);
+	a_box.max = c2Maxv(p0, p1);
 
-	if (hi >= 0 && hi >= lo && lo <= A.t)
+	// Test B's axes.
+	if (!c2AABBtoAABB(a_box, B)) return 0;
+
+	// Test the ray's axes (along the segment's normal).
+	c2v ab = c2Sub(p1, p0);
+	c2v n = c2Skew(ab);
+	c2v abs_n = c2Absv(n);
+	c2v half_extents = c2Mulvs(c2Sub(B.max, B.min), 0.5f);
+	c2v center_of_a_box = c2Mulvs(c2Add(B.min, B.max), 0.5f);
+	float d = c2Abs(c2Dot(n, c2Sub(p0, center_of_a_box))) - c2Dot(abs_n, half_extents);
+	if (d > 0) return 0;
+
+	// Calculate intermediate values up-front.
+	// This should play well with superscalar architecture.
+	float da0 = c2SignedDistPointToPlane_OneDimensional(p0.x, -1.0f, B.min.x);
+	float db0 = c2SignedDistPointToPlane_OneDimensional(p1.x, -1.0f, B.min.x);
+	float da1 = c2SignedDistPointToPlane_OneDimensional(p0.x,  1.0f, B.max.x);
+	float db1 = c2SignedDistPointToPlane_OneDimensional(p1.x,  1.0f, B.max.x);
+	float da2 = c2SignedDistPointToPlane_OneDimensional(p0.y, -1.0f, B.min.y);
+	float db2 = c2SignedDistPointToPlane_OneDimensional(p1.y, -1.0f, B.min.y);
+	float da3 = c2SignedDistPointToPlane_OneDimensional(p0.y,  1.0f, B.max.y);
+	float db3 = c2SignedDistPointToPlane_OneDimensional(p1.y,  1.0f, B.max.y);
+	float t0 = c2RayToPlane_OneDimensional(da0, db0);
+	float t1 = c2RayToPlane_OneDimensional(da1, db1);
+	float t2 = c2RayToPlane_OneDimensional(da2, db2);
+	float t3 = c2RayToPlane_OneDimensional(da3, db3);
+
+	// Calculate hit predicate, no branching.
+	int hit0 = t0 < 1.0f;
+	int hit1 = t1 < 1.0f;
+	int hit2 = t2 < 1.0f;
+	int hit3 = t3 < 1.0f;
+	int hit = hit0 | hit1 | hit2 | hit3;
+
+	if (hit)
 	{
-		c2v c = c2Mulvs(c2Add(B.min, B.max), 0.5f);
-		c = c2Sub(c2Impact(A, lo), c);
-		c2v abs_c = c2Absv(c);
-		if (abs_c.x > abs_c.y) out->n = c2V(c2Sign(c.x), 0);
-		else out->n = c2V(0, c2Sign(c.y));
-		out->t = lo;
+		// Remap t's within 0-1 range, where >= 1 is treated as 0.
+		t0 = (float)hit0 * t0;
+		t1 = (float)hit1 * t1;
+		t2 = (float)hit2 * t2;
+		t3 = (float)hit3 * t3;
+
+		// Sort output by finding largest t to deduce the normal.
+		if (t0 >= t1 && t0 >= t2 && t0 >= t3)
+		{
+			out->t = t0 * A.t;
+			out->n = c2V(-1, 0);
+		}
+		
+		else if (t1 >= t0 && t1 >= t2 && t1 >= t3)
+		{
+			out->t = t1 * A.t;
+			out->n = c2V(1, 0);
+		}
+		
+		else if (t2 >= t0 && t2 >= t1 && t2 >= t3)
+		{
+			out->t = t2 * A.t;
+			out->n = c2V(0, -1);
+		}
+		
+		else
+		{
+			out->t = t3 * A.t;
+			out->n = c2V(0, 1);
+		}
+
 		return 1;
-	}
-	return 0;
+	} else return 0; // This can still numerically happen.
 }
 
 int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out)

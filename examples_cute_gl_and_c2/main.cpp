@@ -1237,6 +1237,39 @@ void prime31_cap_to_aabb_bug2()
 	DrawCapsule(capsule.a, capsule.b, capsule.r);
 }
 
+void martincohen_ray_bug()
+{
+	static uint64_t frame_count;
+	frame_count++;
+	int i = (frame_count / 5) % 75;
+
+	c2Ray ray = {
+		{ -50, (float)i - 20 },
+		{ 1, 0 },
+		55
+	};
+	c2AABB bb = {
+		{ 0, 0 },
+		{ 10, 30 },
+	};
+
+	c2Raycast raycast = {0};
+	int hit = c2RaytoAABB(ray, bb, &raycast);
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawCircle(ray.p, 5.0f);
+	gl_line(ctx, ray.p.x, ray.p.y, 0, ray.p.x + ray.d.x * ray.t, ray.p.y + ray.d.y * ray.t, 0);
+	DrawAABB(bb.min, bb.max);
+
+	if (hit) {
+		gl_line_color(ctx, 1, 0, 0);
+
+		c2v p = c2Impact(ray, raycast.t);
+		DrawCircle(p, 5.0f);
+		gl_line(ctx, p.x, p.y, 0, p.x + raycast.n.x * 10.0f, p.y + raycast.n.y * 10.0f, 0);
+	}
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1309,11 +1342,6 @@ int main()
 	user_capsule.b = c2V(30.0f, 0);
 	user_capsule.r = 10.0f;
 
-		for (int i = 0; i < 16; ++i)
-		{
-			printf("%10.10f\n", projection[i]);
-		}
-
 	// main loop
 	glClearColor(0, 0, 0, 1);
 	float t = 0;
@@ -1331,8 +1359,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 21;
-		if (arrow_pressed) code = (code + 1) % 22;
+		static int code = 22;
+		if (arrow_pressed) code = (code + 1) % 23;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1357,6 +1385,7 @@ int main()
 		case 19: prime31_bad_toi_normal_animated_aabb(); break;
 		case 20: prime31_cap_to_aabb_bug(); break;
 		case 21: prime31_cap_to_aabb_bug2(); break;
+		case 22: martincohen_ray_bug(); break;
 		}
 
 		// push a draw call to tinygl
