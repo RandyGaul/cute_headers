@@ -11,7 +11,7 @@
 
 	Summary:
 	cute_sound is a C API for loading, playing, looping, panning and fading mono
-	and stereo sounds. This means cute_sound imparts no external DLLs or large
+	and stero sounds. This means cute_sound imparts no external DLLs or large
 	libraries that adversely effect shipping size. cute_sound can also run on
 	Windows XP since DirectSound ships with all recent versions of Windows.
 	cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
@@ -305,6 +305,7 @@ typedef struct cs_playing_sound_t
 	float pan1;
 	float pitch;
 	cs_pitch_data_t* pitch_filter[2];
+	void* dsp_mixer;
 	int sample_index;
 	cs_loaded_sound_t* loaded_sound;
 	struct cs_playing_sound_t* next;
@@ -340,6 +341,14 @@ void cs_free_sound(cs_loaded_sound_t* sound);
 // Returns the size, in bytes, of all heap-allocated memory for this particular
 // loaded sound
 int cs_sound_size(cs_loaded_sound_t* sound);
+
+// Getter for the DSP context attached to the sound context.
+// Returns as a void ptr with no error checking on the DSP context.
+void* cs_get_dsp_context(cs_context_t* ctx);
+
+// Sets the DSP context on the sound context.
+// Performs no error checking on dsp_context.
+void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context);
 
 // playing_pool_count -- 0 to setup low-level API, non-zero to size the internal
 // memory pool for cs_playing_sound_t instances
@@ -426,6 +435,7 @@ typedef struct cs_play_sound_def_t
 	float pitch;
 	float delay;
 	cs_loaded_sound_t* loaded;
+	void* dsp_mixer;
 } cs_play_sound_def_t;
 
 cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def);
@@ -886,6 +896,7 @@ cs_playing_sound_t cs_make_playing_sound(cs_loaded_sound_t* loaded)
 	playing.sample_index = 0;
 	playing.loaded_sound = loaded;
 	playing.next = 0;
+	playing.dsp_mixer = 0;
 	return playing;
 }
 
@@ -956,6 +967,7 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
+	void* dsp_context;
 
 	// platform specific stuff
 	LPDIRECTSOUND dsound;
@@ -987,6 +999,7 @@ static void cs_release_context(cs_context_t* ctx)
 		cs_remove_filter(playing);
 		playing = playing->next;
 	}
+
 	CUTE_SOUND_FREE(ctx);
 }
 
@@ -1013,6 +1026,18 @@ static void cs_lock(cs_context_t* ctx)
 static void cs_unlock(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) LeaveCriticalSection(&ctx->critical_section);
+}
+
+void* cs_get_dsp_context(cs_context_t* ctx)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	return ctx->dsp_context;
+}
+
+void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	ctx->dsp_context = dsp_context;
 }
 
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
@@ -1094,6 +1119,7 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 		ctx->running = 1;
 		ctx->separate_thread = 0;
 		ctx->sleep_milliseconds = 0;
+		ctx->dsp_context = 0;
 
 		if (playing_pool_count)
 		{
@@ -1102,6 +1128,7 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 				ctx->playing_pool[i].next = ctx->playing_pool + i + 1;
 			ctx->playing_pool[playing_pool_count - 1].next = 0;
 			ctx->playing_free = ctx->playing_pool;
+
 		}
 
 		else
@@ -1148,6 +1175,7 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
+	void* dsp_context;
 
 	// platform specific stuff
 	AudioComponentInstance inst;
@@ -1172,6 +1200,7 @@ static void cs_release_context(cs_context_t* ctx)
 		cs_remove_filter(playing);
 		playing = playing->next;
 	}
+
 	CUTE_SOUND_FREE(ctx);
 }
 
@@ -1202,6 +1231,18 @@ static void cs_unlock(cs_context_t* ctx)
 }
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData);
+
+void* cs_get_dsp_context(cs_context_t* ctx)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	return ctx->dsp_context;
+}
+
+void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	ctx->dsp_context = dsp_context;
+}
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
 {
@@ -1264,6 +1305,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
+	ctx->dsp_context = 0;
 
 	ret = AudioUnitSetProperty(inst, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &stream_desc, sizeof(stream_desc));
 	CUTE_SOUND_CHECK(ret == noErr, "Failed to set stream forat");
@@ -1333,6 +1375,7 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
+	void* dsp_context;
 
 	// data for cs_mix thread, enable these with cs_spawn_mix_thread
 	SDL_Thread* thread;
@@ -1352,6 +1395,7 @@ static void cs_release_context(cs_context_t* ctx)
 		playing = playing->next;
 	}
 	SDL_CloseAudio();
+
 	CUTE_SOUND_FREE(ctx);
 }
 
@@ -1381,6 +1425,18 @@ static void cs_unlock(cs_context_t* ctx)
 }
 
 static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
+
+void* cs_get_dsp_context(cs_context_t* ctx)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	return ctx->dsp_context;
+}
+
+void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
+{
+	CUTE_SOUND_ASSERT(ctx);
+	ctx->dsp_context = dsp_context;
+}
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
 {
@@ -1416,6 +1472,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
+	ctx->dsp_context = 0;
 
 	SDL_memset(&wanted, 0, sizeof(wanted));
 	wanted.freq = play_frequency_in_Hz;
@@ -1613,6 +1670,7 @@ cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound)
 	def.pitch = 1.0f;
 	def.delay = 0.0f;
 	def.loaded = sound;
+	def.dsp_mixer = 0;
 	return def;
 }
 
@@ -1634,6 +1692,7 @@ cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def)
 	playing->next = ctx->playing;
 	ctx->playing = playing;
 	playing->loaded_sound->playing_count += 1;
+	playing->dsp_mixer = def.dsp_mixer;
 
 	cs_unlock(ctx);
 
@@ -1933,17 +1992,18 @@ void cs_mix(cs_context_t* ctx)
 			// use cs_pitch_shift to on-the-fly pitch shift some samples
 			// only call this function if the user set a custom pitch value
 			float pitch = playing->pitch;
-			if (pitch != 1.0f)
-			{
-				int sample_count = (mix_wide - 2 * delay_wide) * 4;
-				int falling_behind = sample_count > CUTE_SOUND_MAX_FRAME_LENGTH;
+			int sample_count = (mix_wide - 2 * delay_wide) * 4;
 
-				// CUTE_SOUND_MAX_FRAME_LENGTH represents max samples we can pitch shift in one go. In the event
-				// that this process takes longer than the time required to play the actual sound, just
-				// fall back to the original sound (non-pitch shifted). This will sound very ugly. To
-				// prevent falling behind, make sure not to pitch shift too many sounds at once. Try tweaking
-				// CUTE_SOUND_PITCH_QUALITY to make it lower (must be a power of 2).
-				if (!falling_behind)
+			// CUTE_SOUND_MAX_FRAME_LENGTH represents max samples we can pitch shift in one go. In the event
+			// that this process takes longer than the time required to play the actual sound, just
+			// fall back to the original sound (non-pitch shifted). This will sound very ugly. To
+			// prevent falling behind, make sure not to pitch shift too many sounds at once. Try tweaking
+			// CUTE_SOUND_PITCH_QUALITY to make it lower (must be a power of 2).
+			int falling_behind = sample_count > CUTE_SOUND_MAX_FRAME_LENGTH;
+
+			if (!falling_behind)
+			{
+				if(pitch != 1.0f)
 				{
 					cs_pitch_shift(pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter);
 					cA = (__m128 *)playing->pitch_filter[0]->pitch_shifted_output_samples;
@@ -1956,7 +2016,28 @@ void cs_mix(cs_context_t* ctx)
 
 					offset_wide = -delay_wide;
 				}
+
+				// handles dsp context
+				// handles both channels of audio
+				if (playing->dsp_mixer)
+				{
+#ifdef CUTE_DSP_H
+					cd_mixer_t* dsp_mixer = (cd_mixer_t *)playing->dsp_mixer;
+					cA = (__m128 *)cd_sample_mixer(playing->dsp_mixer, (float*)(cA + delay_wide + offset_wide), 0, sample_count);
+
+					// handle stereo audio
+					if (loaded->channel_count == 2)
+					{
+						cB = (__m128 *)cd_sample_mixer(playing->dsp_mixer, (float *)(cB + delay_wide + offset_wide), 1, sample_count);
+					}
+
+					// set offset_wide to cancel out delay_wide because cA and cB are now owned by the mixer.
+					offset_wide = -delay_wide;
+#endif
+				}
 			}
+
+			
 
 			// apply volume, load samples into float buffers
 			switch (loaded->channel_count)
