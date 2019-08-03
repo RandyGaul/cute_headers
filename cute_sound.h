@@ -435,12 +435,18 @@ typedef struct cs_play_sound_def_t
 	float pitch;
 	float delay;
 	cs_loaded_sound_t* loaded;
-	void* dsp_mixer;
+	void* dsp_mixer_def;
 } cs_play_sound_def_t;
 
 cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def);
 cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound);
 void cs_stop_all_sounds(cs_context_t* ctx);
+
+// dsp mixer callbacks
+typedef void* (cs_create_dsp_mixer_callback)(void* ctx, const void* mixer_def);
+typedef void (cs_release_dsp_mixer_callback)(void* ctx, void** mixer);
+extern cs_create_dsp_mixer_callback* cs_make_dsp_mixer;
+extern cs_release_dsp_mixer_callback* cs_release_dsp_mixer;
 
 // SDL_RWops specific functions
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
@@ -475,6 +481,9 @@ void cs_stop_all_sounds(cs_context_t* ctx);
 #include <string.h>	// memcmp, memset, memcpy
 #include <xmmintrin.h>
 #include <emmintrin.h>
+
+cs_create_dsp_mixer_callback* cs_make_dsp_mixer = NULL;
+cs_release_dsp_mixer_callback* cs_release_dsp_mixer = NULL;
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
@@ -1670,7 +1679,7 @@ cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound)
 	def.pitch = 1.0f;
 	def.delay = 0.0f;
 	def.loaded = sound;
-	def.dsp_mixer = 0;
+	def.dsp_mixer_def = 0;
 	return def;
 }
 
@@ -1692,7 +1701,14 @@ cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def)
 	playing->next = ctx->playing;
 	ctx->playing = playing;
 	playing->loaded_sound->playing_count += 1;
-	playing->dsp_mixer = def.dsp_mixer;
+	if(cs_make_dsp_mixer)
+	{
+		playing->dsp_mixer = cs_make_dsp_mixer(ctx->dsp_context, def.dsp_mixer_def);
+	}
+	else
+	{
+		playing->dsp_mixer = 0;
+	}
 
 	cs_unlock(ctx);
 
@@ -2100,6 +2116,10 @@ void cs_mix(cs_context_t* ctx)
 		}
 
 		cs_remove_filter(playing);
+		if(cs_release_dsp_mixer)
+		{
+			cs_release_dsp_mixer(ctx->dsp_context, &playing->dsp_mixer);
+		}
 
 		// if using high-level API manage the cs_playing_sound_t memory ourselves
 		if (ctx->playing_pool)
