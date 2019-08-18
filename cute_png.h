@@ -856,7 +856,7 @@ static int cp_unfilter(int w, int h, int bpp, uint8_t* raw)
 		switch (*raw++)
 		{
 		case 0: break;
-		case 1: FILTER_LOOP(0            , raw[x - bpp] );
+		case 1: FILTER_LOOP(0          , raw[x - bpp] );
 		case 2: FILTER_LOOP(prev[x]    , prev[x]);
 		case 3: FILTER_LOOP(prev[x] / 2, (raw[x - bpp] + prev[x]) / 2);
 		case 4: FILTER_LOOP(prev[x]    , cp_paeth(raw[x - bpp], prev[x], prev[x -bpp]));
