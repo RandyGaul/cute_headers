@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_png.h - v1.03
+	cute_png.h - v1.04
 
 	To create implementation (the function definitions)
 		#define CUTE_PNG_IMPLEMENTATION
@@ -22,6 +22,7 @@
 		1.01 (03/08/2017) tRNS chunk support for paletted images
 		1.02 (10/23/2017) support for explicitly loading paletted png images
 		1.03 (11/12/2017) construct atlas in memory
+		1.04 (08/23/2018) various bug fixes for filter and word decoder
 
 
 	EXAMPLES:
@@ -69,6 +70,7 @@
 	Contributors:
 		Zachary Carter    1.01 - bug catch for tRNS chunk in paletted images
 		Dennis Korpel     1.03 - fix some pointer/memory related bugs
+		Dennis Korpel     1.04 - fix for filter on first row of pixels
 */
 
 #if !defined(CUTE_PNG_H)
@@ -255,6 +257,7 @@ typedef struct cp_state_t
 	int word_index;
 	int bits_left;
 
+	int final_word_available;
 	uint32_t final_word;
 
 	char* out;
@@ -285,10 +288,21 @@ static uint64_t cp_peak_bits(cp_state_t* s, int num_bits_to_read)
 {
 	if (s->count < num_bits_to_read)
 	{
-		uint32_t word = (s->word_index < s->word_count) ? s->words[s->word_index++] : s->final_word;
-		s->bits |= (uint64_t) word << s->count;
-		s->count += 32;
-		CUTE_PNG_ASSERT(s->word_index <= s->word_count);
+		if (s->word_index < s->word_count)
+		{
+			uint32_t word = s->words[s->word_index++];
+			s->bits |= (uint64_t)word << s->count;
+			s->count += 32;
+			CUTE_PNG_ASSERT(s->word_index <= s->word_count);
+		}
+
+		else if (s->final_word_available)
+		{
+			uint32_t word = s->final_word;
+			s->bits |= (uint64_t)word << s->count;
+			s->count += s->bits_left;
+			s->final_word_available = 0;
+		}
 	}
 
 	return s->bits;
@@ -423,7 +437,6 @@ static int cp_fixed(cp_state_t* s)
 
 static int cp_decode(cp_state_t* s, uint32_t* tree, int hi)
 {
-	CUTE_PNG_ASSERT(!cp_would_overflow(s, 16));
 	uint64_t bits = cp_peak_bits(s, 16);
 	uint32_t search = (cp_rev16((uint32_t)bits) << 16) | 0xFFFF;
 	int lo = 0;
@@ -537,7 +550,8 @@ int cp_inflate(void* in, int in_bytes, void* out, int out_bytes)
 
 	for (int i = 0; i < first_bytes; ++i)
 		s->bits |= (uint64_t)(((uint8_t*)in)[i]) << (i * 8);
-	
+
+	s->final_word_available = last_bytes ? 1 : 0;
 	s->final_word = 0;
 	for(int i = 0; i < last_bytes; i++) 
 		s->final_word |= ((uint8_t*)in)[in_bytes - last_bytes+i] << (i * 8);
@@ -1646,7 +1660,7 @@ cp_err:
 	This software is available under 2 licenses - you may choose the one you like.
 	------------------------------------------------------------------------------
 	ALTERNATIVE A - zlib license
-	Copyright (c) 2017 Randy Gaul http://www.randygaul.net
+	Copyright (c) 2019 Randy Gaul http://www.randygaul.net
 	This software is provided 'as-is', without any express or implied warranty.
 	In no event will the authors be held liable for any damages arising from
 	the use of this software.
