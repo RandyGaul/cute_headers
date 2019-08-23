@@ -13,7 +13,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_files](cute_files.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
 **[cute_sid](cute_sid.h)** | Compile time string hashing via preprocessing; turns strings into integers | 1.0 | C/C++
 **[cute_math](cute_math.h)** | Professional level 3D vector math via SSE intrinsics | 1.02 | C++
-**[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.03 | C/C++
+**[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.04 | C/C++
 **[cute_gl](cute_gl.h)** | OpenGL 3.2 wrapper with carefully designed API to foster fast iteration | 1.02 | C/C++
 **[cute_utf](cute_utf.h)** | utf-8 and utf-16 encoder/decoder | 1.0 | C/C++ | public domain
 **[cute_huff](cute_huff.h)** | minimal static huffman encoder/decoder (compression) | 1.0 | C/C++ | zlib
