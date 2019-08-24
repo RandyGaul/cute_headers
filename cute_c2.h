@@ -10,7 +10,7 @@
 	in *one* C/CPP file (translation unit) that includes this file
 
 
-	SUMMARY:
+	SUMMARY
 
 		cute_c2 is a single-file header that implements 2D collision detection routines
 		that test for overlap, and optionally can find the collision manifold. The
@@ -22,7 +22,96 @@
 		very easily adapted into pre-existing projects.
 
 
-	Revision history:
+	THE IMPORTANT PARTS
+
+		Most of the math types in this header are for internal use. Users care about
+		the shape types and the collision functions.
+
+		SHAPE TYPES:
+		* c2Circle
+		* c2Capsule
+		* c2AABB
+		* c2Ray
+		* c2Poly
+
+		COLLISION FUNCTIONS (*** is a shape name from the above list):
+		* c2***to***         - boolean YES/NO hittest
+		* c2***to***Manifold - construct manifold to describe how shapes hit
+		* c2GJK              - runs GJK algorithm to find closest point pair
+				       between two shapes
+		* c2TOI              - computes the time of impact between two shapes, useful for
+				       sweeping shapes, or doing shape casts
+		* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
+		* c2Collided         - generic version of c2***to*** funcs
+		* c2Collide          - generic version of c2***to***Manifold funcs
+		* c2CastRay          - generic version of c2Rayto*** funcs
+
+		The rest of the header is more or less for internal use. Here is an example of
+		making some shapes and testing for collision:
+
+			c2Circle c;
+			c.p = position;
+			c.r = radius;
+
+			c2Capsule cap;
+			cap.a = first_endpoint;
+			cap.b = second_endpoint;
+			cap.r = radius;
+
+			int hit = c2CircletoCapsule(c, cap);
+			if (hit)
+			{
+				handle collision here...
+			}
+	
+		For more code examples and tests please see:
+		https://github.com/RandyGaul/cute_header/tree/master/examples_cute_gl_and_c2
+
+		Here is a past discussion thread on this header:
+		https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
+
+		Here is a very nice repo containing various tests and examples using SFML for rendering:
+		https://github.com/sro5h/tinyc2-tests
+
+
+	DETAILS/ADVICE
+
+		This header does not implement a broad-phase, and instead concerns itself with
+		the narrow-phase. This means this header just checks to see if two individual
+		shapes are touching, and can give information about how they are touching.
+
+		Very common 2D broad-phases are tree and grid approaches. Quad trees are good
+		for static geometry that does not move much if at all. Dynamic AABB trees are
+		good for general purpose use, and can handle moving objects very well. Grids
+		are great and are similar to quad trees.
+
+		If implementing a grid it can be wise to have each collideable grid cell hold
+		an integer. This integer refers to a 2D shape that can be passed into the
+		various functions in this header. The shape can be transformed from "model"
+		space to "world" space using c2x -- a transform struct. In this way a grid
+		can be implemented that holds any kind of convex shape (that this header
+		supports) while conserving memory with shape instancing.
+
+		Please email at my address with any questions or comments at:
+		author's last name followed by 1748 at gmail
+
+
+	FEATURES
+
+		* Circles, capsules, AABBs, rays and convex polygons are supported
+		* Fast boolean only result functions (hit yes/no)
+		* Slghtly slower manifold generation for collision normals + depths +points
+		* GJK implementation (finds closest points for disjoint pairs of shapes)
+		* Shape casts/sweeps with c2TOI function (time of impact)
+		* Robust 2D convex hull generator
+		* Lots of correctly implemented and tested 2D math routines
+		* Implemented in portable C, and is readily portable to other languages
+		* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
+		* Extensive examples at: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_gl_and_c2
+
+
+	Revision History
+	
 		1.0  (02/13/2017) initial release
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
 		1.02 (03/21/2017) compile fixes for c on more compilers
@@ -30,10 +119,10 @@
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
 		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
-*/
 
-/*
-	Contributors:
+
+	Contributors
+	
 		Plastburk         1.01 - const pointers pull request
 		mmozeiko          1.02 - 3 compile bugfixes
 		felipefs          1.02 - 3 compile bugfixes
@@ -41,94 +130,6 @@
 		sro5h             1.02 - bug reports for multiple manifold funcs
 		sro5h             1.03 - work involving quality of life fixes for manifolds
 		Wizzard033        1.06 - C2_*** types to C2_TYPE_***, and CUTE_C2_API
-*/
-
-/*
-	THE IMPORTANT PARTS:
-	Most of the math types in this header are for internal use. Users care about
-	the shape types and the collision functions.
-	
-	SHAPE TYPES:
-	* c2Circle
-	* c2Capsule
-	* c2AABB
-	* c2Ray
-	* c2Poly
-	
-	COLLISION FUNCTIONS (*** is a shape name from the above list):
-	* c2***to***         - boolean YES/NO hittest
-	* c2***to***Manifold - construct manifold to describe how shapes hit
-	* c2GJK              - runs GJK algorithm to find closest point pair
-	                       between two shapes
-	* c2TOI              - computes the time of impact between two shapes, useful for
-	                       sweeping shapes, or doing shape casts
-	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
-	* c2Collided         - generic version of c2***to*** funcs
-	* c2Collide          - generic version of c2***to***Manifold funcs
-	* c2CastRay          - generic version of c2Rayto*** funcs
-	
-	The rest of the header is more or less for internal use. Here is an example of
-	making some shapes and testing for collision:
-	
-		c2Circle c;
-		c.p = position;
-		c.r = radius;
-	
-		c2Capsule cap;
-		cap.a = first_endpoint;
-		cap.b = second_endpoint;
-		cap.r = radius;
-		
-		int hit = c2CircletoCapsule(c, cap);
-		if (hit)
-		{
-			handle collision here...
-		}
-	
-	For more code examples and tests please see:
-	https://github.com/RandyGaul/cute_header/tree/master/examples_cute_gl_and_c2
-	
-	Here is a past discussion thread on this header:
-	https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
-
-	Here is a very nice repo containing various tests and examples using SFML for rendering:
-	https://github.com/sro5h/tinyc2-tests
-*/
-
-/*
-	DETAILS/ADVICE:
-	This header does not implement a broad-phase, and instead concerns itself with
-	the narrow-phase. This means this header just checks to see if two individual
-	shapes are touching, and can give information about how they are touching.
-
-	Very common 2D broad-phases are tree and grid approaches. Quad trees are good
-	for static geometry that does not move much if at all. Dynamic AABB trees are
-	good for general purpose use, and can handle moving objects very well. Grids
-	are great and are similar to quad trees.
-
-	If implementing a grid it can be wise to have each collideable grid cell hold
-	an integer. This integer refers to a 2D shape that can be passed into the
-	various functions in this header. The shape can be transformed from "model"
-	space to "world" space using c2x -- a transform struct. In this way a grid
-	can be implemented that holds any kind of convex shape (that this header
-	supports) while conserving memory with shape instancing.
-
-	Please email at my address with any questions or comments at:
-	author's last name followed by 1748 at gmail
-*/
-
-/*
-	Features:
-	* Circles, capsules, AABBs, rays and convex polygons are supported
-	* Fast boolean only result functions (hit yes/no)
-	* Slghtly slower manifold generation for collision normals + depths +points
-	* GJK implementation (finds closest points for disjoint pairs of shapes)
-	* Shape casts/sweeps with c2TOI function (time of impact)
-	* Robust 2D convex hull generator
-	* Lots of correctly implemented and tested 2D math routines
-	* Implemented in portable C, and is readily portable to other languages
-	* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
-	* Extensive examples at: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_gl_and_c2
 */
 
 #if !defined(CUTE_C2_H)
