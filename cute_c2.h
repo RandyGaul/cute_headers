@@ -134,7 +134,9 @@
 
 #if !defined(CUTE_C2_H)
 
-// this define allows exporting/importing of the header to a dynamic library
+// This define allows exporting/importing of the header to a dynamic library.
+// Here's an example.
+// #define CUTE_C2_API extern "C" __declspec(dllexport)
 #if !defined(CUTE_C2_API)
 #	define CUTE_C2_API
 #endif
