@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.05
+	cute_c2.h - v1.06
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
@@ -26,6 +26,7 @@
 		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
+		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
 */
 
 /*
@@ -36,6 +37,7 @@
 		seemk             1.02 - fix branching bug in c2Collide
 		sro5h             1.02 - bug reports for multiple manifold funcs
 		sro5h             1.03 - work involving quality of life fixes for manifolds
+		Wizzard033        1.06 - C2_*** types to C2_TYPE_***, and CUTE_C2_API
 */
 
 /*
@@ -130,7 +132,7 @@
 
 // this define allows exporting/importing of the header to a dynamic library
 #if !defined(CUTE_C2_API)
-#define CUTE_C2_API
+#	define CUTE_C2_API
 #endif
 
 // this can be adjusted as necessary, but is highly recommended to be kept at 8.
