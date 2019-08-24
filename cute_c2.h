@@ -134,13 +134,6 @@
 
 #if !defined(CUTE_C2_H)
 
-// This define allows exporting/importing of the header to a dynamic library.
-// Here's an example.
-// #define CUTE_C2_API extern "C" __declspec(dllexport)
-#if !defined(CUTE_C2_API)
-#	define CUTE_C2_API
-#endif
-
 // this can be adjusted as necessary, but is highly recommended to be kept at 8.
 // higher numbers will incur quite a bit of memory overhead, and convex shapes
 // over 8 verts start to just look like spheres, which can be implicitly rep-
@@ -257,6 +250,13 @@ typedef struct
 	// any of the c2***to***Manifold functions)
 	c2v n;
 } c2Manifold;
+
+// This define allows exporting/importing of the header to a dynamic library.
+// Here's an example.
+// #define CUTE_C2_API extern "C" __declspec(dllexport)
+#if !defined(CUTE_C2_API)
+#	define CUTE_C2_API
+#endif
 
 // boolean collision detection
 // these versions are faster than the manifold versions, but only give a YES/NO
