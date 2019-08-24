@@ -9,15 +9,18 @@
 		#define CUTE_C2_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
-	SUMMARY:
-	cute_c2 is a single-file header that implements 2D collision detection routines
-	that test for overlap, and optionally can find the collision manifold. The
-	manifold contains all necessary information to prevent shapes from inter-
-	penetrating, which is useful for character controllers, general physics
-	simulation, and user-interface programming.
 
-	This header implements a group of "immediate mode" functions that should be
-	very easily adapted into pre-existing projects.
+	SUMMARY:
+
+		cute_c2 is a single-file header that implements 2D collision detection routines
+		that test for overlap, and optionally can find the collision manifold. The
+		manifold contains all necessary information to prevent shapes from inter-
+		penetrating, which is useful for character controllers, general physics
+		simulation, and user-interface programming.
+
+		This header implements a group of "immediate mode" functions that should be
+		very easily adapted into pre-existing projects.
+
 
 	Revision history:
 		1.0  (02/13/2017) initial release
