@@ -128,6 +128,11 @@
 
 #if !defined(CUTE_C2_H)
 
+// this define allows exporting/importing of the header to a dynamic library
+#if !defined(CUTE_C2_API)
+#define CUTE_C2_API
+#endif
+
 // this can be adjusted as necessary, but is highly recommended to be kept at 8.
 // higher numbers will incur quite a bit of memory overhead, and convex shapes
 // over 8 verts start to just look like spheres, which can be implicitly rep-
@@ -248,41 +253,41 @@ typedef struct
 // boolean collision detection
 // these versions are faster than the manifold versions, but only give a YES/NO
 // result
-int c2CircletoCircle(c2Circle A, c2Circle B);
-int c2CircletoAABB(c2Circle A, c2AABB B);
-int c2CircletoCapsule(c2Circle A, c2Capsule B);
-int c2AABBtoAABB(c2AABB A, c2AABB B);
-int c2AABBtoCapsule(c2AABB A, c2Capsule B);
-int c2CapsuletoCapsule(c2Capsule A, c2Capsule B);
-int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx);
-int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx);
-int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx);
-int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2CircletoCircle(c2Circle A, c2Circle B);
+CUTE_C2_API int c2CircletoAABB(c2Circle A, c2AABB B);
+CUTE_C2_API int c2CircletoCapsule(c2Circle A, c2Capsule B);
+CUTE_C2_API int c2AABBtoAABB(c2AABB A, c2AABB B);
+CUTE_C2_API int c2AABBtoCapsule(c2AABB A, c2Capsule B);
+CUTE_C2_API int c2CapsuletoCapsule(c2Capsule A, c2Capsule B);
+CUTE_C2_API int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx);
 
 // ray operations
 // output is placed into the c2Raycast struct, which represents the hit location
 // of the ray. the out param contains no meaningful information if these funcs
 // return 0
-int c2RaytoCircle(c2Ray A, c2Circle B, c2Raycast* out);
-int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out);
-int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
-int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
+CUTE_C2_API int c2RaytoCircle(c2Ray A, c2Circle B, c2Raycast* out);
+CUTE_C2_API int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out);
+CUTE_C2_API int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
+CUTE_C2_API int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
 
 // manifold generation
 // these functions are slower than the boolean versions, but will compute one
 // or two points that represent the plane of contact. This information is
 // is usually needed to resolve and prevent shapes from colliding. If no coll
 // ision occured the count member of the manifold struct is set to 0.
-void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m);
-void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m);
-void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m);
-void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m);
-void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m);
-void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m);
-void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2AABBtoPolyManifold(c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m);
+CUTE_C2_API void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m);
+CUTE_C2_API void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m);
+CUTE_C2_API void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2AABBtoPolyManifold(c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m);
 
 typedef enum
 {
@@ -311,7 +316,7 @@ typedef struct
 // treated as points and capsules are treated as line segments i.e. rays). The cache parameter
 // should be NULL, as it is only for advanced usage (unless you know what you're doing, then
 // go ahead and use it). iterations is an optional parameter.
-float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
+CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
 
 // Computes the time of impact from shape A and shape B. The velocity of each shape is provided
 // by vA and vB respectively. The shapes are *not* allowed to rotate over time. The velocity is
@@ -324,23 +329,23 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 // from shape A to shape B. out_normal can be NULL. iterations is an optional parameter. use_radius
 // will apply radii for capsules and circles (if set to false, spheres are treated as points and
 // capsules are treated as line segments i.e. rays).
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations);
+CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
-int c2Hull(c2v* verts, int count);
-void c2Norms(c2v* verts, c2v* norms, int count);
+CUTE_C2_API int c2Hull(c2v* verts, int count);
+CUTE_C2_API void c2Norms(c2v* verts, c2v* norms, int count);
 
 // runs c2Hull and c2Norms, assumes p->verts and p->count are both set to valid values
-void c2MakePoly(c2Poly* p);
+CUTE_C2_API void c2MakePoly(c2Poly* p);
 
 // Generic collision detection routines, useful for games that want to use some poly-
 // morphism to write more generic-styled code. Internally calls various above functions.
 // For AABBs/Circles/Capsules ax and bx are ignored. For polys ax and bx can define
 // model to world transformations, or be NULL for identity transforms.
-int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB);
-void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m);
-int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out);
+CUTE_C2_API int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB);
+CUTE_C2_API void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m);
+CUTE_C2_API int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out);
 
 #ifdef _MSC_VER
 	#define C2_INLINE __forceinline
