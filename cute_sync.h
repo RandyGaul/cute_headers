@@ -29,7 +29,9 @@
 		http://www.randygaul.net/2014/09/24/multi-threading-best-practices-for-gamedev/
 
 		A good chunk of this code came from Mattias Gustavsson's thread.h header.
-		It really is quite a good header, and worth considering!
+		It really is quite a good header, and worth considering! The main difference from
+		Mattias's header and mine is he created a "signal" abstraction over the
+		condition variable, he has no thread pool, and instead has a "thread queue".
 		https://github.com/mattiasgustavsson/libs
 
 
