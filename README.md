@@ -26,7 +26,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_filewatch](cute_filewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 **[cute_ani](cute_ani.h)** | lower level bits of frame based looping animations | 1.0 | C/C++
 **[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts, word wrapping, CPU-side clipping, kerning | 1.01 | C/C++
-**[cute_sync](cute_sync.h)** | Collection of practical synchronization primitives, including read/write lock and threadpool/task system | 1.0 | C/C++
+**[cute_sync](cute_sync.h)** | Collection of practical synchronization primitives, including read/write lock and threadpool/task system | 1.01 | C/C++
 **[cute_serialize](cute_serialize.h)** | Binary serialization utility focused around building polymorphic routines. Don't-Repeat-Yourself (DRY) style for to/from disk, or to/from in-memory buffer. | 1.03 | C/C++
 
 &ast; Not yet hit first release
