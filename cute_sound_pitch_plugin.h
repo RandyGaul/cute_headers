@@ -15,6 +15,10 @@
 		without time-stretching. It uses the fast fourier transform along with
 		some other tricks, but ultimately is quite an expensive operation. Use
 		with care.
+
+	EXAMPLE
+
+		https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_sound/pitch
 */
 
 #ifndef CUTE_SOUND_H
