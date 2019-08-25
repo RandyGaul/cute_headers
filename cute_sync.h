@@ -12,9 +12,17 @@
 
 	SUMMARY
 
-		Collection of practical syncronization primitives. They are currently all
-		implemented with the SDL2 API, though cute_sync has been written so it can
-		be implemented by other backends, such as pthreads, or Windows primitives.
+		Collection of practical syncronization primitives for Windows/Posix/SDL2.
+
+		Here is a list of all supported primitives.
+
+			* atomic integer/pointer
+			* thread
+			* mutex
+			* condition variable
+			* semaphore
+			* read/write lock
+			* thread pool
 
 		Here are some slides I wrote for those interested in learning prequisite
 		knowledge for utilizing this header:
