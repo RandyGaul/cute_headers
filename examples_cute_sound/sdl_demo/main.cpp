@@ -1,5 +1,3 @@
-#include <Windows.h>
-
 #define _CRT_SECURE_NO_WARNINGS
 #include <SDL2/SDL.h>
 
@@ -9,7 +7,7 @@
 
 int main(int argc, char *args[])
 {
-	cs_context_t* ctx = cs_make_context(0, 44100, 15, 5, 0);
+	cs_context_t* ctx = cs_make_context(NULL, 44100, 15, 5, 0, NULL);
 	cs_loaded_sound_t loaded = cs_load_wav("../jump.wav");
 
 	cs_playing_sound_t jump = cs_make_playing_sound(&loaded);

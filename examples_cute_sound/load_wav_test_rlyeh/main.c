@@ -7,7 +7,7 @@
 int main()
 {
 	HWND hwnd = GetConsoleWindow();
-	cs_context_t* ctx = cs_make_context(hwnd, 48000, 15, 5, 0);
+	cs_context_t* ctx = cs_make_context(hwnd, 48000, 15, 5, 0, NULL);
 	cs_loaded_sound_t voice_audio = cs_load_wav("demo.wav");
 	cs_playing_sound_t voice_instance = cs_make_playing_sound(&voice_audio);
 	printf("demo.wav has a sample rate of %d Hz.\n", voice_audio.sample_rate);

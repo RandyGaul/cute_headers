@@ -127,9 +127,12 @@ int main()
 	int buffered_seconds = 5; // number of seconds the buffer will hold in memory. want this long enough in case of frame-delays
 	int use_playing_pool = 1; // non-zero uses high-level API, 0 uses low-level API
 	int num_elements_in_playing_pool = use_playing_pool ? 5 : 0; // pooled memory array size for playing sounds
+	void* no_allocator_used = NULL; // No custom allocator is used, just pass in NULL here.
 
 	// initializes direct sound and allocate necessary memory
-	cs_context_t* ctx = cs_make_context(GetConsoleWindow(), frequency, latency_in_Hz, buffered_seconds, num_elements_in_playing_pool);
+	cs_context_t* ctx = cs_make_context(GetConsoleWindow(), frequency, latency_in_Hz, buffered_seconds, num_elements_in_playing_pool, no_allocator_used);
+
+	printf("Press, or press and hold, space to play a sound. Press ESC to exit.\n");
 
 	if (!use_playing_pool)
 	{
