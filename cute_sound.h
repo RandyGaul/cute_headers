@@ -162,6 +162,12 @@
 	and struct types.
 
 
+	PLUGINS
+
+		Cute sound can add plugins at run-time to modify audio before it gets mixed. Please
+		refer to all the documentation near `cs_plugin_interface_t`.
+
+
 	KNOWN LIMITATIONS
 
 		* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
@@ -453,7 +459,8 @@ typedef struct cs_plugin_interface_t
 {
 	/**
 	 * This pointer is used to represent your plugin instance, and is pased to all callbacks as the
-	 * `plugin_instance` pointer.
+	 * `plugin_instance` pointer. This pointer is not managed by cute sound in any way. You are
+	 * responsible for allocating and releasing all resources associated with the plugin instance.
 	 */
 	void* plugin_instance;
 
@@ -461,6 +468,9 @@ typedef struct cs_plugin_interface_t
 	 * Called whenever a new sound is starting to play. `playing_sound_udata` is optional, and should
 	 * point to whatever data you would like to associate with playing sounds, on a per-playing-sound
 	 * basis.
+	 *
+	 * This function is only called from user threads whenever `cs_play_sound` or `cs_insert_sound`
+	 * is called.
 	 */
 	void (*on_make_playing_sound_fn)(cs_context_t* cs_ctx, void* plugin_instance, void** playing_sound_udata, const cs_playing_sound_t* sound);
 
@@ -469,6 +479,8 @@ typedef struct cs_plugin_interface_t
 	 * in `on_make_playing_sound_fn` will be passed back here as `playing_sound_udata`. The intent is
 	 * to let the user free up any resources associated with the playing sound instance before the sound
 	 * is released completely internally.
+	 *
+	 * This function can be called from the user thread, or from the mixer thread.
 	 */
 	void (*on_free_playing_sound_fn)(cs_context_t* cs_ctx, void* plugin_instance, void* playing_sound_udata, const cs_playing_sound_t* sound);
 
@@ -489,7 +501,8 @@ typedef struct cs_plugin_interface_t
 	 *                       the next time `on_mix_fn` is called. Typically the plugin can hold a single buffer used
 	 *                       for altered samples, and simply reuse the same buffer each time `on_mix_fn` is called.
 	 * `playing_sound_udata` The user data `playing_sound_udata` assigned when `on_make_playing_sound_fn` was called.
-	 * 
+	 *
+	 * This function can be called from the user thread, or from the mixer thread.
 	 */
 	void (*on_mix_fn)(cs_context_t* cs_ctx, void* plugin_instance, int channel_index, const float* samples_in, int sample_count, float** samples_out, void* playing_sound_udata, const cs_playing_sound_t* sound);
 } cs_plugin_interface_t;
