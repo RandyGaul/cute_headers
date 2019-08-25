@@ -29,9 +29,7 @@
 		http://www.randygaul.net/2014/09/24/multi-threading-best-practices-for-gamedev/
 
 		A good chunk of this code came from Mattias Gustavsson's thread.h header.
-		It really is quite a good header, and worth considering! The main difference from
-		Mattias's header and mine is he created a "signal" abstraction over the
-		condition variable, he has no thread pool, and instead has a "thread queue".
+		It really is quite a good header, and worth considering!
 		https://github.com/mattiasgustavsson/libs
 
 
@@ -198,8 +196,6 @@ void* cute_atomic_ptr_get(void** atomic);
  */
 int cute_atomic_ptr_cas(void** atomic, void* expected, void* value);
 
-#define CUTE_RW_LOCK_MAX_READERS (1 << 30)
-
 /**
  * A reader/writer mutual exclusion lock. Allows many simultaneous readers or a single writer.
  *
@@ -207,12 +203,13 @@ int cute_atomic_ptr_cas(void** atomic, void* expected, void* value);
  * number). Exceeding `CUTE_RW_LOCK_MAX_READERS` simultaneous readers results in undefined behavior.
  */
 typedef struct cute_rw_lock_t cute_rw_lock_t;
+#define CUTE_RW_LOCK_MAX_READERS (1 << 30)
 
 /**
  * Constructs an unlocked mutual exclusion read/write lock. The `rw` lock can safely sit
  * on the stack.
  */
-void cute_rw_lock_create(cute_rw_lock_t* rw);
+cute_rw_lock_t cute_rw_lock_create();
 
 /**
  * Locks for reading. Many simultaneous readers are allowed.
@@ -952,13 +949,15 @@ int cute_ram_size()
 
 #endif
 
-void cute_rw_lock_create(cute_rw_lock_t* rw)
+cute_rw_lock_t cute_rw_lock_create()
 {
-	rw->mutex = cute_mutex_create();
-	rw->write_sem = cute_semaphore_create(0);
-	rw->read_sem = cute_semaphore_create(0);
-	rw->readers.i = 0;
-	rw->readers_departing.i = 0;
+	cute_rw_lock_t rw;
+	rw.mutex = cute_mutex_create();
+	rw.write_sem = cute_semaphore_create(0);
+	rw.read_sem = cute_semaphore_create(0);
+	rw.readers.i = 0;
+	rw.readers_departing.i = 0;
+	return rw;
 }
 
 void cute_read_lock(cute_rw_lock_t* rw)
