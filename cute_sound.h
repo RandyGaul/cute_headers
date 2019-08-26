@@ -1447,6 +1447,7 @@ typedef struct cs_pcm_functions_t
 	size_t (*snd_pcm_hw_params_sizeof)(void);
 	size_t (*snd_pcm_sw_params_sizeof)(void);
 	int (*snd_pcm_drain)(snd_pcm_t*);
+	int (*snd_pcm_recover)(snd_pcm_t*, int, int);
 } cs_pcm_functions_t;
 
 #define CUTE_SOUND_DLSYM(fn) \
@@ -1484,6 +1485,7 @@ static void* cs_load_alsa_functions(cs_pcm_functions_t* fns)
 	CUTE_SOUND_DLSYM(snd_pcm_hw_params_sizeof);
 	CUTE_SOUND_DLSYM(snd_pcm_sw_params_sizeof);
 	CUTE_SOUND_DLSYM(snd_pcm_drain);
+	CUTE_SOUND_DLSYM(snd_pcm_recover);
 
 	return handle;
 }
@@ -2450,7 +2452,11 @@ void cs_mix(cs_context_t* ctx)
 		cs_push_bytes(ctx, samples, bytes_to_write);
 	#else
 		int ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
-		if (ret < 0) { /* Fatal error... How should this be handled? */ }
+		if (ret < 0) ret = ctx->fns.snd_pcm_recover(ctx->pcm_handle, ret, 0);
+		if (ret < 0) {
+			// A fatal error occured.
+			ctx->separate_thread = 0;
+		}
 	#endif
 
 #endif
