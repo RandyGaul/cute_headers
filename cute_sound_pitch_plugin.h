@@ -519,7 +519,9 @@ static int s_pitch_shift(int num_samples_to_process, float sample_rate, const fl
 	// If this does happen it will sound ugly. The only thing to do is
 	// to either optimize the pitch shifter, tweak the tuning parameters,
 	// or simply pitch shift less audio all at once.
-	if (num_samples_to_process > CUTE_SOUND_MAX_FRAME_LENGTH) return 0;
+	if (num_samples_to_process > CUTE_SOUND_MAX_FRAME_LENGTH) {
+		return 0;
+	}
 
 	// make sure compiler didn't do anything weird with the member
 	// offsets of csp_filter_t. All arrays must be 16 byte aligned
@@ -807,19 +809,27 @@ void csp_set_pitch(cs_playing_sound_t* sound, float pitch, cs_plugin_id_t id)
 	CUTE_SOUND_ASSERT(id >= 0 && id < CUTE_SOUND_PLUGINS_MAX);
 	if (pitch == 1.0f) return;
 	csp_data_t* pitch_data = (csp_data_t*)sound->plugin_udata[id];
+
 	if (!pitch_data)
 	{
 		pitch_data = (csp_data_t*)CUTE_SOUND_ALLOC(sizeof(csp_data_t), NULL);
 		memset(pitch_data, 0, sizeof(csp_data_t));
 		pitch_data->channel_count = sound->loaded_sound->channel_count;
 		sound->plugin_udata[id] = pitch_data;
+
+		for (int i = 0; i < pitch_data->channel_count; ++i)
+		{
+			csp_filter_t* filter = (csp_filter_t*)cs_malloc16(sizeof(csp_filter_t), NULL);
+			memset(filter, 0, sizeof(csp_filter_t));
+			filter->pitch = pitch;
+			pitch_data->filters[i] = filter;
+		}
 	}
+
 	for (int i = 0; i < pitch_data->channel_count; ++i)
 	{
-		csp_filter_t* filter = (csp_filter_t*)cs_malloc16(sizeof(csp_filter_t), NULL);
-		memset(filter, 0, sizeof(csp_filter_t));
+		csp_filter_t* filter = pitch_data->filters[i];
 		filter->pitch = pitch;
-		pitch_data->filters[i] = filter;
 	}
 }
 

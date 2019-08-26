@@ -7,7 +7,7 @@
 
 int main(int argc, char *args[])
 {
-	cs_context_t* ctx = cs_make_context(NULL, 44100, 15, 5, 0, NULL);
+	cs_context_t* ctx = cs_make_context(NULL, 44100, 4096 * 2, 0, NULL);
 	cs_loaded_sound_t loaded = cs_load_wav("../jump.wav");
 
 	cs_playing_sound_t jump = cs_make_playing_sound(&loaded);

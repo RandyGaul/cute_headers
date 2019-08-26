@@ -239,6 +239,18 @@
 
 #if !defined(CUTE_SOUND_H)
 
+#if defined(_WIN32)
+
+	#if !defined _CRT_SECURE_NO_WARNINGS
+		#define _CRT_SECURE_NO_WARNINGS
+	#endif
+
+	#if !defined _CRT_NONSTDC_NO_DEPRECATE
+		#define _CRT_NONSTDC_NO_DEPRECATE
+	#endif
+
+#endif
+
 #include <stdint.h>
 
 // read this in the event of cs_load_wav/cs_load_ogg errors
@@ -1097,7 +1109,6 @@ static void cs_unlock(cs_context_t* ctx)
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
 	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
-	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	int bps = sizeof(INT16) * 2;
 	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
@@ -1299,7 +1310,6 @@ static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
 	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
-	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	int bps = sizeof(uint16_t) * 2;
 
 	AudioComponentDescription comp_desc = { 0 };
@@ -1559,7 +1569,6 @@ static void cs_unlock(cs_context_t* ctx)
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
 	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
-	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	(void)unused;
 	int sample_count = buffered_samples;
 	int bps;
@@ -1771,7 +1780,6 @@ static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
 	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
-	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	(void)unused;
 	int bps = sizeof(uint16_t) * 2;
 	int sample_count = buffered_samples;

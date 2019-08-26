@@ -12,7 +12,7 @@ int main()
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 	hwnd = GetConsoleWindow();
 #endif
-	cs_context_t* ctx = cs_make_context(hwnd, 44100, 15, 5, 5, NULL);
+	cs_context_t* ctx = cs_make_context(hwnd, 44100, 4096 * 16, 5, NULL);
 	cs_thread_sleep_delay(ctx, 5);
 	cs_loaded_sound_t loaded_sound = cs_load_wav("la.wav");
 	int delay = 1000 * loaded_sound.sample_count / 44100;
