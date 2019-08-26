@@ -18,9 +18,11 @@
 		libraries that adversely effect shipping size. cute_sound can also run on
 		Windows XP since DirectSound ships with all recent versions of Windows.
 		cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
-		machines (like OSX and iOS). SDL is used for all other platforms. Define
-		CUTE_SOUND_FORCE_SDL before placaing the CUTE_SOUND_IMPLEMENTATION in order to force
-		the use of SDL.
+		machines (like OSX and iOS). ALSA is used on Linux (though it may be buggy
+		currently).
+
+		SDL is used for all other platforms. Define CUTE_SOUND_FORCE_SDL before placaing
+		the CUTE_SOUND_IMPLEMENTATION in order to force the use of SDL.
 
 
 	REVISION HISTORY
@@ -190,12 +192,6 @@
 		implement needed features, and users won't hear the difference between various APIs. Latency is
 		not that great with DS but it is shippable. Additionally, many other APIs will in the end speak
 		to Windows through the DS API.
-
-		Q : Why not include Linux support?
-		A : There have been a couple requests for ALSA support on Linux. For now the only option is to use
-		SDL backend, which can indirectly support ALSA. SDL is used only in a very low-level manner;
-		to get sound samples to the sound card via callback, so there shouldn't be much in the way of
-		considering SDL a good option for "name your flavor" of Linux backend.
 
 		Q : I would like to use my own memory management, how can I achieve this?
 		A : This header makes a couple uses of malloc/free, and cs_malloc16/cs_free16. Simply find these bits
