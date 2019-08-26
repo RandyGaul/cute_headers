@@ -122,14 +122,13 @@
 		First create a context and pass 0 in the final parameter (0 here means
 		the context will *not* allocate a cs_playing_sound_t memory pool):
 
-		cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, 0);
+		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, 0);
 
 		parameters:
-			hwnd           --  HWND, handle to window (on OSX just pass in 0)
-			frequency      --  int, represents Hz frequency rate in which samples are played
-			latency        --  int, estimated latency in Hz from PlaySound call to speaker output
-			seconds        --  int, number of second of samples internal buffers can hold
-			0 (last param) --  int, number of elements in cs_playing_sound_t pool
+			hwnd             --  HWND, handle to window (on OSX just pass in 0)
+			frequency        --  int, represents Hz frequency rate in which samples are played
+			buffered_samples --  int, number of samples the internal ring buffers can hold at once
+			0 (last param)   --  int, number of elements in cs_playing_sound_t pool
 
 		We create a cs_playing_sound_t like so:
 		cs_loaded_sound_t loaded = cs_load_wav("path_to_file/filename.wav");
@@ -240,50 +239,7 @@
 
 #if !defined(CUTE_SOUND_H)
 
-#define CUTE_SOUND_WINDOWS	1
-#define CUTE_SOUND_MAC		2
-#define CUTE_SOUND_UNIX		3
-#define CUTE_SOUND_SDL		4
-
-#if defined(_WIN32)
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
-
-	#if !defined _CRT_SECURE_NO_WARNINGS
-	#define _CRT_SECURE_NO_WARNINGS
-	#endif
-
-#elif defined(__APPLE__)
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_MAC
-
-#else
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
-	// please note CUTE_SOUND_UNIX is not directly support
-	// instead, unix-style OSes are encouraged to use SDL
-	// see: https://www.libsdl.org/
-
-#endif
-
-// Use CUTE_SOUND_FORCE_SDL to override the above macros and use the SDL port.
-#ifdef CUTE_SOUND_FORCE_SDL
-
-	#undef CUTE_SOUND_PLATFORM
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
-#endif
-
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
-
-	#include <SDL2/SDL.h>
-	
-#endif
-
 #include <stdint.h>
-
-#define CUTE_SOUND_PLUGINS_MAX (32)
 
 // read this in the event of cs_load_wav/cs_load_ogg errors
 // also read this in the event of certain errors from cs_make_context
@@ -304,6 +260,9 @@ typedef struct cs_loaded_sound_t
 	// The actual raw audio samples in memory.
 	void* channels[2];
 } cs_loaded_sound_t;
+
+// Don't change this unless necessary. 32 is a huge number to begin with.
+#define CUTE_SOUND_PLUGINS_MAX (32)
 
 // represents an instance of a cs_loaded_sound_t, can be played through the cs_context_t
 typedef struct cs_playing_sound_t
@@ -356,7 +315,7 @@ int cs_sound_size(cs_loaded_sound_t* sound);
 // memory pool for cs_playing_sound_t instances
 // `user_allocator_context` can be NULL - it is passed to `CUTE_SOUND_ALLOC` and
 // `CUTE_SOUND_FREE`.
-cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count, void* user_allocator_context);
+cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_context);
 void cs_shutdown_context(cs_context_t* ctx);
 
 // Call cs_spawn_mix_thread once to setup a separate thread for the context to run
@@ -429,7 +388,7 @@ cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound);
 void cs_stop_all_sounds(cs_context_t* ctx);
 
 // SDL_RWops specific functions
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#ifdef SDL_rwops_h_
 
 	// Provides the ability to use cs_load_wav with an SDL_RWops object.
 	cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context);
@@ -441,7 +400,7 @@ void cs_stop_all_sounds(cs_context_t* ctx);
 
 	#endif
 
-#endif
+#endif // SDL_rwops_h_
 
 /**
  * Uniquely identifies a plugin once added to a `cs_context_t` via `cs_add_plugin`.
@@ -527,9 +486,54 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 #include <xmmintrin.h>
 #include <emmintrin.h>
 
+// Platform detection.
+#define CUTE_SOUND_WINDOWS 1
+#define CUTE_SOUND_APPLE   2
+#define CUTE_SOUND_LINUX   3
+#define CUTE_SOUND_SDL     4
+
+#if defined(_WIN32)
+
+	#if !defined _CRT_SECURE_NO_WARNINGS
+		#define _CRT_SECURE_NO_WARNINGS
+	#endif
+
+	#if !defined _CRT_NONSTDC_NO_DEPRECATE
+		#define _CRT_NONSTDC_NO_DEPRECATE
+	#endif
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+
+#elif defined(__APPLE__)
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+
+#elif defined(__linux__)
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_LINUX
+
+#else
+
+	// Just use SDL on other esoteric platforms.
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+
+#endif
+
+// Use CUTE_SOUND_FORCE_SDL to override the above macros and use the SDL port.
+#ifdef CUTE_SOUND_FORCE_SDL
+
+	#undef CUTE_SOUND_PLATFORM
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+
+#endif
+
+// Platform specific file inclusions.
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 	#ifndef _WINDOWS_
+		#ifndef WIN32_LEAN_AND_MEAN
+			#define WIN32_LEAN_AND_MEAN
+		#endif
 		#include <Windows.h>
 	#endif
 
@@ -540,23 +544,36 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 	#include <dsound.h>
 	#undef PlaySound
 
-	#if defined(_MSC_VER)
-		#pragma comment(lib, "dsound.lib")
-	#endif
+	#pragma comment(lib, "dsound.lib")
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 	#include <CoreAudio/CoreAudio.h>
 	#include <AudioUnit/AudioUnit.h>
 	#include <pthread.h>
 	#include <mach/mach_time.h>
 
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+	#define ALSA_PCM_NEW_HW_PARAMS_API
+	#include <alsa/asoundlib.h>
+	#include <unistd.h> // usleep
+	#include <dlfcn.h> // dlopen, dclose, dlsym
+	#include <pthread.h>
+	#include <assert.h>
+
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+
+	#include <SDL2/SDL.h>
+
 #else
+
+	#error Unsupported platform - please choose one of CUTE_SOUND_WINDOWS, CUTE_SOUND_APPLE, CUTE_SOUND_LINUX or CUTE_SOUND_SDL.
 
 #endif
 
 #define CUTE_SOUND_CHECK(X, Y) do { if (!(X)) { cs_error_reason = Y; goto ts_err; } } while (0)
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC && defined(__clang__)
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE && defined(__clang__)
 	#define CUTE_SOUND_ASSERT_INTERNAL __builtin_trap()
 #else
 	#define CUTE_SOUND_ASSERT_INTERNAL *(int*)0 = 0
@@ -1077,10 +1094,12 @@ static void cs_unlock(cs_context_t* ctx)
 	if (ctx->separate_thread) LeaveCriticalSection(&ctx->critical_section);
 }
 
-cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count, void* user_allocator_ctx)
+cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
+	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	int bps = sizeof(INT16) * 2;
-	int buffer_size = play_frequency_in_Hz * bps * num_buffered_seconds;
+	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
 	WAVEFORMATEX format = { 0 };
 	DSBUFFERDESC bufdesc = { 0 };
@@ -1132,13 +1151,13 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 #endif
 		CUTE_SOUND_CHECK(res == DS_OK, "Failed to set format on secondary buffer");
 
-		int sample_count = play_frequency_in_Hz * num_buffered_seconds;
+		int sample_count = buffered_samples;
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
 		int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 		int mix_buffers_size = sizeof(__m128) * wide_count * 2;
 		int sample_buffer_size = sizeof(__m128i) * wide_count;
 		ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
-		ctx->latency_samples = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
+		ctx->latency_samples = 4096;
 		ctx->running_index = 0;
 		ctx->Hz = play_frequency_in_Hz;
 		ctx->bps = bps;
@@ -1191,7 +1210,7 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	CreateThread(0, 0, cs_ctx_thread, ctx, 0, 0);
 }
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 void cs_sleep(int milliseconds)
 {
@@ -1254,6 +1273,7 @@ static void* cs_ctx_thread(void* udata)
 
 	while (ctx->running)
 	{
+        printf("Entering mix...\n");
 		cs_mix(ctx);
 		if (ctx->sleep_milliseconds) cs_sleep(ctx->sleep_milliseconds);
 		else pthread_yield_np();
@@ -1276,8 +1296,10 @@ static void cs_unlock(cs_context_t* ctx)
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData);
 
-cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count, void* user_allocator_ctx)
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
+	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	int bps = sizeof(uint16_t) * 2;
 
 	AudioComponentDescription comp_desc = { 0 };
@@ -1311,16 +1333,14 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 
 	ret = AudioComponentInstanceNew(comp, &inst);
 
-	int sample_count = play_frequency_in_Hz * num_buffered_seconds;
-	int latency_count = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
-	CUTE_SOUND_ASSERT(sample_count > latency_count);
+	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
 	int sample_buffer_size = sizeof(__m128i) * wide_count;
 	cs_context_t* ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ret == noErr, "AudioComponentInstanceNew failed");
-	ctx->latency_samples = latency_count;
+	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
 	ctx->Hz = play_frequency_in_Hz;
@@ -1384,7 +1404,288 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	pthread_create(&ctx->thread, 0, cs_ctx_thread, ctx);
 }
 
-#else
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+void cs_sleep(int milliseconds)
+{
+	usleep(milliseconds * 1000);
+}
+
+// Load up ALSA functions manually, so nobody has to deal with compiler linker flags.
+typedef struct cs_pcm_functions_t
+{
+	int (*snd_pcm_open)(snd_pcm_t**, const char*, snd_pcm_stream_t, int);
+	int (*snd_pcm_close)(snd_pcm_t* pcm);
+	int (*snd_pcm_hw_params_any)(snd_pcm_t*, snd_pcm_hw_params_t*);
+	int (*snd_pcm_hw_params_set_access)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_access_t);
+	int (*snd_pcm_hw_params_set_format)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_format_t);
+	int (*snd_pcm_hw_params_set_rate_near)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+	int (*snd_pcm_hw_params_set_channels)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int);
+	int (*snd_pcm_hw_params_set_period_size_near)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_uframes_t*, int*);
+	int (*snd_pcm_hw_params_set_periods_min)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+	int (*snd_pcm_hw_params_set_periods_first)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+    int (*snd_pcm_hw_params)(snd_pcm_t*, snd_pcm_hw_params_t*);
+	int (*snd_pcm_sw_params_current)(snd_pcm_t*, snd_pcm_sw_params_t*);
+	int (*snd_pcm_sw_params_set_avail_min)(snd_pcm_t*, snd_pcm_sw_params_t*, snd_pcm_uframes_t);
+	int (*snd_pcm_sw_params_set_start_threshold)(snd_pcm_t*, snd_pcm_sw_params_t*, snd_pcm_uframes_t);
+	int (*snd_pcm_sw_params)(snd_pcm_t*, snd_pcm_sw_params_t*);
+	snd_pcm_sframes_t (*snd_pcm_avail)(snd_pcm_t*);
+	snd_pcm_sframes_t (*snd_pcm_writei)(snd_pcm_t*, const void*, snd_pcm_uframes_t);
+	size_t (*snd_pcm_hw_params_sizeof)(void);
+	size_t (*snd_pcm_sw_params_sizeof)(void);
+	int (*snd_pcm_drain)(snd_pcm_t*);
+} cs_pcm_functions_t;
+
+#define CUTE_SOUND_DLSYM(fn) \
+	do { \
+		void* ptr = dlsym(handle, #fn); \
+		assert(ptr); \
+		memcpy(&fns->fn, &ptr, sizeof(void*)); \
+	} while (0)
+
+static void* cs_load_alsa_functions(cs_pcm_functions_t* fns)
+{
+	void* handle = dlopen("libasound.so", RTLD_NOW);
+	if (!handle) return NULL;
+
+	memset(fns, 0, sizeof(*fns));
+
+	CUTE_SOUND_DLSYM(snd_pcm_open);
+	CUTE_SOUND_DLSYM(snd_pcm_close);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_any);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_access);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_format);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_rate_near);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_format);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_channels);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_period_size_near);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_periods_min);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_periods_first);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params);
+    CUTE_SOUND_DLSYM(snd_pcm_sw_params);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_current);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_set_avail_min);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_set_start_threshold);
+	CUTE_SOUND_DLSYM(snd_pcm_avail);
+	CUTE_SOUND_DLSYM(snd_pcm_writei);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_sizeof);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_sizeof);
+	CUTE_SOUND_DLSYM(snd_pcm_drain);
+
+	return handle;
+}
+
+struct cs_context_t
+{
+	unsigned latency_samples;
+	unsigned index0; // read
+	unsigned index1; // write
+	unsigned running_index;
+	int Hz;
+	int bps;
+	int buffer_size;
+	int wide_count;
+	int sample_count;
+	cs_playing_sound_t* playing;
+	__m128* floatA;
+	__m128* floatB;
+	__m128i* samples;
+	cs_playing_sound_t* playing_pool;
+	cs_playing_sound_t* playing_free;
+
+	// Platform specific stuff.
+	snd_pcm_t* pcm_handle;
+	cs_pcm_functions_t fns;
+	void *alsa_so;
+
+	// data for cs_mix thread, enable these with cs_spawn_mix_thread
+	pthread_t thread;
+	pthread_mutex_t mutex;
+	int separate_thread;
+	int running;
+	int sleep_milliseconds;
+
+	int plugin_count;
+	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
+};
+
+static void cs_release_context(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_destroy(&ctx->mutex);
+	cs_playing_sound_t* playing = ctx->playing;
+	while (playing)
+	{
+		for (int i = 0; i < ctx->plugin_count; ++i)
+		{
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+		}
+		playing = playing->next;
+	}
+	ctx->fns.snd_pcm_drain(ctx->pcm_handle);
+	ctx->fns.snd_pcm_close(ctx->pcm_handle);
+	dlclose(ctx->alsa_so);
+
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
+}
+
+int cs_ctx_thread(void* udata)
+{
+	cs_context_t* ctx = (cs_context_t*)udata;
+
+	while (ctx->running)
+	{
+		cs_mix(ctx);
+		if (ctx->sleep_milliseconds) cs_sleep(ctx->sleep_milliseconds);
+		else cs_sleep(1);
+	}
+
+	ctx->separate_thread = 0;
+	return 0;
+}
+
+static void cs_lock(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+}
+
+static void cs_unlock(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+}
+
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
+{
+	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
+	(void)unused;
+	int sample_count = buffered_samples;
+	int bps;
+	int latency_count;
+	int wide_count;
+	int pool_size;
+	int mix_buffers_size;
+	int sample_buffer_size;
+	cs_context_t* ctx = NULL;
+
+	// Platform specific things.
+	snd_pcm_t* pcm_handle;
+	cs_pcm_functions_t fns;
+	snd_pcm_uframes_t period_size;
+	const char* default_device = "hw:0,0";
+	unsigned int periods = 2;
+    int dir = 0;
+	snd_pcm_hw_params_t *hw_params = NULL;
+	snd_pcm_sw_params_t *sw_params = NULL;
+
+// This hack is necessary for some inline'd code in ALSA's headers that tries to
+// call these sizeof functions, which we are loading into the cute sound context manually.
+#define snd_pcm_hw_params_sizeof fns.snd_pcm_hw_params_sizeof
+#define snd_pcm_sw_params_sizeof fns.snd_pcm_sw_params_sizeof
+
+	void* alsa_so = cs_load_alsa_functions(&fns);
+	CUTE_SOUND_CHECK(alsa_so, "Unable to load ALSA functions from shared library.");
+    printf("%p\n", fns.snd_pcm_open);
+	int res = fns.snd_pcm_open(&pcm_handle, default_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to open default audio device.");
+	snd_pcm_hw_params_alloca(&hw_params);
+	res = fns.snd_pcm_hw_params_any(pcm_handle, hw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set default parameters.");
+	res = fns.snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+	CUTE_SOUND_CHECK(res >= 0, "Only interleaved sample output is supported by cute_sound, and is not available.");
+	res = fns.snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_S16_LE);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set sample format.");
+	res = fns.snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, (unsigned*)&play_frequency_in_Hz, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set sample rate.");
+	res = fns.snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set channel count.");
+	period_size = (snd_pcm_uframes_t)sample_count;
+	res = fns.snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set buffer size, likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params_set_periods_min(pcm_handle, hw_params, &periods, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set double buffering (min), likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params_set_periods_first(pcm_handle, hw_params, &periods, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set double buffering (first), likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params(pcm_handle, hw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to send hardware parameters to the driver.");
+    snd_pcm_sw_params_alloca(&sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to allocate software parameters.");
+	res = fns.snd_pcm_sw_params_current(pcm_handle, sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to initialize software parameters.");
+	res = fns.snd_pcm_sw_params_set_avail_min(pcm_handle, sw_params, period_size);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set minimum available count.");
+	res = fns.snd_pcm_sw_params_set_start_threshold(pcm_handle, sw_params, 1);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set start threshold.");
+	res = fns.snd_pcm_sw_params(pcm_handle, sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to send software parameters to the driver.");
+
+	// Platform independent things.
+	sample_count = (int)period_size;
+	bps = sizeof(uint16_t) * 2;
+	wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
+	pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
+	mix_buffers_size = sizeof(__m128) * wide_count * 2;
+	sample_buffer_size = sizeof(__m128i) * wide_count;
+
+	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
+	CUTE_SOUND_CHECK(ctx != NULL, "Can't create audio context");
+	ctx->latency_samples = 4096;
+	ctx->index0 = 0;
+	ctx->index1 = 0;
+	ctx->Hz = play_frequency_in_Hz;
+	ctx->bps = bps;
+	ctx->wide_count = wide_count;
+	ctx->sample_count = wide_count * 4;
+	ctx->playing = 0;
+	ctx->floatA = (__m128*)(ctx + 1);
+	ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+	CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
+	ctx->floatB = ctx->floatA + wide_count;
+	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->running = 1;
+	ctx->separate_thread = 0;
+	ctx->sleep_milliseconds = 0;
+	ctx->plugin_count = 0;
+	ctx->mem_ctx = user_allocator_ctx;
+
+	// Platform dependent assignments.
+	ctx->fns = fns;
+	ctx->pcm_handle = pcm_handle;
+	ctx->alsa_so = alsa_so;
+
+	if (playing_pool_count)
+	{
+		ctx->playing_pool = (cs_playing_sound_t*)(ctx->samples + wide_count);
+		for (int i = 0; i < playing_pool_count - 1; ++i)
+			ctx->playing_pool[i].next = ctx->playing_pool + i + 1;
+		ctx->playing_pool[playing_pool_count - 1].next = 0;
+		ctx->playing_free = ctx->playing_pool;
+	}
+
+	else
+	{
+		ctx->playing_pool = 0;
+		ctx->playing_free = 0;
+	}
+
+	return ctx;
+
+ts_err:
+	if (ctx) CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
+	return 0;
+}
+
+void cs_spawn_mix_thread(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) return;
+	pthread_mutex_init(&ctx->mutex, NULL);
+	ctx->separate_thread = 1;
+	pthread_create(&ctx->thread, NULL, (void* (*)(void*))cs_ctx_thread, ctx);
+}
+
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 void cs_sleep(int milliseconds)
 {
@@ -1467,13 +1768,13 @@ static void cs_unlock(cs_context_t* ctx)
 
 static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
 
-cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count, void* user_allocator_ctx)
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
+	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples > 16384 ? 16384 : buffered_samples;
 	(void)unused;
 	int bps = sizeof(uint16_t) * 2;
-	int sample_count = play_frequency_in_Hz * num_buffered_seconds;
-	int latency_count = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
-	CUTE_SOUND_ASSERT(sample_count > latency_count);
+	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
@@ -1485,7 +1786,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 
 	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ctx != NULL, "Can't create audio context");
-	ctx->latency_samples = latency_count;
+	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
 	ctx->Hz = play_frequency_in_Hz;
@@ -1545,9 +1846,9 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", ctx);
 }
 
-#endif
+#endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
 
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 static int cs_samples_written(cs_context_t* ctx)
 {
@@ -1565,7 +1866,7 @@ static int cs_samples_unwritten(cs_context_t* ctx)
 	else return index0 - index1;
 }
 
-static int cs_sampels_to_mix(cs_context_t* ctx)
+static int cs_samples_to_mix(cs_context_t* ctx)
 {
 	int lat = ctx->latency_samples;
 	int written = cs_samples_written(ctx);
@@ -1861,7 +2162,7 @@ static void cs_memcpy_to_directsound(cs_context_t* ctx, int16_t* samples, int by
 	}
 }
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData)
 {
@@ -1905,13 +2206,21 @@ void cs_mix(cs_context_t* ctx)
 	if (!bytes_to_write) goto unlock;
 	int samples_to_write = bytes_to_write / ctx->bps;
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
-	int samples_to_write = cs_sampels_to_mix(ctx);
+	int samples_to_write = cs_samples_to_mix(ctx);
 	if (!samples_to_write) goto unlock;
 	int bytes_to_write = samples_to_write * ctx->bps;
 
-#else
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+	snd_pcm_sframes_t frames = ctx->fns.snd_pcm_avail(ctx->pcm_handle);
+	if (frames == -EAGAIN) goto unlock; // No data yet.
+	else if (frames < 0) { /* Fatal error... How should this be handled? */ }
+	else if (frames == 0) goto unlock;
+	int samples_to_write = (int)frames;
+	if (samples_to_write > ctx->latency_samples) samples_to_write = ctx->latency_samples;
+
 #endif
 
 	// clear mixer buffers
@@ -2105,7 +2414,7 @@ void cs_mix(cs_context_t* ctx)
 	}
 	cs_memcpy_to_directsound(ctx, (int16_t*)samples, byte_to_lock, bytes_to_write);
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
 
 	// Since the ctx->samples array is already in use as a ring buffer
 	// reusing floatA to store output is a good way to temporarly store
@@ -2120,10 +2429,20 @@ void cs_mix(cs_context_t* ctx)
 		__m128i a2b2a3b3 = _mm_unpackhi_epi32(a, b);
 		samples[i] = _mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
-	cs_push_bytes(ctx, samples, bytes_to_write);
 
-#else
+	// SDL/CoreAudio use a callback mechanism communicating with cute sound
+	// over a ring buffer (accessed by cs_push_bytes and cs_pull_bytes), but
+	// ALSA on Linux has their own memcpy-style function to use... So we don't
+	// need a local ring buffer at all, and can directly hand over the samples.
+	#if CUTE_SOUND_PLATFORM != CUTE_SOUND_LINUX
+		cs_push_bytes(ctx, samples, bytes_to_write);
+	#else
+		int ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
+		if (ret < 0) { /* Fatal error... How should this be handled? */ }
+	#endif
+
 #endif
+
 	unlock:
 	cs_unlock(ctx);
 }
@@ -2170,3 +2489,4 @@ void cs_mix(cs_context_t* ctx)
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	------------------------------------------------------------------------------
 */
+
