@@ -551,12 +551,15 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 
 	#ifndef _WAVEFORMATEX_
 		#include <mmreg.h>
+		#include <mmsystem.h>
 	#endif
 
 	#include <dsound.h>
 	#undef PlaySound
 
-	#pragma comment(lib, "dsound.lib")
+	#ifdef _MSC_VER
+		#pragma comment(lib, "dsound.lib")
+	#endif
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
@@ -1108,7 +1111,7 @@ static void cs_unlock(cs_context_t* ctx)
 
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	int bps = sizeof(INT16) * 2;
 	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
@@ -1309,7 +1312,7 @@ static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* 
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	int bps = sizeof(uint16_t) * 2;
 
 	AudioComponentDescription comp_desc = { 0 };
@@ -1568,7 +1571,7 @@ static void cs_unlock(cs_context_t* ctx)
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	(void)unused;
 	int sample_count = buffered_samples;
 	int bps;
@@ -1779,7 +1782,7 @@ static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 4096 ? 4096 : buffered_samples;
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	(void)unused;
 	int bps = sizeof(uint16_t) * 2;
 	int sample_count = buffered_samples;
@@ -2091,7 +2094,8 @@ static void cs_position(cs_context_t* ctx, int* byte_to_lock, int* bytes_to_writ
 	CUTE_SOUND_ASSERT(hr == DS_OK);
 
 	DWORD lock = (ctx->running_index * ctx->bps) % ctx->buffer_size;
-	DWORD target_cursor = (write_cursor + ctx->latency_samples * ctx->bps) % ctx->buffer_size;
+	DWORD target_cursor = (write_cursor + ctx->latency_samples * ctx->bps);
+	if (target_cursor > (DWORD)ctx->buffer_size) target_cursor %= ctx->buffer_size;
 	target_cursor = (DWORD)CUTE_SOUND_ALIGN(target_cursor, 16);
 	DWORD write;
 
@@ -2497,4 +2501,3 @@ void cs_mix(cs_context_t* ctx)
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	------------------------------------------------------------------------------
 */
-
