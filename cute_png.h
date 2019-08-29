@@ -23,6 +23,7 @@
 		1.02 (10/23/2017) support for explicitly loading paletted png images
 		1.03 (11/12/2017) construct atlas in memory
 		1.04 (08/23/2018) various bug fixes for filter and word decoder
+		                  added `cp_load_blank`
 
 
 	EXAMPLES:
@@ -116,6 +117,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 // call free on cp_image_t::pix when done, or call cp_free_png
 cp_image_t cp_load_png(const char *file_name);
 cp_image_t cp_load_png_mem(const void *png_data, int png_length);
+cp_image_t cp_load_blank(int w, int h);
 void cp_free_png(cp_image_t* img);
 void cp_flip_image_horizontal(cp_image_t* img);
 
@@ -1050,6 +1052,15 @@ cp_err:
 	CUTE_PNG_FREE(img.pix);
 	img.pix = 0;
 
+	return img;
+}
+
+cp_image_t cp_load_blank(int w, int h)
+{
+	cp_image_t img;
+	img.w = w;
+	img.h = h;
+	img.pix = (cp_pixel_t*)CUTE_PNG_ALLOC(w * h * sizeof(cp_pixel_t));
 	return img;
 }
 
