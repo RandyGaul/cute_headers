@@ -117,7 +117,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 // call free on cp_image_t::pix when done, or call cp_free_png
 cp_image_t cp_load_png(const char *file_name);
 cp_image_t cp_load_png_mem(const void *png_data, int png_length);
-cp_image_t cp_load_blank(int w, int h);
+cp_image_t cp_load_blank(int w, int h); // Alloc's pixels, but `pix` memory is uninitialized.
 void cp_free_png(cp_image_t* img);
 void cp_flip_image_horizontal(cp_image_t* img);
 
