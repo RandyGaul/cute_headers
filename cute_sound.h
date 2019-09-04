@@ -2315,11 +2315,11 @@ void cs_mix(cs_context_t* ctx)
 			int sample_count = (mix_wide - 2 * delay_wide) * 4;
 
 			// Give all plugins a chance to inject altered samples into the mix streams.
-			float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
-			float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
 			for (int i = 0; i < ctx->plugin_count; ++i)
 			{
 				cs_plugin_interface_t* plugin = ctx->plugins + i;
+				float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
+				float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
 				float* samples_out_channel_a = NULL;
 				float* samples_out_channel_b = NULL;
 				plugin->on_mix_fn(ctx, plugin->plugin_instance, 0, plugin_samples_in_channel_a, sample_count, &samples_out_channel_a, playing->plugin_udata[i], playing);
