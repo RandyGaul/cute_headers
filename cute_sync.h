@@ -33,6 +33,16 @@
 		https://github.com/mattiasgustavsson/libs
 
 
+	PLATFORMS
+
+		The current support platforms are Windows/Posix/SDL. Here are the macros for
+		picking each implementation.
+
+			* CUTE_SYNC_WINDOWS
+			* CUTE_SYNC_POSIX
+			* CUTE_SYNC_SDL
+
+
 	REVISION HISTORY
 
 		1.0  (05/31/2018) initial release
@@ -343,7 +353,7 @@ struct cute_rw_lock_t
 #endif
 
 #if !defined(CUTE_SYNC_YIELD)
-	#ifdef CYTE_SYNC_WINDOWS
+	#ifdef CUTE_SYNC_WINDOWS
 		#define WIN32_LEAN_AND_MEAN
 		#include <Windows.h> // winnt
 		#define CUTE_SYNC_YIELD YieldProcessor
