@@ -35,7 +35,7 @@
 
 	PLATFORMS
 
-		The current support platforms are Windows/Posix/SDL. Here are the macros for
+		The current supported platforms are Windows/Posix/SDL. Here are the macros for
 		picking each implementation.
 
 			* CUTE_SYNC_WINDOWS
