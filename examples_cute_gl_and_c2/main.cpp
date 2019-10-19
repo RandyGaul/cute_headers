@@ -1401,7 +1401,6 @@ void infinite_loop_tyler_glaiel_analytic_toi_and_gjk()
 
 int main()
 {
-
 	// glfw and glad setup
 	glfwSetErrorCallback(ErrorCB);
 
@@ -1472,7 +1471,7 @@ int main()
 	user_capsule.b = c2V(30.0f, 0);
 	user_capsule.r = 10.0f;
 
-	infinite_loop_tyler_glaiel_analytic_toi_and_gjk();
+	//infinite_loop_tyler_glaiel_analytic_toi_and_gjk();
 
 	// main loop
 	glClearColor(0, 0, 0, 1);
