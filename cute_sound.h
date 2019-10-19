@@ -18,9 +18,11 @@
 		libraries that adversely effect shipping size. cute_sound can also run on
 		Windows XP since DirectSound ships with all recent versions of Windows.
 		cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
-		machines (like OSX and iOS). SDL is used for all other platforms. Define
-		CUTE_SOUND_FORCE_SDL before placaing the CUTE_SOUND_IMPLEMENTATION in order to force
-		the use of SDL.
+		machines (like OSX and iOS). ALSA is used on Linux (though it may be buggy
+		currently).
+
+		SDL is used for all other platforms. Define CUTE_SOUND_FORCE_SDL before placaing
+		the CUTE_SOUND_IMPLEMENTATION in order to force the use of SDL.
 
 
 	REVISION HISTORY
@@ -190,12 +192,6 @@
 		implement needed features, and users won't hear the difference between various APIs. Latency is
 		not that great with DS but it is shippable. Additionally, many other APIs will in the end speak
 		to Windows through the DS API.
-
-		Q : Why not include Linux support?
-		A : There have been a couple requests for ALSA support on Linux. For now the only option is to use
-		SDL backend, which can indirectly support ALSA. SDL is used only in a very low-level manner;
-		to get sound samples to the sound card via callback, so there shouldn't be much in the way of
-		considering SDL a good option for "name your flavor" of Linux backend.
 
 		Q : I would like to use my own memory management, how can I achieve this?
 		A : This header makes a couple uses of malloc/free, and cs_malloc16/cs_free16. Simply find these bits
@@ -2319,11 +2315,11 @@ void cs_mix(cs_context_t* ctx)
 			int sample_count = (mix_wide - 2 * delay_wide) * 4;
 
 			// Give all plugins a chance to inject altered samples into the mix streams.
-			float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
-			float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
 			for (int i = 0; i < ctx->plugin_count; ++i)
 			{
 				cs_plugin_interface_t* plugin = ctx->plugins + i;
+				float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
+				float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
 				float* samples_out_channel_a = NULL;
 				float* samples_out_channel_b = NULL;
 				plugin->on_mix_fn(ctx, plugin->plugin_instance, 0, plugin_samples_in_channel_a, sample_count, &samples_out_channel_a, playing->plugin_udata[i], playing);

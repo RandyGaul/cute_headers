@@ -123,7 +123,7 @@
 
 
 	Contributors
-	
+
 		Plastburk         1.01 - const pointers pull request
 		mmozeiko          1.02 - 3 compile bugfixes
 		felipefs          1.02 - 3 compile bugfixes
@@ -144,21 +144,21 @@
 #define C2_MAX_POLYGON_VERTS 8
 
 // 2d vector
-typedef struct
+typedef struct c2v
 {
 	float x;
 	float y;
 } c2v;
 
 // 2d rotation composed of cos/sin pair
-typedef struct
+typedef struct c2r
 {
 	float c;
 	float s;
 } c2r;
 
 // 2d rotation matrix
-typedef struct
+typedef struct c2m
 {
 	c2v x;
 	c2v y;
@@ -171,40 +171,40 @@ typedef struct
 // a c2x pointer (like c2PolytoPoly), these pointers can be NULL, which represents
 // an identity transformation and assumes the verts inside of c2Poly are already
 // in world space.
-typedef struct
+typedef struct c2x
 {
 	c2v p;
 	c2r r;
 } c2x;
 
 // 2d halfspace (aka plane, aka line)
-typedef struct
+typedef struct c2h
 {
 	c2v n;   // normal, normalized
 	float d; // distance to origin from plane, or ax + by = d
 } c2h;
 
-typedef struct
+typedef struct c2Circle
 {
 	c2v p;
 	float r;
 } c2Circle;
 
-typedef struct
+typedef struct c2AABB
 {
 	c2v min;
 	c2v max;
 } c2AABB;
 
 // a capsule is defined as a line segment (from a to b) and radius r
-typedef struct
+typedef struct c2Capsule
 {
 	c2v a;
 	c2v b;
 	float r;
 } c2Capsule;
 
-typedef struct
+typedef struct c2Poly
 {
 	int count;
 	c2v verts[C2_MAX_POLYGON_VERTS];
@@ -216,14 +216,14 @@ typedef struct
 // ray direction (c2Ray::d). It is highly recommended to normalize the
 // ray direction and use t to specify a distance. Please see this link
 // for an in-depth explanation: https://github.com/RandyGaul/cute_headers/issues/30
-typedef struct
+typedef struct c2Ray
 {
 	c2v p;   // position
 	c2v d;   // direction (normalized)
 	float t; // distance along d from position p to find endpoint of ray
 } c2Ray;
 
-typedef struct
+typedef struct c2Raycast
 {
 	float t; // time of impact
 	c2v n;   // normal of surface at impact (unit length)
@@ -241,7 +241,7 @@ typedef struct
 // of simulations that cache information over multiple game-ticks, of which are
 // associated to the collision of specific features. An example implementation
 // is in the qu3e 3D physics engine library: https://github.com/RandyGaul/qu3e
-typedef struct
+typedef struct c2Manifold
 {
 	int count;
 	float depths[2];
@@ -309,7 +309,7 @@ typedef enum
 
 // This struct is only for advanced usage of the c2GJK function. See comments inside of the
 // c2GJK function for more details.
-typedef struct
+typedef struct c2GJKCache
 {
 	float metric;
 	int count;
