@@ -391,7 +391,7 @@ void TestBoolean1()
 	c2Capsule cap = GetCapsule();
 
 	c2v a, b;
-	c2GJK(&bb, C2_TYPE_AABB, 0, &cap, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0);
+	c2GJK(&bb, C2_TYPE_AABB, 0, &cap, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0, 0);
 	DrawCircle(a, 2.0f);
 	DrawCircle(b, 2.0f);
 	gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -442,7 +442,7 @@ void TestBoolean2()
 	case 0:
 	{
 		c2v a, b;
-		c2GJK(&user_circle, C2_TYPE_CIRCLE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
+		c2GJK(&user_circle, C2_TYPE_CIRCLE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -472,7 +472,7 @@ void TestBoolean2()
 		bb.max = c2V(10.0f, 10.0f);
 		bb.min = c2Add(bb.min, mp);
 		bb.max = c2Add(bb.max, mp);
-		c2GJK(&bb, C2_TYPE_AABB, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
+		c2GJK(&bb, C2_TYPE_AABB, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -489,7 +489,7 @@ void TestBoolean2()
 	{
 		c2v a, b;
 		c2Capsule cap = GetCapsule();
-		c2GJK(&cap, C2_TYPE_CAPSULE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
+		c2GJK(&cap, C2_TYPE_CAPSULE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -509,7 +509,7 @@ void TestBoolean2()
 		for (int i = 0; i < poly2.count; ++i) poly3.verts[i] = c2Add(mp, poly2.verts[i]);
 		poly3.count = poly2.count;
 
-		c2GJK(&poly, C2_TYPE_POLY, 0, &poly3, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
+		c2GJK(&poly, C2_TYPE_POLY, 0, &poly3, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -1004,7 +1004,7 @@ void lundmark_GJK_div_by_0_bug()
 	B = { { 1133.07214f, 1443.59570f }, { 1127.39636f, 1440.69470f }, 6.0f };
 
 	c2v a, b;
-	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0, 0);
 }
 
 void gjk_make_sure_cache_helps_and_works()
@@ -1020,8 +1020,8 @@ void gjk_make_sure_cache_helps_and_works()
 	cache.count = 0;
 	int iterations = -1;
 	int cached_iterations = -1;
-	float d0 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a0, &b0, 1, &iterations, &cache);
-	float d1 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, &cached_iterations, &cache);
+	float d0 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a0, &b0, 1, 0, &iterations, &cache);
+	float d1 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, &cached_iterations, &cache);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(A.p, A.r);
@@ -1270,8 +1270,138 @@ void martincohen_ray_bug()
 	}
 }
 
+float PointSegmentTOI(c2v p, c2v v, c2v a, c2v b){ //almost certainly can be reduced down to a simpler equation
+	c2v AB = c2Sub(b, a);
+	c2v n = c2CCW90(AB);
+	c2v vP = c2Sub(a,p);
+
+	float denom = (c2Dot(v,n));
+	if(denom == 0) return INFINITY; //parallel, never collide
+	float t = (c2Dot(vP,n))/denom;
+	if(t<0) return INFINITY; //collided in the past
+
+	c2v intersection = c2Add(p, c2Mulvs(v,t));
+	c2v iA = c2Sub(intersection, a);
+	c2v iB = c2Sub(intersection, b);
+
+	if(c2Dot(iA,AB) < 0) return INFINITY; //off the sides, never collide
+	if(c2Dot(iB,AB) > 0) return INFINITY; //off the sides, never collide
+	return t;
+}
+
+float PolyToPolyTOI(const c2Poly* pA, const c2x* ax_ptr, c2v vA, const c2Poly* pB, const c2x* bx_ptr, c2v vB, c2v* out_normal, c2v* out_contact_point){
+	//return c2TOI(pA, C2_TYPE_POLY, ax_ptr, vA, pB, C2_TYPE_POLY, bx_ptr, vB, true, out_normal, out_contact_point, NULL);
+	
+	//degenerate cases, zero movement or already colliding
+	if((vA.x==vB.x && vA.y==vB.y) || c2PolytoPoly(pA, ax_ptr, pB, bx_ptr)){
+		if(out_normal) *out_normal = {0,0};
+		if(out_contact_point) *out_contact_point = {0,0};
+		return 0;
+	}
+
+	float t = INFINITY;
+	c2v n = {0,0};
+	c2v p = {0,0};
+
+	//pre-transform poly vertices to avoid doing it every access
+	c2Poly A = *pA;
+	c2Poly B = *pB;
+	if(ax_ptr){
+		for(int i = 0; i<A.count; i++){
+			A.verts[i] = c2Mulxv(*ax_ptr, A.verts[i]);
+			A.norms[i] = c2Mulrv(ax_ptr->r, A.norms[i]);
+		}
+	}
+	if(bx_ptr){
+		for(int i = 0; i<B.count; i++){
+			B.verts[i] = c2Mulxv(*bx_ptr, B.verts[i]);
+			B.norms[i] = c2Mulrv(bx_ptr->r, B.norms[i]);
+		}
+	}
+
+	//TOI of A's vertices against B's edges
+	c2v v = c2Sub(vA, vB);
+	for(int j = 0; j<B.count; j++){
+		if(c2Dot(B.norms[j], v) < 0){ //don't need to check edges facing away from the direction of movement
+			for(int i = 0; i<A.count; i++){
+				float v_t = PointSegmentTOI(A.verts[i], v, B.verts[j], B.verts[(j+1)%B.count]);
+				if(v_t <= t){
+					t = v_t;
+					n = c2Neg(B.norms[j]);
+					p = c2Add(A.verts[i], c2Mulvs(vA, v_t));
+				}
+			}
+		}
+	}
+
+	//TOI of B's vertices against A's edges
+	v = c2Sub(vB, vA);
+	for(int j = 0; j<A.count; j++){
+		if(c2Dot(A.norms[j], v) < 0){ //don't need to check edges facing away from the direction of movement
+			for(int i = 0; i<B.count; i++){
+				float v_t = PointSegmentTOI(B.verts[i], v, A.verts[j], A.verts[(j+1)%A.count]);
+				if(v_t <= t){
+					t = v_t;
+					n = A.norms[j];
+					p = c2Add(B.verts[i], c2Mulvs(vB, v_t));
+				}
+			}
+		}
+	}
+
+	if(out_normal) *out_normal = c2SafeNorm(n);
+	if(out_contact_point) *out_contact_point = p;
+	return t;
+}
+
+#pragma optimize("", off)
+void infinite_loop_tyler_glaiel_analytic_toi_and_gjk()
+{
+	int N = 10000;
+	c2Poly* quads = (c2Poly*)malloc(sizeof(c2Poly) * N);
+
+	for (int i = 0; i < N; ++i) {
+		quads->count = 4;
+		quads->verts[0] = c2Add(c2V(randf() * 0.1f, randf() * 0.1f), c2V(-1, -1));
+		quads->verts[1] = c2Add(c2V(randf() * 0.1f, randf() * 0.1f), c2V(-1,  1));
+		quads->verts[2] = c2Add(c2V(randf() * 0.1f, randf() * 0.1f), c2V( 1,  1));
+		quads->verts[3] = c2Add(c2V(randf() * 0.1f, randf() * 0.1f), c2V( 1, -1));
+		c2Norms(quads->verts, quads->norms, 4);
+	}
+
+	c2Poly moving_quad;
+	moving_quad.count = 4;
+	moving_quad.verts[0] = c2V(-1,  0);
+	moving_quad.verts[1] = c2V( 0,  1);
+	moving_quad.verts[2] = c2V( 1,  0);
+	moving_quad.verts[3] = c2V( 0,  -1);
+	c2Norms(moving_quad.verts, moving_quad.norms, 4);
+
+	double inv_freq = 1.0 / (double)glfwGetTimerFrequency();
+
+	while (1) {
+		uint64_t t0 = glfwGetTimerValue();
+		for (int i = 0; i < N; ++i) {
+			c2TOI(quads + i, C2_TYPE_POLY, NULL, c2V(0, 0), &moving_quad, C2_TYPE_POLY, NULL, c2V(0, -100), 0, NULL, NULL, NULL);
+		}
+		uint64_t t1 = glfwGetTimerValue();
+		float dt0 = (float)((double)(t1 - t0) * inv_freq);
+
+		t0 = glfwGetTimerValue();
+		for (int i = 0; i < N; ++i) {
+			PolyToPolyTOI(quads + i, NULL, c2V(0, 0), &moving_quad, NULL, c2V(0, -100), NULL, NULL);
+		}
+		t1 = glfwGetTimerValue();
+		float dt1 = (float)((double)(t1 - t0) * inv_freq);
+
+		printf("Conservative Advancement %f\nAnalytic %f\n", dt0, dt1);
+	}
+}
+#pragma optimize("", on)
+
 int main()
 {
+
 	// glfw and glad setup
 	glfwSetErrorCallback(ErrorCB);
 
@@ -1341,6 +1471,8 @@ int main()
 	user_capsule.a = c2V(-30.0f, 0);
 	user_capsule.b = c2V(30.0f, 0);
 	user_capsule.r = 10.0f;
+
+	infinite_loop_tyler_glaiel_analytic_toi_and_gjk();
 
 	// main loop
 	glClearColor(0, 0, 0, 1);

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.06
+	cute_c2.h - v1.07
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
@@ -119,6 +119,7 @@
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
 		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
+		1.07 (08/23/2019) Optimizations to c2TOI - breaking change to c2GJK API
 
 
 	Contributors
@@ -324,7 +325,7 @@ typedef struct
 // treated as points and capsules are treated as line segments i.e. rays). The cache parameter
 // should be NULL, as it is only for advanced usage (unless you know what you're doing, then
 // go ahead and use it). iterations is an optional parameter.
-CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
+CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, float feather_radius, int* iterations, c2GJKCache* cache);
 
 // Computes the time of impact from shape A and shape B. The velocity of each shape is provided
 // by vA and vB respectively. The shapes are *not* allowed to rotate over time. The velocity is
@@ -705,8 +706,8 @@ static C2_INLINE void c22(c2Simplex* s)
 {
 	c2v a = s->a.p;
 	c2v b = s->b.p;
-	float u = c2Dot(b, c2Norm(c2Sub(b, a)));
-	float v = c2Dot(a, c2Norm(c2Sub(a, b)));
+	float u = c2Dot(b, c2Sub(b, a));
+	float v = c2Dot(a, c2Sub(a, b));
 
 	if (v <= 0)
 	{
@@ -738,13 +739,13 @@ static C2_INLINE void c23(c2Simplex* s)
 	c2v b = s->b.p;
 	c2v c = s->c.p;
 
-	float uAB = c2Dot(b, c2Norm(c2Sub(b, a)));
-	float vAB = c2Dot(a, c2Norm(c2Sub(a, b)));
-	float uBC = c2Dot(c, c2Norm(c2Sub(c, b)));
-	float vBC = c2Dot(b, c2Norm(c2Sub(b, c)));
-	float uCA = c2Dot(a, c2Norm(c2Sub(a, c)));
-	float vCA = c2Dot(c, c2Norm(c2Sub(c, a)));
-	float area = c2Det2(c2Norm(c2Sub(b, a)), c2Norm(c2Sub(c, a)));
+	float uAB = c2Dot(b, c2Sub(b, a));
+	float vAB = c2Dot(a, c2Sub(a, b));
+	float uBC = c2Dot(c, c2Sub(c, b));
+	float vBC = c2Dot(b, c2Sub(b, c));
+	float uCA = c2Dot(a, c2Sub(a, c));
+	float vCA = c2Dot(c, c2Sub(c, a));
+	float area = c2Det2(c2Sub(b, a), c2Sub(c, a));
 	float uABC = c2Det2(b, c) * area;
 	float vABC = c2Det2(c, a) * area;
 	float wABC = c2Det2(a, b) * area;
@@ -826,7 +827,7 @@ static C2_INLINE float c2GJKSimplexMetric(c2Simplex* s)
 // Please see http://box2d.org/downloads/ under GDC 2010 for Erin's demo code
 // and PDF slides for documentation on the GJK algorithm. This function is mostly
 // from Erin's version from his online resources.
-float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache)
+float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, float feather_radius, int* iterations, c2GJKCache* cache)
 {
 	c2x ax;
 	c2x bx;
@@ -839,6 +840,7 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 	c2Proxy pB;
 	c2MakeProxy(A, typeA, &pA);
 	c2MakeProxy(B, typeB, &pB);
+	pA.radius += feather_radius;
 
 	c2Simplex s;
 	c2sv* verts = &s.a;
@@ -1010,13 +1012,13 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 	return dist;
 }
 
-static C2_INLINE float c2Step(float t, const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, c2v* a, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, c2v* b, int use_radius, c2GJKCache* cache)
+static C2_INLINE float c2Step(float t, const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, c2v* a, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, c2v* b, int use_radius, float feather_radius, c2GJKCache* cache)
 {
 	c2x ax = *ax_ptr;
 	c2x bx = *bx_ptr;
 	ax.p = c2Add(ax.p, c2Mulvs(vA, t));
 	bx.p = c2Add(bx.p, c2Mulvs(vB, t));
-	float d = c2GJK(A, typeA, &ax, B, typeB, &bx, a, b, use_radius, NULL, cache);
+	float d = c2GJK(A, typeA, &ax, B, typeB, &bx, a, b, use_radius, feather_radius, NULL, cache);
 	return d;
 }
 
@@ -1032,36 +1034,34 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 	c2v a, b, n;
 	c2GJKCache cache;
 	cache.count = 0;
-	float d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
+	float feather_radius = 1.0e-3f;
+	float d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, feather_radius, &cache);
 	c2v v = c2Sub(vB, vA);
-	n = c2SafeNorm(c2Sub(b, a));
 
-	int iter = 0;
-	float eps = 1.0e-5f;
+	int iters = 0;
+	float eps = 1.0e-6f;
 	while (d > eps && t < 1)
 	{
-		++iter;
+		++iters;
 		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
 		if (!velocity_bound) return 1;
 		float delta = d / velocity_bound;
-		t += delta * 0.95f;
-		c2v a0, b0;
-		d = c2Step(t, A, typeA, &ax, vA, &a0, B, typeB, &bx, vB, &b0, use_radius, &cache);
-		if (d * d >= eps)
-		{
-			a = a0;
-			b = b0;
-			n = c2Sub(b, a);
-		}
+		float t0 = t;
+		float t1 = t + delta;
+		if (t0 == t1) break;
+		t = t1;
+		d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, feather_radius, &cache);
 	}
 
-	n = c2SafeNorm(n);
+	d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, 0, &cache);
+	n = c2SafeNorm(c2Sub(b, a));
 	t = t >= 1 ? 1 : t;
 	c2v p = c2Mulvs(c2Add(a, b), 0.5f);
 
 	if (out_normal) *out_normal = n;
 	if (out_contact_point) *out_contact_point = p;
-	if (iterations) *iterations = iter;
+	if (iterations) *iterations = iters;
+
 	return t;
 }
 
@@ -1194,37 +1194,37 @@ int c2CircletoCapsule(c2Circle A, c2Capsule B)
 
 int c2AABBtoCapsule(c2AABB A, c2Capsule B)
 {
-	if (c2GJK(&A, C2_TYPE_AABB, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_AABB, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CapsuletoCapsule(c2Capsule A, c2Capsule B)
 {
-	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
 int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_TYPE_AABB, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_AABB, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
 int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(A, C2_TYPE_POLY, ax, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(A, C2_TYPE_POLY, ax, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0, 0)) return 0;
 	return 1;
 }
 
@@ -1510,7 +1510,7 @@ void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m)
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0, 0);
 	if (d < r)
 	{
 		c2v n;
@@ -1597,7 +1597,7 @@ void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m)
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0, 0);
 	if (d < r)
 	{
 		c2v n;
@@ -1623,7 +1623,7 @@ void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Man
 {
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx_tr, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx_tr, &a, &b, 0, 0, 0, 0);
 
 	// shallow, the circle center did not hit the polygon
 	// just use a and b from GJK to define the collision
@@ -1774,7 +1774,7 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 {
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx_ptr, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx_ptr, &a, &b, 0, 0, 0, 0);
 
 	// deep, treat as segment to poly collision
 	if (d == 0)
