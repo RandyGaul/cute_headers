@@ -119,7 +119,7 @@
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
 		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
-		1.07 (08/23/2019) Optimizations to c2TOI - breaking change to c2GJK API
+		1.07 (10/19/2019) Optimizations to c2TOI - breaking change to c2GJK API
 
 
 	Contributors
