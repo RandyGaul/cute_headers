@@ -12,8 +12,8 @@
 	SUMMARY:
 
 		Collection of c-string manipulation functions for dealing with common file-path
-		operations. More or less a less-featuerd replacement for Shlwapi.h path functions
-		on Windows.
+		operations. More or less a less-fully-featured replacement for Shlwapi.h path
+		functions on Windows.
 
 		Performs no dynamic memory management and has no external dependencies (other than
 		some crt funcs).
