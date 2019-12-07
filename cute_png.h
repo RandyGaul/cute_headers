@@ -610,7 +610,7 @@ typedef struct cp_save_png_data_t
 	FILE *fp;
 } cp_save_png_data_t;
 
-uint32_t tpCRC_TABLE[] = {
+uint32_t CP_CRC_TABLE[] = {
 	0, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
 	0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
 };
@@ -618,8 +618,8 @@ uint32_t tpCRC_TABLE[] = {
 static void cp_put8(cp_save_png_data_t* s, uint32_t a)
 {
 	fputc(a, s->fp);
-	s->crc = (s->crc >> 4) ^ tpCRC_TABLE[(s->crc & 15) ^ (a & 15)];
-	s->crc = (s->crc >> 4) ^ tpCRC_TABLE[(s->crc & 15) ^ (a >> 4)];
+	s->crc = (s->crc >> 4) ^ CP_CRC_TABLE[(s->crc & 15) ^ (a & 15)];
+	s->crc = (s->crc >> 4) ^ CP_CRC_TABLE[(s->crc & 15) ^ (a >> 4)];
 }
 
 static void cp_update_adler(cp_save_png_data_t* s, uint32_t v)
