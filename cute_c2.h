@@ -1164,6 +1164,22 @@ int c2AABBtoAABB(c2AABB A, c2AABB B)
 	return !(d0 | d1 | d2 | d3);
 }
 
+int c2AABBtoPoint(c2AABB A, c2v B)
+{
+	int d0 = B.x < A.min.x;
+	int d1 = B.y < A.min.y;
+	int d2 = B.x > A.max.x;
+	int d3 = B.y > A.max.y;
+	return !(d0 | d1 | d2 | d3);
+}
+
+int c2CircleToPoint(c2Circle A, c2v B)
+{
+	c2v n = c2Sub(A.p, B);
+	float d2 = c2Dot(n, n);
+	return d2 < A.r * A.r;
+}
+
 // see: http://www.randygaul.net/2014/07/23/distance-point-to-line-segment/
 int c2CircletoCapsule(c2Circle A, c2Capsule B)
 {
@@ -1352,42 +1368,65 @@ int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out)
 
 	// rotate capsule to origin, along Y axis
 	// rotate the ray same way
-	c2v yBb = c2MulmvT(M, c2Sub(B.b, B.a));
+	c2v cap_n = c2Sub(B.b, B.a);
+	c2v yBb = c2MulmvT(M, cap_n);
 	c2v yAp = c2MulmvT(M, c2Sub(A.p, B.a));
 	c2v yAd = c2MulmvT(M, A.d);
 	c2v yAe = c2Add(yAp, c2Mulvs(yAd, A.t));
 
+	c2AABB capsule_bb;
+	capsule_bb.min = c2V(-B.r, 0);
+	capsule_bb.max = c2V(B.r, yBb.y);
+
+	out->n = c2Norm(cap_n);
+	out->t = 0;
+
+	// check and see if ray starts within the capsule
+	if (c2AABBtoPoint(capsule_bb, yAp)) {
+		return 1;
+	} else {
+		c2Circle capsule_a;
+		c2Circle capsule_b;
+		capsule_a.p = B.a;
+		capsule_a.r = B.r;
+		capsule_b.p = B.b;
+		capsule_b.r = B.r;
+
+		if (c2CircleToPoint(capsule_a, A.p)) {
+			return 1;
+		} else if (c2CircleToPoint(capsule_b, A.p)) {
+			return 1;
+		}
+	}
+
 	if (yAe.x * yAp.x < 0 || c2Min(c2Abs(yAe.x), c2Abs(yAp.x)) < B.r)
 	{
-		float c = yAp.x > 0 ? B.r : -B.r;
-		float d = (yAe.x - yAp.x);
-		float t = (c - yAp.x) / d;
-		float y = yAp.y + (yAe.y - yAp.y) * t;
+		c2Circle Ca, Cb;
+		Ca.p = B.a;
+		Ca.r = B.r;
+		Cb.p = B.b;
+		Cb.r = B.r;
 
-		// hit bottom half-circle
-		if (y < 0)
-		{
-			c2Circle C;
-			C.p = B.a;
-			C.r = B.r;
-			return c2RaytoCircle(A, C, out);
+		// ray starts inside capsule prism -- must hit one of the semi-circles
+		if (c2Abs(yAp.x) < B.r) {
+			if (yAp.y < 0) return c2RaytoCircle(A, Ca, out);
+			else return c2RaytoCircle(A, Cb, out);
 		}
 
-		// hit top-half circle
-		else if (y > yBb.y)
-		{
-			c2Circle C;
-			C.p = B.b;
-			C.r = B.r;
-			return c2RaytoCircle(A, C, out);
-		}
-
-		// hit the middle of capsule
+		// hit the capsule prism
 		else
 		{
-			out->n = c > 0 ? M.x : c2Skew(M.y);
-			out->t = t * A.t;
-			return 1;
+			float c = yAp.x > 0 ? B.r : -B.r;
+			float d = (yAe.x - yAp.x);
+			float t = (c - yAp.x) / d;
+			float y = yAp.y + (yAe.y - yAp.y) * t;
+			if (y <= 0) return c2RaytoCircle(A, Ca, out);
+			if (y >= yBb.y) return c2RaytoCircle(A, Cb, out);
+			else {
+				out->n = c > 0 ? M.x : c2Skew(M.y);
+				out->t = t * A.t;
+				return 1;
+			}
 		}
 	}
 

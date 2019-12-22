@@ -91,10 +91,27 @@ c2Capsule GetCapsule()
 	return cap;
 }
 
+int mouse_pressed;
+float mouse_x;
+float mouse_y;
+
+void MouseButtonCB(GLFWwindow* window, int button, int action, int mods)
+{
+	if (action == GLFW_PRESS) {
+		if (button == GLFW_MOUSE_BUTTON_1) {
+			mouse_pressed = 1;
+		}
+	} else if (action == GLFW_RELEASE) {
+		if (button == GLFW_MOUSE_BUTTON_1) {
+			mouse_pressed = 0;
+		}
+	}
+}
+
 void MouseCB(GLFWwindow* window, double x, double y)
 {
-	float mouse_x = (float)x - screen_w / 2;
-	float mouse_y = -((float)y - screen_h / 2);
+	mouse_x = (float)x - screen_w / 2;
+	mouse_y = -((float)y - screen_h / 2);
 	mp = c2V(mouse_x, mouse_y);
 
 	user_circle.p = mp;
@@ -582,8 +599,15 @@ void TestRay1()
 	cap.b = c2V(50.0f, -40.0f);
 	cap.r = 20.0f;
 
+	static float x = 75.0f;
+	static float y = 100.0f;
+	if (mouse_pressed) {
+		x = mouse_x;
+		y = mouse_y;
+	}
+
 	c2Ray ray;
-	ray.p = c2V(75.0f, 100.0f);
+	ray.p = c2V(x, y);
 	ray.d = c2Norm(c2Sub(mp, ray.p));
 	ray.t = c2Dot(mp, ray.d) - c2Dot(ray.p, ray.d);
 
@@ -1399,6 +1423,41 @@ void infinite_loop_tyler_glaiel_analytic_toi_and_gjk()
 }
 #pragma optimize("", on)
 
+void PDeveloper_c2PolytoPoly_bug()
+{
+	c2v p0[] = {
+		{ -568.0f, 928.0f },
+		{ -568.0f, 1056.0f },
+		{ -848.0f, 1056.0f },
+		{ -848.0f, 928.0f }
+	};
+
+	c2v p1[] = {
+		{ -688.0f, 736.0f },
+		{ -688.0f, 1184.0f },
+		{ -912.0f, 1184.0f },
+		{ -912.0f, 736.0f }
+	};
+
+	c2Poly poly0;
+	c2Poly poly1;
+
+	poly0.count = poly1.count = 4;
+	for (int i = 0; i < 4; ++i) {
+		poly0.verts[i] = p0[i];
+		poly1.verts[i] = p1[i];
+	}
+
+	c2MakePoly(&poly0);
+	c2MakePoly(&poly1);
+
+	DrawPoly(poly0.verts, 4);
+	DrawPoly(poly1.verts, 4);
+
+	if (c2PolytoPoly(&poly0, nullptr, &poly1, nullptr)) printf("POLYGONS ARE COLLIDING\n");
+	else printf("POLYGONS ARE ***NOT*** COLLIDING\n");
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1424,6 +1483,7 @@ int main()
 
 	glfwSetScrollCallback(window, ScrollCB);
 	glfwSetCursorPosCallback(window, MouseCB);
+	glfwSetMouseButtonCallback(window, MouseButtonCB);
 	glfwSetKeyCallback(window, KeyCB);
 	glfwSetFramebufferSizeCallback(window, Reshape);
 
@@ -1490,8 +1550,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 22;
-		if (arrow_pressed) code = (code + 1) % 23;
+		static int code = 23;
+		if (arrow_pressed) code = (code + 1) % 24;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1517,6 +1577,7 @@ int main()
 		case 20: prime31_cap_to_aabb_bug(); break;
 		case 21: prime31_cap_to_aabb_bug2(); break;
 		case 22: martincohen_ray_bug(); break;
+		case 23: PDeveloper_c2PolytoPoly_bug(); break;
 		}
 
 		// push a draw call to tinygl
