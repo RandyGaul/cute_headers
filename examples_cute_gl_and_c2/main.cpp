@@ -408,7 +408,7 @@ void TestBoolean1()
 	c2Capsule cap = GetCapsule();
 
 	c2v a, b;
-	c2GJK(&bb, C2_TYPE_AABB, 0, &cap, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0, 0);
+	c2GJK(&bb, C2_TYPE_AABB, 0, &cap, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0);
 	DrawCircle(a, 2.0f);
 	DrawCircle(b, 2.0f);
 	gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -459,7 +459,7 @@ void TestBoolean2()
 	case 0:
 	{
 		c2v a, b;
-		c2GJK(&user_circle, C2_TYPE_CIRCLE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
+		c2GJK(&user_circle, C2_TYPE_CIRCLE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -489,7 +489,7 @@ void TestBoolean2()
 		bb.max = c2V(10.0f, 10.0f);
 		bb.min = c2Add(bb.min, mp);
 		bb.max = c2Add(bb.max, mp);
-		c2GJK(&bb, C2_TYPE_AABB, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
+		c2GJK(&bb, C2_TYPE_AABB, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -506,7 +506,7 @@ void TestBoolean2()
 	{
 		c2v a, b;
 		c2Capsule cap = GetCapsule();
-		c2GJK(&cap, C2_TYPE_CAPSULE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
+		c2GJK(&cap, C2_TYPE_CAPSULE, 0, &poly, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -526,7 +526,7 @@ void TestBoolean2()
 		for (int i = 0; i < poly2.count; ++i) poly3.verts[i] = c2Add(mp, poly2.verts[i]);
 		poly3.count = poly2.count;
 
-		c2GJK(&poly, C2_TYPE_POLY, 0, &poly3, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0, 0);
+		c2GJK(&poly, C2_TYPE_POLY, 0, &poly3, C2_TYPE_POLY, 0, &a, &b, 1, 0, 0);
 		DrawCircle(a, 2.0f);
 		DrawCircle(b, 2.0f);
 		gl_line(ctx, a.x, a.y, 0, b.x, b.y, 0);
@@ -1028,7 +1028,7 @@ void lundmark_GJK_div_by_0_bug()
 	B = { { 1133.07214f, 1443.59570f }, { 1127.39636f, 1440.69470f }, 6.0f };
 
 	c2v a, b;
-	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, 0);
 }
 
 void gjk_make_sure_cache_helps_and_works()
@@ -1044,8 +1044,8 @@ void gjk_make_sure_cache_helps_and_works()
 	cache.count = 0;
 	int iterations = -1;
 	int cached_iterations = -1;
-	float d0 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a0, &b0, 1, 0, &iterations, &cache);
-	float d1 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, 0, &cached_iterations, &cache);
+	float d0 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a0, &b0, 1, &iterations, &cache);
+	float d1 = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 1, &cached_iterations, &cache);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(A.p, A.r);
@@ -1071,11 +1071,9 @@ void try_out_toi_via_conservative_advancment()
 	c2v vB = c2V(0, 0);
 	Rotate(&vA, &vA, 1);
 
-	c2v n;
-	c2v contact;
 	int iterations = -1;
 	int use_radius = 1;
-	float t = c2TOI(&A, C2_TYPE_CIRCLE, NULL, vA, &B, C2_TYPE_CAPSULE, NULL, vB, use_radius, &n, &contact, &iterations);
+	float t = c2TOI(&A, C2_TYPE_CIRCLE, NULL, vA, &B, C2_TYPE_CAPSULE, NULL, vB, use_radius, &iterations);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(A.p, A.r);
@@ -1109,13 +1107,10 @@ void prime31_bad_toi_normal()
 	aabb.min = c2V(-100, -100);
 	aabb.max = c2V(100, 100);
 
-	c2v normal;
-	c2v contact_point;
 	c2v vel = c2V(5000, 0);
-	float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+	float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
 
 	gl_line_color(ctx, 1, 1, 1);
-	draw_point_normal(contact_point, normal, 10.0f);
 	DrawCircle(circle.p, circle.r);
 	DrawAABB(aabb.min, aabb.max);
 
@@ -1139,13 +1134,10 @@ void prime31_bad_toi_normal_animated()
 	int i = (frame_count / 3) % 75;
 	{
 		circle.p.x += 2 * i;
-		c2v normal;
-		c2v contact_point;
 		c2v vel = c2V(0, -500);
-		float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+		float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
 
 		gl_line_color(ctx, 1, 1, 1);
-		draw_point_normal(contact_point, normal, 10.0f);
 		DrawCircle(circle.p, circle.r);
 		DrawAABB(aabb.min, aabb.max);
 
@@ -1171,13 +1163,10 @@ void prime31_bad_toi_normal_animated_aabb()
 	{
 		aabb_top.min.x += 2 * i;
 		aabb_top.max.x += 2 * i;
-		c2v normal;
-		c2v contact_point;
 		c2v vel = c2V(0, -500);
-		float toi = c2TOI(&aabb_top, C2_TYPE_AABB, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, &normal, &contact_point, NULL);
+		float toi = c2TOI(&aabb_top, C2_TYPE_AABB, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
 
 		gl_line_color(ctx, 1, 1, 1);
-		draw_point_normal(contact_point, normal, 10.0f);
 		DrawAABB(aabb_top.min, aabb_top.max);
 		DrawAABB(aabb.min, aabb.max);
 
@@ -1406,7 +1395,7 @@ void infinite_loop_tyler_glaiel_analytic_toi_and_gjk()
 	while (1) {
 		uint64_t t0 = glfwGetTimerValue();
 		for (int i = 0; i < N; ++i) {
-			c2TOI(quads + i, C2_TYPE_POLY, NULL, c2V(0, 0), &moving_quad, C2_TYPE_POLY, NULL, c2V(0, -100), 0, NULL, NULL, NULL);
+			c2TOI(quads + i, C2_TYPE_POLY, NULL, c2V(0, 0), &moving_quad, C2_TYPE_POLY, NULL, c2V(0, -100), 0, NULL);
 		}
 		uint64_t t1 = glfwGetTimerValue();
 		float dt0 = (float)((double)(t1 - t0) * inv_freq);
