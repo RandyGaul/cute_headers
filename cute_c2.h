@@ -1742,13 +1742,8 @@ static int c2Clip(c2v* seg, c2h h)
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer
 #endif
 
-// clip a segment to the "side planes" of another segment.
-// side planes are planes orthogonal to a segment and attached to the
-// endpoints of the segment
-static int c2SidePlanes(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
+static int c2SidePlanes(c2v* seg, c2v ra, c2v rb, c2h* h)
 {
-	c2v ra = c2Mulxv(x, p->verts[e]);
-	c2v rb = c2Mulxv(x, p->verts[e + 1 == p->count ? 0 : e + 1]);
 	c2v in = c2Norm(c2Sub(rb, ra));
 	c2h left = { c2Neg(in), c2Dot(c2Neg(in), ra) };
 	c2h right = { in, c2Dot(in, rb) };
@@ -1759,6 +1754,16 @@ static int c2SidePlanes(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
 		h->d = c2Dot(c2CCW90(in), ra);
 	}
 	return 1;
+}
+
+// clip a segment to the "side planes" of another segment.
+// side planes are planes orthogonal to a segment and attached to the
+// endpoints of the segment
+static int c2SidePlanesFromPoly(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
+{
+	c2v ra = c2Mulxv(x, p->verts[e]);
+	c2v rb = c2Mulxv(x, p->verts[e + 1 == p->count ? 0 : e + 1]);
+	return c2SidePlanes(seg, ra, rb, h);
 }
 
 static void c2KeepDeep(c2v* seg, c2h h, c2Manifold* m)
@@ -1809,6 +1814,23 @@ static void c2AntinormalFace(c2Capsule cap, const c2Poly* p, c2x x, int* face_ou
 	*n_out = n;
 }
 
+static void c2Incident(c2v* incident, const c2Poly* ip, c2x ix, c2v rn_in_incident_space)
+{
+	int index = ~0;
+	float min_dot = FLT_MAX;
+	for (int i = 0; i < ip->count; ++i)
+	{
+		float dot = c2Dot(rn_in_incident_space, ip->norms[i]);
+		if (dot < min_dot)
+		{
+			min_dot = dot;
+			index = i;
+		}
+	}
+	incident[0] = c2Mulxv(ix, ip->verts[index]);
+	incident[1] = c2Mulxv(ix, ip->verts[index + 1 == ip->count ? 0 : index + 1]);
+}
+
 void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2Manifold* m)
 {
 	m->count = 0;
@@ -1816,35 +1838,107 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx_ptr, &a, &b, 0, 0, 0, 0);
 
 	// deep, treat as segment to poly collision
-	if (d == 0)
+	if (d < 1.0e-5f)
 	{
 		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity();
-		c2v n;
-		int index;
-		c2AntinormalFace(A, B, bx, &index, &n);
-		c2v seg[2] = { A.a, A.b };
-		c2h h;
-		if (!c2SidePlanes(seg, bx, B, index, &h)) return;
-		c2KeepDeep(seg, h, m);
-		for (int i = 0; i < m->count; ++i)
+		c2Capsule A_in_B;
+		A_in_B.a = c2MulxvT(bx, A.a);
+		A_in_B.b = c2MulxvT(bx, A.b);
+		c2v ab = c2Norm(c2Sub(A_in_B.a, A_in_B.b));
+
+		// test capsule axes
+		c2h ab_h0;
+		ab_h0.n = c2CCW90(ab);
+		ab_h0.d = c2Dot(A_in_B.a, ab_h0.n);
+		int v0 = c2Support(B->verts, B->count, c2Neg(ab_h0.n));
+		float s0 = c2Dist(ab_h0, B->verts[v0]);
+
+		c2h ab_h1;
+		ab_h1.n = c2Skew(ab);
+		ab_h1.d = c2Dot(A_in_B.a, ab_h1.n);
+		int v1 = c2Support(B->verts, B->count, c2Neg(ab_h1.n));
+		float s1 = c2Dist(ab_h1, B->verts[v1]);
+
+		// test poly axes
+		int index = ~0;
+		float sep = -FLT_MAX;
+		int code = 0;
+		for (int i = 0; i < B->count; ++i)
 		{
-			m->depths[i] += c2Sign(m->depths) * A.r;
-			m->contact_points[i] = c2Add(m->contact_points[i], c2Mulvs(n, A.r));
+			c2h h = c2PlaneAt(B, i);
+			float da = c2Dot(A_in_B.a, c2Neg(h.n));
+			float db = c2Dot(A_in_B.b, c2Neg(h.n));
+			float d;
+			if (da > db) d = c2Dist(h, A_in_B.a);
+			else d = c2Dist(h, A_in_B.b);
+			if (d > sep)
+			{
+				sep = d;
+				index = i;
+			}
 		}
-		m->n = c2Neg(m->n);
+
+		// track axis of minimum separation
+		if (s0 > sep) {
+			sep = s0;
+			index = v0;
+			code = 1;
+		}
+
+		if (s1 > sep) {
+			sep = s1;
+			index = v1;
+			code = 2;
+		}
+
+		switch (code)
+		{
+		case 0: // poly face
+		{
+			c2v seg[2] = { A.a, A.b };
+			c2h h;
+			if (!c2SidePlanesFromPoly(seg, bx, B, index, &h)) return;
+			c2KeepDeep(seg, h, m);
+			m->n = c2Neg(m->n);
+		}	break;
+
+		case 1: // side 0 of capsule segment
+		{
+			c2v incident[2];
+			c2Incident(incident, B, bx, ab_h0.n);
+			c2h h;
+			if (!c2SidePlanes(incident, A_in_B.b, A_in_B.a, &h)) return;
+			c2KeepDeep(incident, h, m);
+		}	break;
+
+		case 2: // side 1 of capsule segment
+		{
+			c2v incident[2];
+			c2Incident(incident, B, bx, ab_h1.n);
+			c2h h;
+			if (!c2SidePlanes(incident, A_in_B.a, A_in_B.b, &h)) return;
+			c2KeepDeep(incident, h, m);
+		}	break;
+
+		default:
+			// should never happen.
+			return;
+		}
+
+		for (int i = 0; i < m->count; ++i) m->depths[i] += c2Sign(m->depths) * A.r;
 	}
 
 	// shallow, use GJK results a and b to define manifold
 	else if (d < A.r)
 	{
 		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity();
-		c2v ab = c2Sub(b, a);
+		c2v ab = c2Sub(A.b, A.a);
 		int face_case = 0;
 
 		for (int i = 0; i < B->count; ++i)
 		{
-			c2v n = c2Mulrv(bx.r, B->norms[i]);
-			if (c2Parallel(c2Neg(ab), n, 5.0e-3f))
+			c2v n = c2Mulrv(bx.r, c2CCW90(B->norms[i]));
+			if (c2Parallel(ab, n, 5.0e-3f))
 			{
 				face_case = 1;
 				break;
@@ -1856,7 +1950,7 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 		{
 			one_contact:
 			m->count = 1;
-			m->n = c2Norm(ab);
+			m->n = c2Norm(c2Sub(b, a));
 			m->contact_points[0] = c2Add(a, c2Mulvs(m->n, A.r));
 			m->depths[0] = A.r - d;
 		}
@@ -1867,10 +1961,11 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 			c2v n;
 			int index;
 			c2AntinormalFace(A, B, bx, &index, &n);
-			c2v seg[2] = { c2Add(A.a, c2Mulvs(n, A.r)), c2Add(A.b, c2Mulvs(n, A.r)) };
+			c2v seg[2] = { A.a, A.b };
 			c2h h;
-			if (!c2SidePlanes(seg, bx, B, index, &h)) goto one_contact;
+			if (!c2SidePlanesFromPoly(seg, bx, B, index, &h)) goto one_contact;
 			c2KeepDeep(seg, h, m);
+			for (int i = 0; i < m->count; ++i) m->depths[i] += c2Sign(m->depths) * A.r;
 			m->n = c2Neg(m->n);
 		}
 	}
@@ -1902,24 +1997,6 @@ static float c2CheckFaces(const c2Poly* A, c2x ax, const c2Poly* B, c2x bx, int*
 
 	*face_index = index;
 	return sep;
-}
-
-static C2_INLINE void c2Incident(c2v* incident, const c2Poly* ip, c2x ix, const c2Poly* rp, c2x rx, int re)
-{
-	c2v n = c2MulrvT(ix.r, c2Mulrv(rx.r, rp->norms[re]));
-	int index = ~0;
-	float min_dot = FLT_MAX;
-	for (int i = 0; i < ip->count; ++i)
-	{
-		float dot = c2Dot(n, ip->norms[i]);
-		if (dot < min_dot)
-		{
-			min_dot = dot;
-			index = i;
-		}
-	}
-	incident[0] = c2Mulxv(ix, ip->verts[index]);
-	incident[1] = c2Mulxv(ix, ip->verts[index + 1 == ip->count ? 0 : index + 1]);
 }
 
 // Please see Dirk Gregorius's 2013 GDC lecture on the Separating Axis Theorem
@@ -1961,9 +2038,9 @@ void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, c
 	}
 
 	c2v incident[2];
-	c2Incident(incident, ip, ix, rp, rx, re);
+	c2Incident(incident, ip, ix, c2MulrvT(ix.r, c2Mulrv(rx.r, rp->norms[re])));
 	c2h rh;
-	if (!c2SidePlanes(incident, rx, rp, re, &rh)) return;
+	if (!c2SidePlanesFromPoly(incident, rx, rp, re, &rh)) return;
 	c2KeepDeep(incident, rh, m);
 	if (flip) m->n = c2Neg(m->n);
 }

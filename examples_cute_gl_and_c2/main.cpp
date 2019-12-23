@@ -1458,6 +1458,46 @@ void PDeveloper_c2PolytoPoly_bug()
 	else printf("POLYGONS ARE ***NOT*** COLLIDING\n");
 }
 
+void tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case()
+{
+	c2Capsule cap;
+	cap.a = c2V(0, 0);
+	cap.b = c2V(0, 100);
+	cap.r = 20.0f;
+
+	c2Poly poly;
+	poly.verts[0] = c2Mulvs(c2V( 0,  1), 75.0f);
+	poly.verts[1] = c2Mulvs(c2V(-1,  1), 75.0f);
+	poly.verts[2] = c2Mulvs(c2V( 1, -1), 75.0f);
+	poly.count = 3;
+	c2MakePoly(&poly);
+
+	for (int i = 0; i < 3; ++i) {
+		poly.verts[i] = c2Add(poly.verts[i], c2V(mouse_x, mouse_y));
+	}
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawCapsule(cap.a, cap.b, cap.r);
+	DrawPoly(poly.verts, 3);
+
+	c2Manifold m;
+	c2CapsuletoPolyManifold(cap, &poly, NULL, &m);
+
+	if (m.count) {
+		DrawManifold(m);
+
+		gl_line_color(ctx, 0.5f, 0.5f, 0.5f);
+		float max_depth = 0;
+		for (int i = 0; i < m.count; ++i) {
+			if (max_depth < m.depths[i]) max_depth = m.depths[i];
+		}
+		for (int i = 0; i < 3; ++i) {
+			poly.verts[i] = c2Add(poly.verts[i], c2Mulvs(m.n, max_depth));
+		}
+		DrawPoly(poly.verts, 3);
+	}
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1577,7 +1617,7 @@ int main()
 		case 20: prime31_cap_to_aabb_bug(); break;
 		case 21: prime31_cap_to_aabb_bug2(); break;
 		case 22: martincohen_ray_bug(); break;
-		case 23: PDeveloper_c2PolytoPoly_bug(); break;
+		case 23: tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case(); break;
 		}
 
 		// push a draw call to tinygl
