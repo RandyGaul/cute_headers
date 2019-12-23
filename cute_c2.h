@@ -37,10 +37,8 @@
 		COLLISION FUNCTIONS (*** is a shape name from the above list):
 		* c2***to***         - boolean YES/NO hittest
 		* c2***to***Manifold - construct manifold to describe how shapes hit
-		* c2GJK              - runs GJK algorithm to find closest point pair
-				       between two shapes
-		* c2TOI              - computes the time of impact between two shapes, useful for
-				       sweeping shapes, or doing shape casts
+		* c2GJK              - runs GJK algorithm to find closest point pair between two shapes
+		* c2TOI              - computes the time of impact between two shapes, useful for sweeping shapes, or doing shape casts
 		* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
 		* c2Collided         - generic version of c2***to*** funcs
 		* c2Collide          - generic version of c2***to***Manifold funcs
@@ -74,28 +72,6 @@
 		https://github.com/sro5h/tinyc2-tests
 
 
-	DETAILS/ADVICE
-
-		This header does not implement a broad-phase, and instead concerns itself with
-		the narrow-phase. This means this header just checks to see if two individual
-		shapes are touching, and can give information about how they are touching.
-
-		Very common 2D broad-phases are tree and grid approaches. Quad trees are good
-		for static geometry that does not move much if at all. Dynamic AABB trees are
-		good for general purpose use, and can handle moving objects very well. Grids
-		are great and are similar to quad trees.
-
-		If implementing a grid it can be wise to have each collideable grid cell hold
-		an integer. This integer refers to a 2D shape that can be passed into the
-		various functions in this header. The shape can be transformed from "model"
-		space to "world" space using c2x -- a transform struct. In this way a grid
-		can be implemented that holds any kind of convex shape (that this header
-		supports) while conserving memory with shape instancing.
-
-		Please email at my address with any questions or comments at:
-		author's last name followed by 1748 at gmail
-
-
 	FEATURES
 
 		* Circles, capsules, AABBs, rays and convex polygons are supported
@@ -120,6 +96,9 @@
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
 		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
 		1.07 (10/19/2019) Optimizations to c2TOI - breaking change to c2GJK API
+		1.08 (12/22/2019) Remove contact point + normal from c2TOI, removed feather
+		                  radius from c2GJK, fixed various bugs in capsule to poly
+		                  manifold, did a pass on all docs
 
 
 	Contributors
@@ -131,6 +110,52 @@
 		sro5h             1.02 - bug reports for multiple manifold funcs
 		sro5h             1.03 - work involving quality of life fixes for manifolds
 		Wizzard033        1.06 - C2_*** types to C2_TYPE_***, and CUTE_C2_API
+		Tyler Glaeil      1.08 - Lots of bug reports and disussion on capsules + TOIs
+
+
+	DETAILS/ADVICE
+
+		BROAD PHASE
+
+			This header does not implement a broad-phase, and instead concerns itself with
+			the narrow-phase. This means this header just checks to see if two individual
+			shapes are touching, and can give information about how they are touching.
+
+			Very common 2D broad-phases are tree and grid approaches. Quad trees are good
+			for static geometry that does not move much if at all. Dynamic AABB trees are
+			good for general purpose use, and can handle moving objects very well. Grids
+			are great and are similar to quad trees.
+
+			If implementing a grid it can be wise to have each collideable grid cell hold
+			an integer. This integer refers to a 2D shape that can be passed into the
+			various functions in this header. The shape can be transformed from "model"
+			space to "world" space using c2x -- a transform struct. In this way a grid
+			can be implemented that holds any kind of convex shape (that this header
+			supports) while conserving memory with shape instancing.
+
+		NUMERIC ROBUSTNESS
+
+			Many of the functions in cute c2 use `c2GJK`, an implementation of the GJK
+			algorithm. Internally GJK computes signed area values, and these values are
+			very numerically sensitive to large shapes. This means the GJK function will
+			break down if input shapes are too large or too far away from the origin.
+
+			In general it is best to compute collision detection on small shapes very
+			close to the origin. One trick is to keep your collision information numerically
+			very tiny, and simply scale it up when rendering to the appropriate size.
+
+			For reference, if your shapes are all AABBs and contain a width and height
+			of somewhere between 1.0f and 10.0f, everything will be fine. However, once
+			your shapes start approaching a width/height of 100.0f to 1000.0f GJK can
+			start breaking down.
+
+			This is a complicated topic, so feel free to ask the author for advice here.
+
+			Here is an example demonstrating this problem with two large AABBs:
+			https://github.com/RandyGaul/cute_headers/issues/160
+
+		Please email at my address with any questions or comments at:
+		author's last name followed by 1748 at gmail
 */
 
 #if !defined(CUTE_C2_H)
@@ -234,13 +259,7 @@ typedef struct c2Raycast
 
 // contains all information necessary to resolve a collision, or in other words
 // this is the information needed to separate shapes that are colliding. Doing
-// the resolution step is *not* included in cute_c2. cute_c2 does not include
-// "feature information" that describes which topological features collided.
-// However, modifying the exist ***Manifold funcs can be done to output any
-// needed feature information. Feature info is sometimes needed for certain kinds
-// of simulations that cache information over multiple game-ticks, of which are
-// associated to the collision of specific features. An example implementation
-// is in the qu3e 3D physics engine library: https://github.com/RandyGaul/qu3e
+// the resolution step is *not* included in cute_c2.
 typedef struct c2Manifold
 {
 	int count;
@@ -260,8 +279,7 @@ typedef struct c2Manifold
 #endif
 
 // boolean collision detection
-// these versions are faster than the manifold versions, but only give a YES/NO
-// result
+// these versions are faster than the manifold versions, but only give a YES/NO result
 CUTE_C2_API int c2CircletoCircle(c2Circle A, c2Circle B);
 CUTE_C2_API int c2CircletoAABB(c2Circle A, c2AABB B);
 CUTE_C2_API int c2CircletoCapsule(c2Circle A, c2Capsule B);
@@ -283,7 +301,7 @@ CUTE_C2_API int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
 CUTE_C2_API int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
 
 // manifold generation
-// these functions are slower than the boolean versions, but will compute one
+// these functions are (generally) slower than the boolean versions, but will compute one
 // or two points that represent the plane of contact. This information is
 // is usually needed to resolve and prevent shapes from colliding. If no coll
 // ision occured the count member of the manifold struct is set to 0.
@@ -318,6 +336,8 @@ typedef struct c2GJKCache
 	float div;
 } c2GJKCache;
 
+// This is an advanced function, intended to be used by people who know what they're doing.
+//
 // Runs the GJK algorithm to find closest points, returns distance between closest points.
 // outA and outB can be NULL, in this case only distance is returned. ax_ptr and bx_ptr
 // can be NULL, and represent local to world transformations for shapes A and B respectively.
@@ -325,19 +345,42 @@ typedef struct c2GJKCache
 // treated as points and capsules are treated as line segments i.e. rays). The cache parameter
 // should be NULL, as it is only for advanced usage (unless you know what you're doing, then
 // go ahead and use it). iterations is an optional parameter.
+//
+// IMPORTANT NOTE:
+// The GJK function is sensitive to large shapes, since it internally will compute signed area
+// values. `c2GJK` is called throughout cute c2 in many ways, so try to make sure all of your
+// collision shapes are not gigantic. For example, try to keep the volume of all your shapes
+// less than 100.0f. If you need large shapes, you should use tiny collision geometry for all
+// cute c2 function, and simply render the geometry larger on-screen by scaling it up.
 CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
 
+// This is an advanced function, intended to be used by people who know what they're doing.
+//
 // Computes the time of impact from shape A and shape B. The velocity of each shape is provided
 // by vA and vB respectively. The shapes are *not* allowed to rotate over time. The velocity is
 // assumed to represent the change in motion from time 0 to time 1, and so the return value will
 // be a number from 0 to 1. To move each shape to the colliding configuration, multiply vA and vB
 // each by the return value. ax_ptr and bx_ptr are optional parameters to transforms for each shape,
 // and are typically used for polygon shapes to transform from model to world space. Set these to
-// NULL to represent identity transforms. The out_normal for non-colliding configurations (or in
-// other words, when the return value is 1) is just the direction pointing along the closest points
-// from shape A to shape B. out_normal can be NULL. iterations is an optional parameter. use_radius
+// NULL to represent identity transforms. iterations is an optional parameter. use_radius
 // will apply radii for capsules and circles (if set to false, spheres are treated as points and
 // capsules are treated as line segments i.e. rays).
+//
+// IMPORTANT NOTE:
+// The c2TOI function can be used to implement a "swept character controller", but it can be
+// difficult to do so. Say we compute a time of impact with `c2TOI` and move the shapes to the
+// time of impact, and adjust the velocity by zeroing out the velocity along the surface normal.
+// If we then call `c2TOI` again, it will fail since the shapes will be considered to start in
+// a colliding configuration. There are many styles of tricks to get around this problem, and
+// all of them involve giving the next call to `c2TOI` some breathing room. It is recommended
+// to use some variation of the following algorithm:
+//
+// 1. Call c2TOI.
+// 2. Move the shapes to the TOI.
+// 3. Slightly inflate the size of one, or both, of the shapes so they will be intersecting.
+//    The purpose is to make the shapes numerically intersecting, but not visually intersecting.
+// 4. Compute the collision manifold between the inflated shapes (for example, use c2PolytoPolyManifold).
+// 5. Gently push the shapes apart. This will give the next call to c2TOI some breathing room.
 CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
