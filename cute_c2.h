@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.07
+	cute_c2.h - v1.08
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
