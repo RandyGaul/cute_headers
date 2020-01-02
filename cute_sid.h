@@ -38,7 +38,7 @@ int sid_preprocess(const char* path, const char* out_path);
 // The underlying hash function can be swapped out as-needed by modifying
 // this source file. Just replace all instances of sid_FNV1a with your own
 // hash function, along with a matching signature.
-#define SID(str, len) sid_FNV1a(str, str + strlen(str))
+#define SID(str) sid_FNV1a(str, strlen(str))
 uint64_t sid_FNV1a(const void* buf, int len);
 
 #define CUTE_SID_H
