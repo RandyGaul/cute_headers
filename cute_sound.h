@@ -1998,9 +1998,10 @@ int cs_insert_sound(cs_context_t* ctx, cs_playing_sound_t* sound)
 	ctx->playing = sound;
 	sound->loaded_sound->playing_count += 1;
 	sound->active = 1;
-	cs_unlock(ctx);
 
 	s_on_make_playing(ctx, sound);
+
+	cs_unlock(ctx);
 
 	return 1;
 }
@@ -2044,9 +2045,9 @@ cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def)
 	ctx->playing = playing;
 	playing->loaded_sound->playing_count += 1;
 
-	cs_unlock(ctx);
-
 	s_on_make_playing(ctx, playing);
+
+	cs_unlock(ctx);
 
 	return playing;
 }
