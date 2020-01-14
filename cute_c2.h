@@ -3,127 +3,159 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.05
+	cute_c2.h - v1.08
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
-	SUMMARY:
-	cute_c2 is a single-file header that implements 2D collision detection routines
-	that test for overlap, and optionally can find the collision manifold. The
-	manifold contains all necessary information to prevent shapes from inter-
-	penetrating, which is useful for character controllers, general physics
-	simulation, and user-interface programming.
 
-	This header implements a group of "immediate mode" functions that should be
-	very easily adapted into pre-existing projects.
+	SUMMARY
 
-	Revision history:
+		cute_c2 is a single-file header that implements 2D collision detection routines
+		that test for overlap, and optionally can find the collision manifold. The
+		manifold contains all necessary information to prevent shapes from inter-
+		penetrating, which is useful for character controllers, general physics
+		simulation, and user-interface programming.
+
+		This header implements a group of "immediate mode" functions that should be
+		very easily adapted into pre-existing projects.
+
+
+	THE IMPORTANT PARTS
+
+		Most of the math types in this header are for internal use. Users care about
+		the shape types and the collision functions.
+
+		SHAPE TYPES:
+		* c2Circle
+		* c2Capsule
+		* c2AABB
+		* c2Ray
+		* c2Poly
+
+		COLLISION FUNCTIONS (*** is a shape name from the above list):
+		* c2***to***         - boolean YES/NO hittest
+		* c2***to***Manifold - construct manifold to describe how shapes hit
+		* c2GJK              - runs GJK algorithm to find closest point pair between two shapes
+		* c2TOI              - computes the time of impact between two shapes, useful for sweeping shapes, or doing shape casts
+		* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
+		* c2Collided         - generic version of c2***to*** funcs
+		* c2Collide          - generic version of c2***to***Manifold funcs
+		* c2CastRay          - generic version of c2Rayto*** funcs
+
+		The rest of the header is more or less for internal use. Here is an example of
+		making some shapes and testing for collision:
+
+			c2Circle c;
+			c.p = position;
+			c.r = radius;
+
+			c2Capsule cap;
+			cap.a = first_endpoint;
+			cap.b = second_endpoint;
+			cap.r = radius;
+
+			int hit = c2CircletoCapsule(c, cap);
+			if (hit)
+			{
+				handle collision here...
+			}
+	
+		For more code examples and tests please see:
+		https://github.com/RandyGaul/cute_header/tree/master/examples_cute_gl_and_c2
+
+		Here is a past discussion thread on this header:
+		https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
+
+		Here is a very nice repo containing various tests and examples using SFML for rendering:
+		https://github.com/sro5h/tinyc2-tests
+
+
+	FEATURES
+
+		* Circles, capsules, AABBs, rays and convex polygons are supported
+		* Fast boolean only result functions (hit yes/no)
+		* Slghtly slower manifold generation for collision normals + depths +points
+		* GJK implementation (finds closest points for disjoint pairs of shapes)
+		* Shape casts/sweeps with c2TOI function (time of impact)
+		* Robust 2D convex hull generator
+		* Lots of correctly implemented and tested 2D math routines
+		* Implemented in portable C, and is readily portable to other languages
+		* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
+		* Extensive examples at: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_gl_and_c2
+
+
+	Revision History
+	
 		1.0  (02/13/2017) initial release
 		1.01 (02/13/2017) const crusade, minor optimizations, capsule degen
 		1.02 (03/21/2017) compile fixes for c on more compilers
 		1.03 (09/15/2017) various bugfixes and quality of life changes to manifolds
 		1.04 (03/25/2018) fixed manifold bug in c2CircletoAABBManifold
 		1.05 (11/01/2018) added c2TOI (time of impact) for shape cast/sweep test
-*/
+		1.06 (08/23/2019) C2_*** types to C2_TYPE_***, and CUTE_C2_API
+		1.07 (10/19/2019) Optimizations to c2TOI - breaking change to c2GJK API
+		1.08 (12/22/2019) Remove contact point + normal from c2TOI, removed feather
+		                  radius from c2GJK, fixed various bugs in capsule to poly
+		                  manifold, did a pass on all docs
 
-/*
-	Contributors:
+
+	Contributors
+
 		Plastburk         1.01 - const pointers pull request
 		mmozeiko          1.02 - 3 compile bugfixes
 		felipefs          1.02 - 3 compile bugfixes
 		seemk             1.02 - fix branching bug in c2Collide
 		sro5h             1.02 - bug reports for multiple manifold funcs
 		sro5h             1.03 - work involving quality of life fixes for manifolds
-*/
+		Wizzard033        1.06 - C2_*** types to C2_TYPE_***, and CUTE_C2_API
+		Tyler Glaeil      1.08 - Lots of bug reports and disussion on capsules + TOIs
 
-/*
-	THE IMPORTANT PARTS:
-	Most of the math types in this header are for internal use. Users care about
-	the shape types and the collision functions.
-	
-	SHAPE TYPES:
-	* c2Circle
-	* c2Capsule
-	* c2AABB
-	* c2Ray
-	* c2Poly
-	
-	COLLISION FUNCTIONS (*** is a shape name from the above list):
-	* c2***to***         - boolean YES/NO hittest
-	* c2***to***Manifold - construct manifold to describe how shapes hit
-	* c2GJK              - runs GJK algorithm to find closest point pair
-	                       between two shapes
-	* c2TOI              - computes the time of impact between two shapes, useful for
-	                       sweeping shapes, or doing shape casts
-	* c2MakePoly         - Runs convex hull algorithm and computes normals on input point-set
-	* c2Collided         - generic version of c2***to*** funcs
-	* c2Collide          - generic version of c2***to***Manifold funcs
-	* c2CastRay          - generic version of c2Rayto*** funcs
-	
-	The rest of the header is more or less for internal use. Here is an example of
-	making some shapes and testing for collision:
-	
-		c2Circle c;
-		c.p = position;
-		c.r = radius;
-	
-		c2Capsule cap;
-		cap.a = first_endpoint;
-		cap.b = second_endpoint;
-		cap.r = radius;
-		
-		int hit = c2CircletoCapsule(c, cap);
-		if (hit)
-		{
-			handle collision here...
-		}
-	
-	For more code examples and tests please see:
-	https://github.com/RandyGaul/cute_header/tree/master/examples_cute_gl_and_c2
-	
-	Here is a past discussion thread on this header:
-	https://www.reddit.com/r/gamedev/comments/5tqyey/tinyc2_2d_collision_detection_library_in_c/
 
-	Here is a very nice repo containing various tests and examples using SFML for rendering:
-	https://github.com/sro5h/tinyc2-tests
-*/
+	DETAILS/ADVICE
 
-/*
-	DETAILS/ADVICE:
-	This header does not implement a broad-phase, and instead concerns itself with
-	the narrow-phase. This means this header just checks to see if two individual
-	shapes are touching, and can give information about how they are touching.
+		BROAD PHASE
 
-	Very common 2D broad-phases are tree and grid approaches. Quad trees are good
-	for static geometry that does not move much if at all. Dynamic AABB trees are
-	good for general purpose use, and can handle moving objects very well. Grids
-	are great and are similar to quad trees.
+			This header does not implement a broad-phase, and instead concerns itself with
+			the narrow-phase. This means this header just checks to see if two individual
+			shapes are touching, and can give information about how they are touching.
 
-	If implementing a grid it can be wise to have each collideable grid cell hold
-	an integer. This integer refers to a 2D shape that can be passed into the
-	various functions in this header. The shape can be transformed from "model"
-	space to "world" space using c2x -- a transform struct. In this way a grid
-	can be implemented that holds any kind of convex shape (that this header
-	supports) while conserving memory with shape instancing.
+			Very common 2D broad-phases are tree and grid approaches. Quad trees are good
+			for static geometry that does not move much if at all. Dynamic AABB trees are
+			good for general purpose use, and can handle moving objects very well. Grids
+			are great and are similar to quad trees.
 
-	Please email at my address with any questions or comments at:
-	author's last name followed by 1748 at gmail
-*/
+			If implementing a grid it can be wise to have each collideable grid cell hold
+			an integer. This integer refers to a 2D shape that can be passed into the
+			various functions in this header. The shape can be transformed from "model"
+			space to "world" space using c2x -- a transform struct. In this way a grid
+			can be implemented that holds any kind of convex shape (that this header
+			supports) while conserving memory with shape instancing.
 
-/*
-	Features:
-	* Circles, capsules, AABBs, rays and convex polygons are supported
-	* Fast boolean only result functions (hit yes/no)
-	* Slghtly slower manifold generation for collision normals + depths +points
-	* GJK implementation (finds closest points for disjoint pairs of shapes)
-	* Shape casts/sweeps with c2TOI function (time of impact)
-	* Robust 2D convex hull generator
-	* Lots of correctly implemented and tested 2D math routines
-	* Implemented in portable C, and is readily portable to other languages
-	* Generic c2Collide, c2Collided and c2CastRay function (can pass in any shape type)
-	* Extensive examples at: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_gl_and_c2
+		NUMERIC ROBUSTNESS
+
+			Many of the functions in cute c2 use `c2GJK`, an implementation of the GJK
+			algorithm. Internally GJK computes signed area values, and these values are
+			very numerically sensitive to large shapes. This means the GJK function will
+			break down if input shapes are too large or too far away from the origin.
+
+			In general it is best to compute collision detection on small shapes very
+			close to the origin. One trick is to keep your collision information numerically
+			very tiny, and simply scale it up when rendering to the appropriate size.
+
+			For reference, if your shapes are all AABBs and contain a width and height
+			of somewhere between 1.0f and 10.0f, everything will be fine. However, once
+			your shapes start approaching a width/height of 100.0f to 1000.0f GJK can
+			start breaking down.
+
+			This is a complicated topic, so feel free to ask the author for advice here.
+
+			Here is an example demonstrating this problem with two large AABBs:
+			https://github.com/RandyGaul/cute_headers/issues/160
+
+		Please email at my address with any questions or comments at:
+		author's last name followed by 1748 at gmail
 */
 
 #if !defined(CUTE_C2_H)
@@ -137,21 +169,21 @@
 #define C2_MAX_POLYGON_VERTS 8
 
 // 2d vector
-typedef struct
+typedef struct c2v
 {
 	float x;
 	float y;
 } c2v;
 
 // 2d rotation composed of cos/sin pair
-typedef struct
+typedef struct c2r
 {
 	float c;
 	float s;
 } c2r;
 
 // 2d rotation matrix
-typedef struct
+typedef struct c2m
 {
 	c2v x;
 	c2v y;
@@ -164,40 +196,40 @@ typedef struct
 // a c2x pointer (like c2PolytoPoly), these pointers can be NULL, which represents
 // an identity transformation and assumes the verts inside of c2Poly are already
 // in world space.
-typedef struct
+typedef struct c2x
 {
 	c2v p;
 	c2r r;
 } c2x;
 
 // 2d halfspace (aka plane, aka line)
-typedef struct
+typedef struct c2h
 {
 	c2v n;   // normal, normalized
 	float d; // distance to origin from plane, or ax + by = d
 } c2h;
 
-typedef struct
+typedef struct c2Circle
 {
 	c2v p;
 	float r;
 } c2Circle;
 
-typedef struct
+typedef struct c2AABB
 {
 	c2v min;
 	c2v max;
 } c2AABB;
 
 // a capsule is defined as a line segment (from a to b) and radius r
-typedef struct
+typedef struct c2Capsule
 {
 	c2v a;
 	c2v b;
 	float r;
 } c2Capsule;
 
-typedef struct
+typedef struct c2Poly
 {
 	int count;
 	c2v verts[C2_MAX_POLYGON_VERTS];
@@ -209,14 +241,14 @@ typedef struct
 // ray direction (c2Ray::d). It is highly recommended to normalize the
 // ray direction and use t to specify a distance. Please see this link
 // for an in-depth explanation: https://github.com/RandyGaul/cute_headers/issues/30
-typedef struct
+typedef struct c2Ray
 {
 	c2v p;   // position
 	c2v d;   // direction (normalized)
 	float t; // distance along d from position p to find endpoint of ray
 } c2Ray;
 
-typedef struct
+typedef struct c2Raycast
 {
 	float t; // time of impact
 	c2v n;   // normal of surface at impact (unit length)
@@ -227,14 +259,8 @@ typedef struct
 
 // contains all information necessary to resolve a collision, or in other words
 // this is the information needed to separate shapes that are colliding. Doing
-// the resolution step is *not* included in cute_c2. cute_c2 does not include
-// "feature information" that describes which topological features collided.
-// However, modifying the exist ***Manifold funcs can be done to output any
-// needed feature information. Feature info is sometimes needed for certain kinds
-// of simulations that cache information over multiple game-ticks, of which are
-// associated to the collision of specific features. An example implementation
-// is in the qu3e 3D physics engine library: https://github.com/RandyGaul/qu3e
-typedef struct
+// the resolution step is *not* included in cute_c2.
+typedef struct c2Manifold
 {
 	int count;
 	float depths[2];
@@ -245,57 +271,63 @@ typedef struct
 	c2v n;
 } c2Manifold;
 
+// This define allows exporting/importing of the header to a dynamic library.
+// Here's an example.
+// #define CUTE_C2_API extern "C" __declspec(dllexport)
+#if !defined(CUTE_C2_API)
+#	define CUTE_C2_API
+#endif
+
 // boolean collision detection
-// these versions are faster than the manifold versions, but only give a YES/NO
-// result
-int c2CircletoCircle(c2Circle A, c2Circle B);
-int c2CircletoAABB(c2Circle A, c2AABB B);
-int c2CircletoCapsule(c2Circle A, c2Capsule B);
-int c2AABBtoAABB(c2AABB A, c2AABB B);
-int c2AABBtoCapsule(c2AABB A, c2Capsule B);
-int c2CapsuletoCapsule(c2Capsule A, c2Capsule B);
-int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx);
-int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx);
-int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx);
-int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx);
+// these versions are faster than the manifold versions, but only give a YES/NO result
+CUTE_C2_API int c2CircletoCircle(c2Circle A, c2Circle B);
+CUTE_C2_API int c2CircletoAABB(c2Circle A, c2AABB B);
+CUTE_C2_API int c2CircletoCapsule(c2Circle A, c2Capsule B);
+CUTE_C2_API int c2AABBtoAABB(c2AABB A, c2AABB B);
+CUTE_C2_API int c2AABBtoCapsule(c2AABB A, c2Capsule B);
+CUTE_C2_API int c2CapsuletoCapsule(c2Capsule A, c2Capsule B);
+CUTE_C2_API int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx);
+CUTE_C2_API int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx);
 
 // ray operations
 // output is placed into the c2Raycast struct, which represents the hit location
 // of the ray. the out param contains no meaningful information if these funcs
 // return 0
-int c2RaytoCircle(c2Ray A, c2Circle B, c2Raycast* out);
-int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out);
-int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
-int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
+CUTE_C2_API int c2RaytoCircle(c2Ray A, c2Circle B, c2Raycast* out);
+CUTE_C2_API int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out);
+CUTE_C2_API int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
+CUTE_C2_API int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
 
 // manifold generation
-// these functions are slower than the boolean versions, but will compute one
+// these functions are (generally) slower than the boolean versions, but will compute one
 // or two points that represent the plane of contact. This information is
 // is usually needed to resolve and prevent shapes from colliding. If no coll
 // ision occured the count member of the manifold struct is set to 0.
-void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m);
-void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m);
-void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m);
-void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m);
-void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m);
-void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m);
-void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2AABBtoPolyManifold(c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m);
-void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m);
+CUTE_C2_API void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m);
+CUTE_C2_API void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m);
+CUTE_C2_API void c2AABBtoCapsuleManifold(c2AABB A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m);
+CUTE_C2_API void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2AABBtoPolyManifold(c2AABB A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx, c2Manifold* m);
+CUTE_C2_API void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx, c2Manifold* m);
 
 typedef enum
 {
-	C2_NONE,
-	C2_CIRCLE,
-	C2_AABB,
-	C2_CAPSULE,
-	C2_POLY
+	C2_TYPE_NONE,
+	C2_TYPE_CIRCLE,
+	C2_TYPE_AABB,
+	C2_TYPE_CAPSULE,
+	C2_TYPE_POLY
 } C2_TYPE;
 
 // This struct is only for advanced usage of the c2GJK function. See comments inside of the
 // c2GJK function for more details.
-typedef struct
+typedef struct c2GJKCache
 {
 	float metric;
 	int count;
@@ -304,6 +336,8 @@ typedef struct
 	float div;
 } c2GJKCache;
 
+// This is an advanced function, intended to be used by people who know what they're doing.
+//
 // Runs the GJK algorithm to find closest points, returns distance between closest points.
 // outA and outB can be NULL, in this case only distance is returned. ax_ptr and bx_ptr
 // can be NULL, and represent local to world transformations for shapes A and B respectively.
@@ -311,36 +345,59 @@ typedef struct
 // treated as points and capsules are treated as line segments i.e. rays). The cache parameter
 // should be NULL, as it is only for advanced usage (unless you know what you're doing, then
 // go ahead and use it). iterations is an optional parameter.
-float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
+//
+// IMPORTANT NOTE:
+// The GJK function is sensitive to large shapes, since it internally will compute signed area
+// values. `c2GJK` is called throughout cute c2 in many ways, so try to make sure all of your
+// collision shapes are not gigantic. For example, try to keep the volume of all your shapes
+// less than 100.0f. If you need large shapes, you should use tiny collision geometry for all
+// cute c2 function, and simply render the geometry larger on-screen by scaling it up.
+CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
 
+// This is an advanced function, intended to be used by people who know what they're doing.
+//
 // Computes the time of impact from shape A and shape B. The velocity of each shape is provided
 // by vA and vB respectively. The shapes are *not* allowed to rotate over time. The velocity is
 // assumed to represent the change in motion from time 0 to time 1, and so the return value will
 // be a number from 0 to 1. To move each shape to the colliding configuration, multiply vA and vB
 // each by the return value. ax_ptr and bx_ptr are optional parameters to transforms for each shape,
 // and are typically used for polygon shapes to transform from model to world space. Set these to
-// NULL to represent identity transforms. The out_normal for non-colliding configurations (or in
-// other words, when the return value is 1) is just the direction pointing along the closest points
-// from shape A to shape B. out_normal can be NULL. iterations is an optional parameter. use_radius
+// NULL to represent identity transforms. iterations is an optional parameter. use_radius
 // will apply radii for capsules and circles (if set to false, spheres are treated as points and
 // capsules are treated as line segments i.e. rays).
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations);
+//
+// IMPORTANT NOTE:
+// The c2TOI function can be used to implement a "swept character controller", but it can be
+// difficult to do so. Say we compute a time of impact with `c2TOI` and move the shapes to the
+// time of impact, and adjust the velocity by zeroing out the velocity along the surface normal.
+// If we then call `c2TOI` again, it will fail since the shapes will be considered to start in
+// a colliding configuration. There are many styles of tricks to get around this problem, and
+// all of them involve giving the next call to `c2TOI` some breathing room. It is recommended
+// to use some variation of the following algorithm:
+//
+// 1. Call c2TOI.
+// 2. Move the shapes to the TOI.
+// 3. Slightly inflate the size of one, or both, of the shapes so they will be intersecting.
+//    The purpose is to make the shapes numerically intersecting, but not visually intersecting.
+// 4. Compute the collision manifold between the inflated shapes (for example, use c2PolytoPolyManifold).
+// 5. Gently push the shapes apart. This will give the next call to c2TOI some breathing room.
+CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
-int c2Hull(c2v* verts, int count);
-void c2Norms(c2v* verts, c2v* norms, int count);
+CUTE_C2_API int c2Hull(c2v* verts, int count);
+CUTE_C2_API void c2Norms(c2v* verts, c2v* norms, int count);
 
 // runs c2Hull and c2Norms, assumes p->verts and p->count are both set to valid values
-void c2MakePoly(c2Poly* p);
+CUTE_C2_API void c2MakePoly(c2Poly* p);
 
 // Generic collision detection routines, useful for games that want to use some poly-
 // morphism to write more generic-styled code. Internally calls various above functions.
 // For AABBs/Circles/Capsules ax and bx are ignored. For polys ax and bx can define
 // model to world transformations, or be NULL for identity transforms.
-int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB);
-void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m);
-int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out);
+CUTE_C2_API int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB);
+CUTE_C2_API void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m);
+CUTE_C2_API int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out);
 
 #ifdef _MSC_VER
 	#define C2_INLINE __forceinline
@@ -451,46 +508,46 @@ int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 {
 	switch (typeA)
 	{
-	case C2_CIRCLE:
+	case C2_TYPE_CIRCLE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  return c2CircletoCircle(*(c2Circle*)A, *(c2Circle*)B);
-		case C2_AABB:    return c2CircletoAABB(*(c2Circle*)A, *(c2AABB*)B);
-		case C2_CAPSULE: return c2CircletoCapsule(*(c2Circle*)A, *(c2Capsule*)B);
-		case C2_POLY:    return c2CircletoPoly(*(c2Circle*)A, (const c2Poly*)B, bx);
+		case C2_TYPE_CIRCLE:  return c2CircletoCircle(*(c2Circle*)A, *(c2Circle*)B);
+		case C2_TYPE_AABB:    return c2CircletoAABB(*(c2Circle*)A, *(c2AABB*)B);
+		case C2_TYPE_CAPSULE: return c2CircletoCapsule(*(c2Circle*)A, *(c2Capsule*)B);
+		case C2_TYPE_POLY:    return c2CircletoPoly(*(c2Circle*)A, (const c2Poly*)B, bx);
 		default:         return 0;
 		}
 		break;
 
-	case C2_AABB:
+	case C2_TYPE_AABB:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  return c2CircletoAABB(*(c2Circle*)B, *(c2AABB*)A);
-		case C2_AABB:    return c2AABBtoAABB(*(c2AABB*)A, *(c2AABB*)B);
-		case C2_CAPSULE: return c2AABBtoCapsule(*(c2AABB*)A, *(c2Capsule*)B);
-		case C2_POLY:    return c2AABBtoPoly(*(c2AABB*)A, (const c2Poly*)B, bx);
+		case C2_TYPE_CIRCLE:  return c2CircletoAABB(*(c2Circle*)B, *(c2AABB*)A);
+		case C2_TYPE_AABB:    return c2AABBtoAABB(*(c2AABB*)A, *(c2AABB*)B);
+		case C2_TYPE_CAPSULE: return c2AABBtoCapsule(*(c2AABB*)A, *(c2Capsule*)B);
+		case C2_TYPE_POLY:    return c2AABBtoPoly(*(c2AABB*)A, (const c2Poly*)B, bx);
 		default:         return 0;
 		}
 		break;
 
-	case C2_CAPSULE:
+	case C2_TYPE_CAPSULE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  return c2CircletoCapsule(*(c2Circle*)B, *(c2Capsule*)A);
-		case C2_AABB:    return c2AABBtoCapsule(*(c2AABB*)B, *(c2Capsule*)A);
-		case C2_CAPSULE: return c2CapsuletoCapsule(*(c2Capsule*)A, *(c2Capsule*)B);
-		case C2_POLY:    return c2CapsuletoPoly(*(c2Capsule*)A, (const c2Poly*)B, bx);
+		case C2_TYPE_CIRCLE:  return c2CircletoCapsule(*(c2Circle*)B, *(c2Capsule*)A);
+		case C2_TYPE_AABB:    return c2AABBtoCapsule(*(c2AABB*)B, *(c2Capsule*)A);
+		case C2_TYPE_CAPSULE: return c2CapsuletoCapsule(*(c2Capsule*)A, *(c2Capsule*)B);
+		case C2_TYPE_POLY:    return c2CapsuletoPoly(*(c2Capsule*)A, (const c2Poly*)B, bx);
 		default:         return 0;
 		}
 		break;
 
-	case C2_POLY:
+	case C2_TYPE_POLY:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  return c2CircletoPoly(*(c2Circle*)B, (const c2Poly*)A, ax);
-		case C2_AABB:    return c2AABBtoPoly(*(c2AABB*)B, (const c2Poly*)A, ax);
-		case C2_CAPSULE: return c2CapsuletoPoly(*(c2Capsule*)B, (const c2Poly*)A, ax);
-		case C2_POLY:    return c2PolytoPoly((const c2Poly*)A, ax, (const c2Poly*)B, bx);
+		case C2_TYPE_CIRCLE:  return c2CircletoPoly(*(c2Circle*)B, (const c2Poly*)A, ax);
+		case C2_TYPE_AABB:    return c2AABBtoPoly(*(c2AABB*)B, (const c2Poly*)A, ax);
+		case C2_TYPE_CAPSULE: return c2CapsuletoPoly(*(c2Capsule*)B, (const c2Poly*)A, ax);
+		case C2_TYPE_POLY:    return c2PolytoPoly((const c2Poly*)A, ax, (const c2Poly*)B, bx);
 		default:         return 0;
 		}
 		break;
@@ -506,43 +563,43 @@ void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 
 	switch (typeA)
 	{
-	case C2_CIRCLE:
+	case C2_TYPE_CIRCLE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoCircleManifold(*(c2Circle*)A, *(c2Circle*)B, m); break;
-		case C2_AABB:    c2CircletoAABBManifold(*(c2Circle*)A, *(c2AABB*)B, m); break;
-		case C2_CAPSULE: c2CircletoCapsuleManifold(*(c2Circle*)A, *(c2Capsule*)B, m); break;
-		case C2_POLY:    c2CircletoPolyManifold(*(c2Circle*)A, (const c2Poly*)B, bx, m); break;
+		case C2_TYPE_CIRCLE:  c2CircletoCircleManifold(*(c2Circle*)A, *(c2Circle*)B, m); break;
+		case C2_TYPE_AABB:    c2CircletoAABBManifold(*(c2Circle*)A, *(c2AABB*)B, m); break;
+		case C2_TYPE_CAPSULE: c2CircletoCapsuleManifold(*(c2Circle*)A, *(c2Capsule*)B, m); break;
+		case C2_TYPE_POLY:    c2CircletoPolyManifold(*(c2Circle*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
-	case C2_AABB:
+	case C2_TYPE_AABB:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->n = c2Neg(m->n); break;
-		case C2_AABB:    c2AABBtoAABBManifold(*(c2AABB*)A, *(c2AABB*)B, m); break;
-		case C2_CAPSULE: c2AABBtoCapsuleManifold(*(c2AABB*)A, *(c2Capsule*)B, m); break;
-		case C2_POLY:    c2AABBtoPolyManifold(*(c2AABB*)A, (const c2Poly*)B, bx, m); break;
+		case C2_TYPE_CIRCLE:  c2CircletoAABBManifold(*(c2Circle*)B, *(c2AABB*)A, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_AABB:    c2AABBtoAABBManifold(*(c2AABB*)A, *(c2AABB*)B, m); break;
+		case C2_TYPE_CAPSULE: c2AABBtoCapsuleManifold(*(c2AABB*)A, *(c2Capsule*)B, m); break;
+		case C2_TYPE_POLY:    c2AABBtoPolyManifold(*(c2AABB*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
-	case C2_CAPSULE:
+	case C2_TYPE_CAPSULE:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
-		case C2_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
-		case C2_CAPSULE: c2CapsuletoCapsuleManifold(*(c2Capsule*)A, *(c2Capsule*)B, m); break;
-		case C2_POLY:    c2CapsuletoPolyManifold(*(c2Capsule*)A, (const c2Poly*)B, bx, m); break;
+		case C2_TYPE_CIRCLE:  c2CircletoCapsuleManifold(*(c2Circle*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_AABB:    c2AABBtoCapsuleManifold(*(c2AABB*)B, *(c2Capsule*)A, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_CAPSULE: c2CapsuletoCapsuleManifold(*(c2Capsule*)A, *(c2Capsule*)B, m); break;
+		case C2_TYPE_POLY:    c2CapsuletoPolyManifold(*(c2Capsule*)A, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 
-	case C2_POLY:
+	case C2_TYPE_POLY:
 		switch (typeB)
 		{
-		case C2_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
-		case C2_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
-		case C2_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
-		case C2_POLY:    c2PolytoPolyManifold((const c2Poly*)A, ax, (const c2Poly*)B, bx, m); break;
+		case C2_TYPE_CIRCLE:  c2CircletoPolyManifold(*(c2Circle*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_AABB:    c2AABBtoPolyManifold(*(c2AABB*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_CAPSULE: c2CapsuletoPolyManifold(*(c2Capsule*)B, (const c2Poly*)A, ax, m); m->n = c2Neg(m->n); break;
+		case C2_TYPE_POLY:    c2PolytoPolyManifold((const c2Poly*)A, ax, (const c2Poly*)B, bx, m); break;
 		}
 		break;
 	}
@@ -552,10 +609,10 @@ int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* o
 {
 	switch (typeB)
 	{
-	case C2_CIRCLE:  return c2RaytoCircle(A, *(c2Circle*)B, out);
-	case C2_AABB:    return c2RaytoAABB(A, *(c2AABB*)B, out);
-	case C2_CAPSULE: return c2RaytoCapsule(A, *(c2Capsule*)B, out);
-	case C2_POLY:    return c2RaytoPoly(A, (const c2Poly*)B, bx, out);
+	case C2_TYPE_CIRCLE:  return c2RaytoCircle(A, *(c2Circle*)B, out);
+	case C2_TYPE_AABB:    return c2RaytoAABB(A, *(c2AABB*)B, out);
+	case C2_TYPE_CAPSULE: return c2RaytoCapsule(A, *(c2Capsule*)B, out);
+	case C2_TYPE_POLY:    return c2RaytoPoly(A, (const c2Poly*)B, bx, out);
 	}
 
 	return 0;
@@ -591,7 +648,7 @@ static C2_INLINE void c2MakeProxy(const void* shape, C2_TYPE type, c2Proxy* p)
 {
 	switch (type)
 	{
-	case C2_CIRCLE:
+	case C2_TYPE_CIRCLE:
 	{
 		c2Circle* c = (c2Circle*)shape;
 		p->radius = c->r;
@@ -599,7 +656,7 @@ static C2_INLINE void c2MakeProxy(const void* shape, C2_TYPE type, c2Proxy* p)
 		p->verts[0] = c->p;
 	}	break;
 
-	case C2_AABB:
+	case C2_TYPE_AABB:
 	{
 		c2AABB* bb = (c2AABB*)shape;
 		p->radius = 0;
@@ -607,7 +664,7 @@ static C2_INLINE void c2MakeProxy(const void* shape, C2_TYPE type, c2Proxy* p)
 		c2BBVerts(p->verts, bb);
 	}	break;
 
-	case C2_CAPSULE:
+	case C2_TYPE_CAPSULE:
 	{
 		c2Capsule* c = (c2Capsule*)shape;
 		p->radius = c->r;
@@ -616,7 +673,7 @@ static C2_INLINE void c2MakeProxy(const void* shape, C2_TYPE type, c2Proxy* p)
 		p->verts[1] = c->b;
 	}	break;
 
-	case C2_POLY:
+	case C2_TYPE_POLY:
 	{
 		c2Poly* poly = (c2Poly*)shape;
 		p->radius = 0;
@@ -692,8 +749,8 @@ static C2_INLINE void c22(c2Simplex* s)
 {
 	c2v a = s->a.p;
 	c2v b = s->b.p;
-	float u = c2Dot(b, c2Norm(c2Sub(b, a)));
-	float v = c2Dot(a, c2Norm(c2Sub(a, b)));
+	float u = c2Dot(b, c2Sub(b, a));
+	float v = c2Dot(a, c2Sub(a, b));
 
 	if (v <= 0)
 	{
@@ -725,13 +782,13 @@ static C2_INLINE void c23(c2Simplex* s)
 	c2v b = s->b.p;
 	c2v c = s->c.p;
 
-	float uAB = c2Dot(b, c2Norm(c2Sub(b, a)));
-	float vAB = c2Dot(a, c2Norm(c2Sub(a, b)));
-	float uBC = c2Dot(c, c2Norm(c2Sub(c, b)));
-	float vBC = c2Dot(b, c2Norm(c2Sub(b, c)));
-	float uCA = c2Dot(a, c2Norm(c2Sub(a, c)));
-	float vCA = c2Dot(c, c2Norm(c2Sub(c, a)));
-	float area = c2Det2(c2Norm(c2Sub(b, a)), c2Norm(c2Sub(c, a)));
+	float uAB = c2Dot(b, c2Sub(b, a));
+	float vAB = c2Dot(a, c2Sub(a, b));
+	float uBC = c2Dot(c, c2Sub(c, b));
+	float vBC = c2Dot(b, c2Sub(b, c));
+	float uCA = c2Dot(a, c2Sub(a, c));
+	float vCA = c2Dot(c, c2Sub(c, a));
+	float area = c2Det2(c2Sub(b, a), c2Sub(c, a));
 	float uABC = c2Det2(b, c) * area;
 	float vABC = c2Det2(c, a) * area;
 	float wABC = c2Det2(a, b) * area;
@@ -1007,7 +1064,7 @@ static C2_INLINE float c2Step(float t, const void* A, C2_TYPE typeA, const c2x* 
 	return d;
 }
 
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, c2v* out_normal, c2v* out_contact_point, int* iterations)
+float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations)
 {
 	float t = 0;
 	c2x ax;
@@ -1016,39 +1073,30 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 	else ax = *ax_ptr;
 	if (!bx_ptr) bx = c2xIdentity();
 	else bx = *bx_ptr;
-	c2v a, b, n;
+	c2v a, b;
 	c2GJKCache cache;
 	cache.count = 0;
 	float d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
 	c2v v = c2Sub(vB, vA);
-	n = c2SafeNorm(c2Sub(b, a));
 
-	int iter = 0;
-	float eps = 1.0e-5f;
+	int iters = 0;
+	float eps = 1.0e-6f;
 	while (d > eps && t < 1)
 	{
-		++iter;
+		++iters;
 		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
 		if (!velocity_bound) return 1;
 		float delta = d / velocity_bound;
-		t += delta * 0.95f;
-		c2v a0, b0;
-		d = c2Step(t, A, typeA, &ax, vA, &a0, B, typeB, &bx, vB, &b0, use_radius, &cache);
-		if (d * d >= eps)
-		{
-			a = a0;
-			b = b0;
-			n = c2Sub(b, a);
-		}
+		float t0 = t;
+		float t1 = t + delta;
+		if (t0 == t1) break;
+		t = t1;
+		d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
 	}
 
-	n = c2SafeNorm(n);
 	t = t >= 1 ? 1 : t;
-	c2v p = c2Mulvs(c2Add(a, b), 0.5f);
+	if (iterations) *iterations = iters;
 
-	if (out_normal) *out_normal = n;
-	if (out_contact_point) *out_contact_point = p;
-	if (iterations) *iterations = iter;
 	return t;
 }
 
@@ -1151,6 +1199,22 @@ int c2AABBtoAABB(c2AABB A, c2AABB B)
 	return !(d0 | d1 | d2 | d3);
 }
 
+int c2AABBtoPoint(c2AABB A, c2v B)
+{
+	int d0 = B.x < A.min.x;
+	int d1 = B.y < A.min.y;
+	int d2 = B.x > A.max.x;
+	int d3 = B.y > A.max.y;
+	return !(d0 | d1 | d2 | d3);
+}
+
+int c2CircleToPoint(c2Circle A, c2v B)
+{
+	c2v n = c2Sub(A.p, B);
+	float d2 = c2Dot(n, n);
+	return d2 < A.r * A.r;
+}
+
 // see: http://www.randygaul.net/2014/07/23/distance-point-to-line-segment/
 int c2CircletoCapsule(c2Circle A, c2Capsule B)
 {
@@ -1181,37 +1245,37 @@ int c2CircletoCapsule(c2Circle A, c2Capsule B)
 
 int c2AABBtoCapsule(c2AABB A, c2Capsule B)
 {
-	if (c2GJK(&A, C2_AABB, 0, &B, C2_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_AABB, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CapsuletoCapsule(c2Capsule A, c2Capsule B)
 {
-	if (c2GJK(&A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CircletoPoly(c2Circle A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_CIRCLE, 0, B, C2_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
 int c2AABBtoPoly(c2AABB A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_AABB, 0, B, C2_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_AABB, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
 int c2CapsuletoPoly(c2Capsule A, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(&A, C2_CAPSULE, 0, B, C2_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
 int c2PolytoPoly(const c2Poly* A, const c2x* ax, const c2Poly* B, const c2x* bx)
 {
-	if (c2GJK(A, C2_POLY, ax, B, C2_POLY, bx, 0, 0, 1, 0, 0)) return 0;
+	if (c2GJK(A, C2_TYPE_POLY, ax, B, C2_TYPE_POLY, bx, 0, 0, 1, 0, 0)) return 0;
 	return 1;
 }
 
@@ -1339,42 +1403,65 @@ int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out)
 
 	// rotate capsule to origin, along Y axis
 	// rotate the ray same way
-	c2v yBb = c2MulmvT(M, c2Sub(B.b, B.a));
+	c2v cap_n = c2Sub(B.b, B.a);
+	c2v yBb = c2MulmvT(M, cap_n);
 	c2v yAp = c2MulmvT(M, c2Sub(A.p, B.a));
 	c2v yAd = c2MulmvT(M, A.d);
 	c2v yAe = c2Add(yAp, c2Mulvs(yAd, A.t));
 
+	c2AABB capsule_bb;
+	capsule_bb.min = c2V(-B.r, 0);
+	capsule_bb.max = c2V(B.r, yBb.y);
+
+	out->n = c2Norm(cap_n);
+	out->t = 0;
+
+	// check and see if ray starts within the capsule
+	if (c2AABBtoPoint(capsule_bb, yAp)) {
+		return 1;
+	} else {
+		c2Circle capsule_a;
+		c2Circle capsule_b;
+		capsule_a.p = B.a;
+		capsule_a.r = B.r;
+		capsule_b.p = B.b;
+		capsule_b.r = B.r;
+
+		if (c2CircleToPoint(capsule_a, A.p)) {
+			return 1;
+		} else if (c2CircleToPoint(capsule_b, A.p)) {
+			return 1;
+		}
+	}
+
 	if (yAe.x * yAp.x < 0 || c2Min(c2Abs(yAe.x), c2Abs(yAp.x)) < B.r)
 	{
-		float c = yAp.x > 0 ? B.r : -B.r;
-		float d = (yAe.x - yAp.x);
-		float t = (c - yAp.x) / d;
-		float y = yAp.y + (yAe.y - yAp.y) * t;
+		c2Circle Ca, Cb;
+		Ca.p = B.a;
+		Ca.r = B.r;
+		Cb.p = B.b;
+		Cb.r = B.r;
 
-		// hit bottom half-circle
-		if (y < 0)
-		{
-			c2Circle C;
-			C.p = B.a;
-			C.r = B.r;
-			return c2RaytoCircle(A, C, out);
+		// ray starts inside capsule prism -- must hit one of the semi-circles
+		if (c2Abs(yAp.x) < B.r) {
+			if (yAp.y < 0) return c2RaytoCircle(A, Ca, out);
+			else return c2RaytoCircle(A, Cb, out);
 		}
 
-		// hit top-half circle
-		else if (y > yBb.y)
-		{
-			c2Circle C;
-			C.p = B.b;
-			C.r = B.r;
-			return c2RaytoCircle(A, C, out);
-		}
-
-		// hit the middle of capsule
+		// hit the capsule prism
 		else
 		{
-			out->n = c > 0 ? M.x : c2Skew(M.y);
-			out->t = t * A.t;
-			return 1;
+			float c = yAp.x > 0 ? B.r : -B.r;
+			float d = (yAe.x - yAp.x);
+			float t = (c - yAp.x) / d;
+			float y = yAp.y + (yAe.y - yAp.y) * t;
+			if (y <= 0) return c2RaytoCircle(A, Ca, out);
+			if (y >= yBb.y) return c2RaytoCircle(A, Cb, out);
+			else {
+				out->n = c > 0 ? M.x : c2Skew(M.y);
+				out->t = t * A.t;
+				return 1;
+			}
 		}
 	}
 
@@ -1497,7 +1584,7 @@ void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m)
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK(&A, C2_CIRCLE, 0, &B, C2_CAPSULE, 0, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0);
 	if (d < r)
 	{
 		c2v n;
@@ -1584,7 +1671,7 @@ void c2CapsuletoCapsuleManifold(c2Capsule A, c2Capsule B, c2Manifold* m)
 	m->count = 0;
 	c2v a, b;
 	float r = A.r + B.r;
-	float d = c2GJK(&A, C2_CAPSULE, 0, &B, C2_CAPSULE, 0, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, &B, C2_TYPE_CAPSULE, 0, &a, &b, 0, 0, 0);
 	if (d < r)
 	{
 		c2v n;
@@ -1610,7 +1697,7 @@ void c2CircletoPolyManifold(c2Circle A, const c2Poly* B, const c2x* bx_tr, c2Man
 {
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK(&A, C2_CIRCLE, 0, B, C2_POLY, bx_tr, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CIRCLE, 0, B, C2_TYPE_POLY, bx_tr, &a, &b, 0, 0, 0);
 
 	// shallow, the circle center did not hit the polygon
 	// just use a and b from GJK to define the collision
@@ -1690,13 +1777,8 @@ static int c2Clip(c2v* seg, c2h h)
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer
 #endif
 
-// clip a segment to the "side planes" of another segment.
-// side planes are planes orthogonal to a segment and attached to the
-// endpoints of the segment
-static int c2SidePlanes(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
+static int c2SidePlanes(c2v* seg, c2v ra, c2v rb, c2h* h)
 {
-	c2v ra = c2Mulxv(x, p->verts[e]);
-	c2v rb = c2Mulxv(x, p->verts[e + 1 == p->count ? 0 : e + 1]);
 	c2v in = c2Norm(c2Sub(rb, ra));
 	c2h left = { c2Neg(in), c2Dot(c2Neg(in), ra) };
 	c2h right = { in, c2Dot(in, rb) };
@@ -1707,6 +1789,16 @@ static int c2SidePlanes(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
 		h->d = c2Dot(c2CCW90(in), ra);
 	}
 	return 1;
+}
+
+// clip a segment to the "side planes" of another segment.
+// side planes are planes orthogonal to a segment and attached to the
+// endpoints of the segment
+static int c2SidePlanesFromPoly(c2v* seg, c2x x, const c2Poly* p, int e, c2h* h)
+{
+	c2v ra = c2Mulxv(x, p->verts[e]);
+	c2v rb = c2Mulxv(x, p->verts[e + 1 == p->count ? 0 : e + 1]);
+	return c2SidePlanes(seg, ra, rb, h);
 }
 
 static void c2KeepDeep(c2v* seg, c2h h, c2Manifold* m)
@@ -1757,70 +1849,127 @@ static void c2AntinormalFace(c2Capsule cap, const c2Poly* p, c2x x, int* face_ou
 	*n_out = n;
 }
 
+static void c2Incident(c2v* incident, const c2Poly* ip, c2x ix, c2v rn_in_incident_space)
+{
+	int index = ~0;
+	float min_dot = FLT_MAX;
+	for (int i = 0; i < ip->count; ++i)
+	{
+		float dot = c2Dot(rn_in_incident_space, ip->norms[i]);
+		if (dot < min_dot)
+		{
+			min_dot = dot;
+			index = i;
+		}
+	}
+	incident[0] = c2Mulxv(ix, ip->verts[index]);
+	incident[1] = c2Mulxv(ix, ip->verts[index + 1 == ip->count ? 0 : index + 1]);
+}
+
 void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2Manifold* m)
 {
 	m->count = 0;
 	c2v a, b;
-	float d = c2GJK(&A, C2_CAPSULE, 0, B, C2_POLY, bx_ptr, &a, &b, 0, 0, 0);
+	float d = c2GJK(&A, C2_TYPE_CAPSULE, 0, B, C2_TYPE_POLY, bx_ptr, &a, &b, 0, 0, 0);
 
 	// deep, treat as segment to poly collision
-	if (d == 0)
+	if (d < 1.0e-6f)
 	{
 		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity();
-		c2v n;
-		int index;
-		c2AntinormalFace(A, B, bx, &index, &n);
-		c2v seg[2] = { A.a, A.b };
-		c2h h;
-		if (!c2SidePlanes(seg, bx, B, index, &h)) return;
-		c2KeepDeep(seg, h, m);
-		for (int i = 0; i < m->count; ++i)
+		c2Capsule A_in_B;
+		A_in_B.a = c2MulxvT(bx, A.a);
+		A_in_B.b = c2MulxvT(bx, A.b);
+		c2v ab = c2Norm(c2Sub(A_in_B.a, A_in_B.b));
+
+		// test capsule axes
+		c2h ab_h0;
+		ab_h0.n = c2CCW90(ab);
+		ab_h0.d = c2Dot(A_in_B.a, ab_h0.n);
+		int v0 = c2Support(B->verts, B->count, c2Neg(ab_h0.n));
+		float s0 = c2Dist(ab_h0, B->verts[v0]);
+
+		c2h ab_h1;
+		ab_h1.n = c2Skew(ab);
+		ab_h1.d = c2Dot(A_in_B.a, ab_h1.n);
+		int v1 = c2Support(B->verts, B->count, c2Neg(ab_h1.n));
+		float s1 = c2Dist(ab_h1, B->verts[v1]);
+
+		// test poly axes
+		int index = ~0;
+		float sep = -FLT_MAX;
+		int code = 0;
+		for (int i = 0; i < B->count; ++i)
 		{
-			m->depths[i] += c2Sign(m->depths) * A.r;
-			m->contact_points[i] = c2Add(m->contact_points[i], c2Mulvs(n, A.r));
+			c2h h = c2PlaneAt(B, i);
+			float da = c2Dot(A_in_B.a, c2Neg(h.n));
+			float db = c2Dot(A_in_B.b, c2Neg(h.n));
+			float d;
+			if (da > db) d = c2Dist(h, A_in_B.a);
+			else d = c2Dist(h, A_in_B.b);
+			if (d > sep)
+			{
+				sep = d;
+				index = i;
+			}
 		}
-		m->n = c2Neg(m->n);
+
+		// track axis of minimum separation
+		if (s0 > sep) {
+			sep = s0;
+			index = v0;
+			code = 1;
+		}
+
+		if (s1 > sep) {
+			sep = s1;
+			index = v1;
+			code = 2;
+		}
+
+		switch (code)
+		{
+		case 0: // poly face
+		{
+			c2v seg[2] = { A.a, A.b };
+			c2h h;
+			if (!c2SidePlanesFromPoly(seg, bx, B, index, &h)) return;
+			c2KeepDeep(seg, h, m);
+			m->n = c2Neg(m->n);
+		}	break;
+
+		case 1: // side 0 of capsule segment
+		{
+			c2v incident[2];
+			c2Incident(incident, B, bx, ab_h0.n);
+			c2h h;
+			if (!c2SidePlanes(incident, A_in_B.b, A_in_B.a, &h)) return;
+			c2KeepDeep(incident, h, m);
+		}	break;
+
+		case 2: // side 1 of capsule segment
+		{
+			c2v incident[2];
+			c2Incident(incident, B, bx, ab_h1.n);
+			c2h h;
+			if (!c2SidePlanes(incident, A_in_B.a, A_in_B.b, &h)) return;
+			c2KeepDeep(incident, h, m);
+		}	break;
+
+		default:
+			// should never happen.
+			return;
+		}
+
+		for (int i = 0; i < m->count; ++i) m->depths[i] += A.r;
 	}
 
 	// shallow, use GJK results a and b to define manifold
 	else if (d < A.r)
 	{
-		c2x bx = bx_ptr ? *bx_ptr : c2xIdentity();
-		c2v ab = c2Sub(b, a);
-		int face_case = 0;
-
-		for (int i = 0; i < B->count; ++i)
-		{
-			c2v n = c2Mulrv(bx.r, B->norms[i]);
-			if (c2Parallel(c2Neg(ab), n, 5.0e-3f))
-			{
-				face_case = 1;
-				break;
-			}
-		}
-
-		// 1 contact
-		if (!face_case)
-		{
-			one_contact:
-			m->count = 1;
-			m->n = c2Norm(ab);
-			m->contact_points[0] = c2Add(a, c2Mulvs(m->n, A.r));
-			m->depths[0] = A.r - d;
-		}
-
-		// 2 contacts if laying on a polygon face nicely
-		else
-		{
-			c2v n;
-			int index;
-			c2AntinormalFace(A, B, bx, &index, &n);
-			c2v seg[2] = { c2Add(A.a, c2Mulvs(n, A.r)), c2Add(A.b, c2Mulvs(n, A.r)) };
-			c2h h;
-			if (!c2SidePlanes(seg, bx, B, index, &h)) goto one_contact;
-			c2KeepDeep(seg, h, m);
-			m->n = c2Neg(m->n);
-		}
+		m->count = 1;
+		m->n = c2Norm(c2Sub(b, a));
+		m->contact_points[0] = c2Add(a, c2Mulvs(m->n, A.r));
+		m->depths[0] = A.r - d;
 	}
 }
 
@@ -1850,24 +1999,6 @@ static float c2CheckFaces(const c2Poly* A, c2x ax, const c2Poly* B, c2x bx, int*
 
 	*face_index = index;
 	return sep;
-}
-
-static C2_INLINE void c2Incident(c2v* incident, const c2Poly* ip, c2x ix, const c2Poly* rp, c2x rx, int re)
-{
-	c2v n = c2MulrvT(ix.r, c2Mulrv(rx.r, rp->norms[re]));
-	int index = ~0;
-	float min_dot = FLT_MAX;
-	for (int i = 0; i < ip->count; ++i)
-	{
-		float dot = c2Dot(n, ip->norms[i]);
-		if (dot < min_dot)
-		{
-			min_dot = dot;
-			index = i;
-		}
-	}
-	incident[0] = c2Mulxv(ix, ip->verts[index]);
-	incident[1] = c2Mulxv(ix, ip->verts[index + 1 == ip->count ? 0 : index + 1]);
 }
 
 // Please see Dirk Gregorius's 2013 GDC lecture on the Separating Axis Theorem
@@ -1909,9 +2040,9 @@ void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax_ptr, const c2Poly* B, c
 	}
 
 	c2v incident[2];
-	c2Incident(incident, ip, ix, rp, rx, re);
+	c2Incident(incident, ip, ix, c2MulrvT(ix.r, c2Mulrv(rx.r, rp->norms[re])));
 	c2h rh;
-	if (!c2SidePlanes(incident, rx, rp, re, &rh)) return;
+	if (!c2SidePlanesFromPoly(incident, rx, rp, re, &rh)) return;
 	c2KeepDeep(incident, rh, m);
 	if (flip) m->n = c2Neg(m->n);
 }

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_png.h - v1.03
+	cute_png.h - v1.04
 
 	To create implementation (the function definitions)
 		#define CUTE_PNG_IMPLEMENTATION
@@ -22,6 +22,8 @@
 		1.01 (03/08/2017) tRNS chunk support for paletted images
 		1.02 (10/23/2017) support for explicitly loading paletted png images
 		1.03 (11/12/2017) construct atlas in memory
+		1.04 (08/23/2018) various bug fixes for filter and word decoder
+		                  added `cp_load_blank`
 
 
 	EXAMPLES:
@@ -69,6 +71,7 @@
 	Contributors:
 		Zachary Carter    1.01 - bug catch for tRNS chunk in paletted images
 		Dennis Korpel     1.03 - fix some pointer/memory related bugs
+		Dennis Korpel     1.04 - fix for filter on first row of pixels
 */
 
 #if !defined(CUTE_PNG_H)
@@ -114,6 +117,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 // call free on cp_image_t::pix when done, or call cp_free_png
 cp_image_t cp_load_png(const char *file_name);
 cp_image_t cp_load_png_mem(const void *png_data, int png_length);
+cp_image_t cp_load_blank(int w, int h); // Alloc's pixels, but `pix` memory is uninitialized.
 void cp_free_png(cp_image_t* img);
 void cp_flip_image_horizontal(cp_image_t* img);
 
@@ -255,6 +259,7 @@ typedef struct cp_state_t
 	int word_index;
 	int bits_left;
 
+	int final_word_available;
 	uint32_t final_word;
 
 	char* out;
@@ -285,10 +290,21 @@ static uint64_t cp_peak_bits(cp_state_t* s, int num_bits_to_read)
 {
 	if (s->count < num_bits_to_read)
 	{
-		uint32_t word = (s->word_index < s->word_count) ? s->words[s->word_index++] : s->final_word;
-		s->bits |= (uint64_t) word << s->count;
-		s->count += 32;
-		CUTE_PNG_ASSERT(s->word_index <= s->word_count);
+		if (s->word_index < s->word_count)
+		{
+			uint32_t word = s->words[s->word_index++];
+			s->bits |= (uint64_t)word << s->count;
+			s->count += 32;
+			CUTE_PNG_ASSERT(s->word_index <= s->word_count);
+		}
+
+		else if (s->final_word_available)
+		{
+			uint32_t word = s->final_word;
+			s->bits |= (uint64_t)word << s->count;
+			s->count += s->bits_left;
+			s->final_word_available = 0;
+		}
 	}
 
 	return s->bits;
@@ -423,7 +439,6 @@ static int cp_fixed(cp_state_t* s)
 
 static int cp_decode(cp_state_t* s, uint32_t* tree, int hi)
 {
-	CUTE_PNG_ASSERT(!cp_would_overflow(s, 16));
 	uint64_t bits = cp_peak_bits(s, 16);
 	uint32_t search = (cp_rev16((uint32_t)bits) << 16) | 0xFFFF;
 	int lo = 0;
@@ -537,7 +552,8 @@ int cp_inflate(void* in, int in_bytes, void* out, int out_bytes)
 
 	for (int i = 0; i < first_bytes; ++i)
 		s->bits |= (uint64_t)(((uint8_t*)in)[i]) << (i * 8);
-	
+
+	s->final_word_available = last_bytes ? 1 : 0;
 	s->final_word = 0;
 	for(int i = 0; i < last_bytes; i++) 
 		s->final_word |= ((uint8_t*)in)[in_bytes - last_bytes+i] << (i * 8);
@@ -594,7 +610,7 @@ typedef struct cp_save_png_data_t
 	FILE *fp;
 } cp_save_png_data_t;
 
-uint32_t tpCRC_TABLE[] = {
+uint32_t CP_CRC_TABLE[] = {
 	0, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
 	0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c, 0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
 };
@@ -602,8 +618,8 @@ uint32_t tpCRC_TABLE[] = {
 static void cp_put8(cp_save_png_data_t* s, uint32_t a)
 {
 	fputc(a, s->fp);
-	s->crc = (s->crc >> 4) ^ tpCRC_TABLE[(s->crc & 15) ^ (a & 15)];
-	s->crc = (s->crc >> 4) ^ tpCRC_TABLE[(s->crc & 15) ^ (a >> 4)];
+	s->crc = (s->crc >> 4) ^ CP_CRC_TABLE[(s->crc & 15) ^ (a & 15)];
+	s->crc = (s->crc >> 4) ^ CP_CRC_TABLE[(s->crc & 15) ^ (a >> 4)];
 }
 
 static void cp_update_adler(cp_save_png_data_t* s, uint32_t v)
@@ -829,16 +845,34 @@ static const uint8_t* cp_find(cp_raw_png_t* png, const char* chunk, uint32_t min
 static int cp_unfilter(int w, int h, int bpp, uint8_t* raw)
 {
 	int len = w * bpp;
-	uint8_t *prev = raw;
+	uint8_t *prev;
 	int x;
 
-	for (int y = 0; y < h; y++, prev = raw, raw += len)
+	if (h > 0)
+	{
+#define FILTER_LOOP_FIRST(A) for (x = bpp; x < len; x++) raw[x] += A; break
+		switch (*raw++)
+		{
+		case 0: break;
+		case 1: FILTER_LOOP_FIRST(raw[x - bpp]);
+		case 2: break;
+		case 3: FILTER_LOOP_FIRST(raw[x - bpp] / 2);
+		case 4: FILTER_LOOP_FIRST(cp_paeth(raw[x - bpp], 0, 0));
+		default: return 0;
+		}
+#undef FILTER_LOOP_FIRST
+	}
+
+	prev = raw;
+	raw += len;
+
+	for (int y = 1; y < h; y++, prev = raw, raw += len)
 	{
 #define FILTER_LOOP(A, B) for (x = 0 ; x < bpp; x++) raw[x] += A; for (; x < len; x++) raw[x] += B; break
 		switch (*raw++)
 		{
 		case 0: break;
-		case 1: FILTER_LOOP(0            , raw[x - bpp] );
+		case 1: FILTER_LOOP(0          , raw[x - bpp] );
 		case 2: FILTER_LOOP(prev[x]    , prev[x]);
 		case 3: FILTER_LOOP(prev[x] / 2, (raw[x - bpp] + prev[x]) / 2);
 		case 4: FILTER_LOOP(prev[x]    , cp_paeth(raw[x - bpp], prev[x], prev[x -bpp]));
@@ -1018,6 +1052,15 @@ cp_err:
 	CUTE_PNG_FREE(img.pix);
 	img.pix = 0;
 
+	return img;
+}
+
+cp_image_t cp_load_blank(int w, int h)
+{
+	cp_image_t img;
+	img.w = w;
+	img.h = h;
+	img.pix = (cp_pixel_t*)CUTE_PNG_ALLOC(w * h * sizeof(cp_pixel_t));
 	return img;
 }
 
@@ -1628,7 +1671,7 @@ cp_err:
 	This software is available under 2 licenses - you may choose the one you like.
 	------------------------------------------------------------------------------
 	ALTERNATIVE A - zlib license
-	Copyright (c) 2017 Randy Gaul http://www.randygaul.net
+	Copyright (c) 2019 Randy Gaul http://www.randygaul.net
 	This software is provided 'as-is', without any express or implied warranty.
 	In no event will the authors be held liable for any damages arising from
 	the use of this software.

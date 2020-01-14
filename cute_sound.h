@@ -3,23 +3,30 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v1.09
+	cute_sound.h - v1.10
+
 
 	To create implementation (the function definitions)
 		#define CUTE_SOUND_IMPLEMENTATION
 	in *one* C/CPP file (translation unit) that includes this file
 
-	Summary:
-	cute_sound is a C API for loading, playing, looping, panning and fading mono
-	and stero sounds. This means cute_sound imparts no external DLLs or large
-	libraries that adversely effect shipping size. cute_sound can also run on
-	Windows XP since DirectSound ships with all recent versions of Windows.
-	cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
-	machines (like OSX and iOS). SDL is used for all other platforms. Define
-	CUTE_SOUND_FORCE_SDL before placaing the CUTE_SOUND_IMPLEMENTATION in order to force
-	the use of SDL.
 
-	Revision history:
+	SUMMARY
+
+		cute_sound is a C API for loading, playing, looping, panning and fading mono
+		and stero sounds. This means cute_sound imparts no external DLLs or large
+		libraries that adversely effect shipping size. cute_sound can also run on
+		Windows XP since DirectSound ships with all recent versions of Windows.
+		cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
+		machines (like OSX and iOS). ALSA is used on Linux (though it may be buggy
+		currently).
+
+		SDL is used for all other platforms. Define CUTE_SOUND_FORCE_SDL before placaing
+		the CUTE_SOUND_IMPLEMENTATION in order to force the use of SDL.
+
+
+	REVISION HISTORY
+
 		1.0  (06/04/2016) initial release
 		1.01 (06/06/2016) load WAV from memory
 		                  separate portable and OS-specific code in cs_mix
@@ -47,44 +54,52 @@
 		1.08 (09/06/2017) SDL_RWops support by RobLoach
 		1.09 (05/20/2018) Load wav funcs can skip all irrelevant chunks
 		                  Ref counting for playing sounds
-*/
+		1.10 (08/24/2019) Introduced plugin interface, reimplemented pitch shifting
+		                  as a plugin, added optional `ctx` to alloc functions
 
-/*
-	Contributors:
+
+	CONTRIBUTORS
+
 		Aaron Balint      1.04 - real time pitch
 		                  1.04 - separate thread for cs_mix
 		                  1.04 - bugfix, removed extra cs_free16 call for second channel
 		DeXP              1.07 - initial work on SDL port
 		RobLoach          1.08 - SDL_RWops support
-*/
+		Matt Rosen        1.10 - Initial experiments with cute_dsp to figure out plugin
+		                         interface needs and use-cases
 
-/*
-	DOCUMENTATION (very quick intro):
-	1. create context
-	2. load sounds from disk into memory
-	3. play sounds
-	4. free context
 
-	1. cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, N);
-	2. cs_play_sound_def_t def = cs_make_def(&cs_load_wav("path_to_file/filename.wav"));
-	3. cs_play_sound(ctx, def);
-	4. cs_shutdown_context(ctx);
+	DOCUMENTATION (very quick intro)
 
-	DOCUMENTATION (longer introduction):
-	cute_sound consists of cs_loaded_sound_t, cs_playing_sound_t and the cs_context_t.
-	The cs_context_t encapsulates an OS sound API, as well as buffers + settings.
-	cs_loaded_sound_t holds raw samples of a sound. cs_playing_sound_t is an instance
-	of a cs_loaded_sound_t that represents a sound that can be played through the
-	cs_context_t.
+		1. create context
+		2. load sounds from disk into memory
+		3. play sounds
+		4. free context
 
-	There are two main versions of the API, the low-level and the high-level
-	API. The low-level API does not manage any memory for cs_playing_sound_ts. The
-	high level api holds a memory pool of playing sounds.
+		1. cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, N);
+		2. cs_play_sound_def_t def = cs_make_def(&cs_load_wav("path_to_file/filename.wav"));
+		3. cs_play_sound(ctx, def);
+		4. cs_shutdown_context(ctx);
 
-	To actually mix sounds together and send audio to the sound card, be sure
-	to call either cs_mix periodically or call cs_spawn_mix_thread once.
 
-	High-level API:
+	DOCUMENTATION (longer introduction)
+
+		cute_sound consists of cs_loaded_sound_t, cs_playing_sound_t and the cs_context_t.
+		The cs_context_t encapsulates an OS sound API, as well as buffers + settings.
+		cs_loaded_sound_t holds raw samples of a sound. cs_playing_sound_t is an instance
+		of a cs_loaded_sound_t that represents a sound that can be played through the
+		cs_context_t.
+
+		There are two main versions of the API, the low-level and the high-level
+		API. The low-level API does not manage any memory for cs_playing_sound_ts. The
+		high level api holds a memory pool of playing sounds.
+
+		To actually mix sounds together and send audio to the sound card, be sure
+		to call either cs_mix periodically or call cs_spawn_mix_thread once.
+
+
+	High-level API
+
 		First create a context and pass in non-zero to the final parameter. This
 		final parameter controls how large of a memory pool to use for cs_playing_sound_ts.
 		Here's an example where N is the size of the internal pool:
@@ -103,18 +118,19 @@
 		The same def can be used to play as many sounds as desired (even simultaneously)
 		as long as the context playing sound pool is large enough.
 
-	Low-level API:
+
+	Low-level API
+
 		First create a context and pass 0 in the final parameter (0 here means
 		the context will *not* allocate a cs_playing_sound_t memory pool):
 
-		cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, 0);
+		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, 0);
 
 		parameters:
-			hwnd           --  HWND, handle to window (on OSX just pass in 0)
-			frequency      --  int, represents Hz frequency rate in which samples are played
-			latency        --  int, estimated latency in Hz from PlaySound call to speaker output
-			seconds        --  int, number of second of samples internal buffers can hold
-			0 (last param) --  int, number of elements in cs_playing_sound_t pool
+			hwnd             --  HWND, handle to window (on OSX just pass in 0)
+			frequency        --  int, represents Hz frequency rate in which samples are played
+			buffered_samples --  int, number of samples the internal ring buffers can hold at once
+			0 (last param)   --  int, number of elements in cs_playing_sound_t pool
 
 		We create a cs_playing_sound_t like so:
 		cs_loaded_sound_t loaded = cs_load_wav("path_to_file/filename.wav");
@@ -145,76 +161,69 @@
 
 	Read the rest of the header for specific details on all available functions
 	and struct types.
-*/
 
-/*
-	Known Limitations:
 
-	* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
-		guarantee it will work for all kinds of wav files, but it certainly does for the common
-		kind (and can be changed fairly easily if someone wanted to extend it).
-	* Only supports 16 bits per sample.
-	* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
-		to float, mix all samples, and write back to audio API as 16 bit integers. In
-		practice this works very well and clipping is not often a big problem.
-	* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
-		past the write cursor. To mitigate this pass in a larger number to cs_make_context's 4th
-		parameter (buffer scale in seconds).
-	* Pitch shifting code is pretty darn expensive. This is due to the use of a Fast Fourier Transform
-		routine. The pitch shifting itself is written in rather efficient SIMD using SSE2 intrinsics,
-		but the FFT routine is very basic. FFT is a big bottleneck for pitch shifting. There is a
-		TODO optimization listed in this file for the FFT routine, but it's fairly low priority;
-		optimizing FFT routines is difficult and requires a lot of specialized knowledge.
-*/
+	PLUGINS
 
-/*
+		Cute sound can add plugins at run-time to modify audio before it gets mixed. Please
+		refer to all the documentation near `cs_plugin_interface_t`.
+
+
+	KNOWN LIMITATIONS
+
+		* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
+			guarantee it will work for all kinds of wav files, but it certainly does for the common
+			kind (and can be changed fairly easily if someone wanted to extend it).
+		* Only supports 16 bits per sample.
+		* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
+			to float, mix all samples, and write back to audio API as 16 bit integers. In
+			practice this works very well and clipping is not often a big problem.
+		* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
+			past the write cursor. To mitigate this pass in a larger number to cs_make_context's 4th
+			parameter (buffer scale in seconds).
+
+
 	FAQ
-	Q : Why DirectSound instead of (insert API here) on Windows?
-	A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
-	shipped on Windows XP all the way through Windows 10 -- using this header effectively intro-
-	duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
-	implement needed features, and users won't hear the difference between various APIs. Latency is
-	not that great with DS but it is shippable. Additionally, many other APIs will in the end speak
-	to Windows through the DS API.
 
-	Q : Why not include Linux support?
-	A : There have been a couple requests for ALSA support on Linux. For now the only option is to use
-	SDL backend, which can indirectly support ALSA. SDL is used only in a very low-level manner;
-	to get sound samples to the sound card via callback, so there shouldn't be much in the way of
-	considering SDL a good option for "name your flavor" of Linux backend.
+		Q : Why DirectSound instead of (insert API here) on Windows?
+		A : Casey Muratori documented DS on Handmade Hero, other APIs do not have such good docs. DS has
+		shipped on Windows XP all the way through Windows 10 -- using this header effectively intro-
+		duces zero dependencies for the foreseeable future. The DS API itself is sane enough to quickly
+		implement needed features, and users won't hear the difference between various APIs. Latency is
+		not that great with DS but it is shippable. Additionally, many other APIs will in the end speak
+		to Windows through the DS API.
 
-	Q : I would like to use my own memory management, how can I achieve this?
-	A : This header makes a couple uses of malloc/free, and cs_malloc16/cs_free16. Simply find these bits
-	and replace them with your own memory allocation routines. They can be wrapped up into a macro,
-	or call your own functions directly -- it's up to you. Generally these functions allocate fairly
-	large chunks of memory, and not very often (if at all), with one exception: cs_set_pitch is a very
-	expensive routine and requires frequent dynamic memory management.
+		Q : I would like to use my own memory management, how can I achieve this?
+		A : This header makes a couple uses of malloc/free, and cs_malloc16/cs_free16. Simply find these bits
+		and replace them with your own memory allocation routines. They can be wrapped up into a macro,
+		or call your own functions directly -- it's up to you. Generally these functions allocate fairly
+		large chunks of memory, and not very often (if at all).
 
-	Q : Does this library support audio streaming? Something like System::createStream in FMOD.
-	A : No. Typically music files aren't that large (in the megabytes). Compare this to a typical
-	DXT texture of 1024x1024, at 0.5MB of memory. Now say an average music file for a game is three
-	minutes long. Loading this file into memory and storing it as raw 16bit samples with two channels,
-	would be:
+		Q : Does this library support audio streaming? Something like System::createStream in FMOD.
+		A : No. Typically music files aren't that large (in the megabytes). Compare this to a typical
+		DXT texture of 1024x1024, at 0.5MB of memory. Now say an average music file for a game is three
+		minutes long. Loading this file into memory and storing it as raw 16bit samples with two channels,
+		would be:
 
-		num_samples = 3 * 60 * 44100 * 2
-		num_bits = num_samples * 16
-		num_bytes = num_bits / 8
-		num_megabytes = num_bytes / (1024 * 1024)
-		or 30.3mb
+			num_samples = 3 * 60 * 44100 * 2
+			num_bits = num_samples * 16
+			num_bytes = num_bits / 8
+			num_megabytes = num_bytes / (1024 * 1024)
+			or 30.3mb
 
-	So say the user has 2gb of spare RAM. That means we could fit 67 different three minute length
-	music files in there simultaneously. That is a ridiculous amount of spare memory. 30mb is nothing
-	nowadays. Just load your music file into memory all at once and then play it.
+		So say the user has 2gb of spare RAM. That means we could fit 67 different three minute length
+		music files in there simultaneously. That is a ridiculous amount of spare memory. 30mb is nothing
+		nowadays. Just load your music file into memory all at once and then play it.
 
-	Q : But I really need streaming of audio files from disk to save memory! Also loading my audio
-	files (like .OGG) takes a long time (multiple seconds).
-	A : It is recommended to either A) load up your music files before they are needed, perhaps during
-	a loading screen, or B) stream in the entire audio into memory on another thread. cs_read_mem_ogg is
-	a great candidate function to throw onto a job pool. Streaming is more a remnant of older machines
-	(like in the 90's or early 2000's) where decoding speed and RAM were real nasty bottlenecks. For
-	more modern machines, these aren't really concerns, even with mobile devices. If even after reading
-	this Q/A section you still want to stream your audio, you can try mini_al as an alternative:
-	https://github.com/dr-soft/mini_al
+		Q : But I really need streaming of audio files from disk to save memory! Also loading my audio
+		files (like .OGG) takes a long time (multiple seconds).
+		A : It is recommended to either A) load up your music files before they are needed, perhaps during
+		a loading screen, or B) stream in the entire audio into memory on another thread. cs_read_mem_ogg is
+		a great candidate function to throw onto a job pool. Streaming is more a remnant of older machines
+		(like in the 90's or early 2000's) where decoding speed and RAM were real nasty bottlenecks. For
+		more modern machines, these aren't really concerns, even with mobile devices. If even after reading
+		this Q/A section you still want to stream your audio, you can try mini_al as an alternative:
+		https://github.com/dr-soft/mini_al
 */
 
 /*
@@ -226,46 +235,16 @@
 
 #if !defined(CUTE_SOUND_H)
 
-#define CUTE_SOUND_WINDOWS	1
-#define CUTE_SOUND_MAC		2
-#define CUTE_SOUND_UNIX		3
-#define CUTE_SOUND_SDL		4
-
 #if defined(_WIN32)
 
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
-
 	#if !defined _CRT_SECURE_NO_WARNINGS
-	#define _CRT_SECURE_NO_WARNINGS
+		#define _CRT_SECURE_NO_WARNINGS
 	#endif
 
-#elif defined(__APPLE__)
+	#if !defined _CRT_NONSTDC_NO_DEPRECATE
+		#define _CRT_NONSTDC_NO_DEPRECATE
+	#endif
 
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_MAC
-
-#else
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
-	// please note CUTE_SOUND_UNIX is not directly support
-	// instead, unix-style OSes are encouraged to use SDL
-	// see: https://www.libsdl.org/
-
-#endif
-
-// Use CUTE_SOUND_FORCE_SDL to override the above macros and use
-// the SDL port.
-#ifdef CUTE_SOUND_FORCE_SDL
-
-	#undef CUTE_SOUND_PLATFORM
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
-#endif
-
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
-
-	#include <SDL2/SDL.h>
-	
 #endif
 
 #include <stdint.h>
@@ -290,8 +269,8 @@ typedef struct cs_loaded_sound_t
 	void* channels[2];
 } cs_loaded_sound_t;
 
-struct cs_pitch_data_t;
-typedef struct cs_pitch_data_t cs_pitch_data_t;
+// Don't change this unless necessary. 32 is a huge number to begin with.
+#define CUTE_SOUND_PLUGINS_MAX (32)
 
 // represents an instance of a cs_loaded_sound_t, can be played through the cs_context_t
 typedef struct cs_playing_sound_t
@@ -303,12 +282,10 @@ typedef struct cs_playing_sound_t
 	float volume1;
 	float pan0;
 	float pan1;
-	float pitch;
-	cs_pitch_data_t* pitch_filter[2];
-	void* dsp_mixer;
 	int sample_index;
 	cs_loaded_sound_t* loaded_sound;
 	struct cs_playing_sound_t* next;
+	void* plugin_udata[CUTE_SOUND_PLUGINS_MAX];
 } cs_playing_sound_t;
 
 // holds audio API info and other info
@@ -342,17 +319,11 @@ void cs_free_sound(cs_loaded_sound_t* sound);
 // loaded sound
 int cs_sound_size(cs_loaded_sound_t* sound);
 
-// Getter for the DSP context attached to the sound context.
-// Returns as a void ptr with no error checking on the DSP context.
-void* cs_get_dsp_context(cs_context_t* ctx);
-
-// Sets the DSP context on the sound context.
-// Performs no error checking on dsp_context.
-void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context);
-
 // playing_pool_count -- 0 to setup low-level API, non-zero to size the internal
 // memory pool for cs_playing_sound_t instances
-cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count);
+// `user_allocator_context` can be NULL - it is passed to `CUTE_SOUND_ALLOC` and
+// `CUTE_SOUND_FREE`.
+cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_context);
 void cs_shutdown_context(cs_context_t* ctx);
 
 // Call cs_spawn_mix_thread once to setup a separate thread for the context to run
@@ -395,22 +366,6 @@ void cs_set_pan(cs_playing_sound_t* sound, float pan);
 // recommended to use the cs_set_pan function for panning).
 void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_right);
 
-// Change pitch (not duration) of sound. pitch = 0.5f for one octave lower, pitch = 2.0f for one octave higher.
-// pitch at 1.0f applies no change. pitch settings farther away from 1.0f create more distortion and lower
-// the output sample quality. pitch can be adjusted in real-time for doppler effects and the like. Going beyond
-// 0.5f and 2.0f may require some tweaking the pitch shifting parameters, and is not recommended.
-
-// Additional important information about performance: This function
-// is quite expensive -- you have been warned! Try it out and be aware of how much CPU consumption it uses.
-// To avoid destroying the originally loaded sound samples, cs_set_pitch will do a one-time allocation to copy
-// sound samples into a new buffer. The new buffer contains the pitch adjusted samples, and these will be played
-// through cs_mix. This lets the pitch be modulated at run-time, but requires dynamically allocated memory. The
-// memory is freed once the sound finishes playing. If a one-time pitch adjustment is desired, for performance
-// reasons please consider doing an off-line pitch adjustment manually as a pre-processing step for your sounds.
-// Also, consider changing cs_malloc16 and cs_free16 to match your custom memory allocation needs. Try adjusting
-// CUTE_SOUND_PITCH_QUALITY (must be a power of two) and see how this affects your performance.
-void cs_set_pitch(cs_playing_sound_t* sound, float pitch);
-
 // Delays sound before actually playing it. Requires context to be passed in
 // since there's a conversion from seconds to samples per second.
 // If one were so inclined another version could be implemented like:
@@ -432,24 +387,16 @@ typedef struct cs_play_sound_def_t
 	float volume_left;
 	float volume_right;
 	float pan;
-	float pitch;
 	float delay;
 	cs_loaded_sound_t* loaded;
-	void* dsp_mixer_def;
 } cs_play_sound_def_t;
 
 cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def);
 cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound);
 void cs_stop_all_sounds(cs_context_t* ctx);
 
-// dsp mixer callbacks
-typedef void* (cs_create_dsp_mixer_callback)(void* ctx, const void* mixer_def);
-typedef void (cs_release_dsp_mixer_callback)(void* ctx, void** mixer);
-extern cs_create_dsp_mixer_callback* cs_make_dsp_mixer;
-extern cs_release_dsp_mixer_callback* cs_release_dsp_mixer;
-
 // SDL_RWops specific functions
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#ifdef SDL_rwops_h_
 
 	// Provides the ability to use cs_load_wav with an SDL_RWops object.
 	cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context);
@@ -461,7 +408,73 @@ extern cs_release_dsp_mixer_callback* cs_release_dsp_mixer;
 
 	#endif
 
-#endif
+#endif // SDL_rwops_h_
+
+/**
+ * Uniquely identifies a plugin once added to a `cs_context_t` via `cs_add_plugin`.
+ */
+typedef int cs_plugin_id_t;
+
+/**
+ * Plugin interface.
+ *
+ * A plugin is anyone who implements one of these cs_plugin_interface_t structs
+ * and then calls `cs_add_plugin(ctx, plugin_ptr)`. Plugins can be implemented to
+ * perform custom operations on playing sounds before they mixed to the audio driver.
+ */
+typedef struct cs_plugin_interface_t
+{
+	/**
+	 * This pointer is used to represent your plugin instance, and is pased to all callbacks as the
+	 * `plugin_instance` pointer. This pointer is not managed by cute sound in any way. You are
+	 * responsible for allocating and releasing all resources associated with the plugin instance.
+	 */
+	void* plugin_instance;
+
+	/**
+	 * Called whenever a new sound is starting to play. `playing_sound_udata` is optional, and should
+	 * point to whatever data you would like to associate with playing sounds, on a per-playing-sound
+	 * basis.
+	 *
+	 * This function is only called from user threads whenever `cs_play_sound` or `cs_insert_sound`
+	 * is called.
+	 */
+	void (*on_make_playing_sound_fn)(cs_context_t* cs_ctx, void* plugin_instance, void** playing_sound_udata, const cs_playing_sound_t* sound);
+
+	/**
+	 * Called once for each time `on_make_playing_sound_fn` is called. The pointer originally assigned
+	 * in `on_make_playing_sound_fn` will be passed back here as `playing_sound_udata`. The intent is
+	 * to let the user free up any resources associated with the playing sound instance before the sound
+	 * is released completely internally.
+	 *
+	 * This function can be called from the user thread, or from the mixer thread.
+	 */
+	void (*on_free_playing_sound_fn)(cs_context_t* cs_ctx, void* plugin_instance, void* playing_sound_udata, const cs_playing_sound_t* sound);
+
+	/**
+	 * Called when mixing each playing sound instance, once per channel on each playing sound instance.
+	 * This function gives the plugin a chance to alter any audio before being mixed by cute_sound to
+	 * the audio driver. The source audio is not alterable, however, the plugin can copy `samples_in`
+	 * and then output modified samples in `samples_out`.
+	 *
+	 * `channel_index`       This function is called once per source channel, so `channel_index` will be either
+	 *                       0 or 1, depending on the channel count.
+	 * `samples_in`          All audio from the playing sound's source.
+	 * `sample_count`        The number of samples in `samples_in` and expected in `samples_out`.
+	 * `samples_out`         Required to point to a valid samples buffer. The simplest case is to assign `samples_out`
+	 *                       directly as `samples_in`, performing no modifications. In most cases though the plugin
+	 *                       will make a copy of `(float*)samples_in`, alter the samples, and assign `samples_out` to
+	 *                       point to the modified samples. `samples_out` is expected to point to a valid buffer until
+	 *                       the next time `on_mix_fn` is called. Typically the plugin can hold a single buffer used
+	 *                       for altered samples, and simply reuse the same buffer each time `on_mix_fn` is called.
+	 * `playing_sound_udata` The user data `playing_sound_udata` assigned when `on_make_playing_sound_fn` was called.
+	 *
+	 * This function can be called from the user thread, or from the mixer thread.
+	 */
+	void (*on_mix_fn)(cs_context_t* cs_ctx, void* plugin_instance, int channel_index, const float* samples_in, int sample_count, float** samples_out, void* playing_sound_udata, const cs_playing_sound_t* sound);
+} cs_plugin_interface_t;
+
+cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plugin);
 
 #define CUTE_SOUND_H
 #endif
@@ -470,11 +483,10 @@ extern cs_release_dsp_mixer_callback* cs_release_dsp_mixer;
 #ifndef CUTE_SOUND_IMPLEMENTATION_ONCE
 #define CUTE_SOUND_IMPLEMENTATION_ONCE
 
-// Change the allocator as necessary
 #if !defined(CUTE_SOUND_ALLOC)
 	#include <stdlib.h>	// malloc, free
-	#define CUTE_SOUND_ALLOC(size) malloc(size)
-	#define CUTE_SOUND_FREE(mem) free(mem)
+	#define CUTE_SOUND_ALLOC(size, ctx) malloc(size)
+	#define CUTE_SOUND_FREE(mem, ctx) free(mem)
 #endif
 
 #include <stdio.h>	// fopen, fclose
@@ -482,39 +494,97 @@ extern cs_release_dsp_mixer_callback* cs_release_dsp_mixer;
 #include <xmmintrin.h>
 #include <emmintrin.h>
 
-cs_create_dsp_mixer_callback* cs_make_dsp_mixer = NULL;
-cs_release_dsp_mixer_callback* cs_release_dsp_mixer = NULL;
+// Platform detection.
+#define CUTE_SOUND_WINDOWS 1
+#define CUTE_SOUND_APPLE   2
+#define CUTE_SOUND_LINUX   3
+#define CUTE_SOUND_SDL     4
 
+#if defined(_WIN32)
+
+	#if !defined _CRT_SECURE_NO_WARNINGS
+		#define _CRT_SECURE_NO_WARNINGS
+	#endif
+
+	#if !defined _CRT_NONSTDC_NO_DEPRECATE
+		#define _CRT_NONSTDC_NO_DEPRECATE
+	#endif
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+
+#elif defined(__APPLE__)
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+
+#elif defined(__linux__)
+
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_LINUX
+
+#else
+
+	// Just use SDL on other esoteric platforms.
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+
+#endif
+
+// Use CUTE_SOUND_FORCE_SDL to override the above macros and use the SDL port.
+#ifdef CUTE_SOUND_FORCE_SDL
+
+	#undef CUTE_SOUND_PLATFORM
+	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+
+#endif
+
+// Platform specific file inclusions.
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 	#ifndef _WINDOWS_
+		#ifndef WIN32_LEAN_AND_MEAN
+			#define WIN32_LEAN_AND_MEAN
+		#endif
 		#include <Windows.h>
 	#endif
 
 	#ifndef _WAVEFORMATEX_
 		#include <mmreg.h>
+		#include <mmsystem.h>
 	#endif
 
 	#include <dsound.h>
 	#undef PlaySound
 
-	#if defined(_MSC_VER)
+	#ifdef _MSC_VER
 		#pragma comment(lib, "dsound.lib")
 	#endif
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 	#include <CoreAudio/CoreAudio.h>
 	#include <AudioUnit/AudioUnit.h>
 	#include <pthread.h>
 	#include <mach/mach_time.h>
 
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+	#define ALSA_PCM_NEW_HW_PARAMS_API
+	#include <alsa/asoundlib.h>
+	#include <unistd.h> // usleep
+	#include <dlfcn.h> // dlopen, dclose, dlsym
+	#include <pthread.h>
+	#include <assert.h>
+
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+
+	#include <SDL2/SDL.h>
+
 #else
+
+	#error Unsupported platform - please choose one of CUTE_SOUND_WINDOWS, CUTE_SOUND_APPLE, CUTE_SOUND_LINUX or CUTE_SOUND_SDL.
 
 #endif
 
 #define CUTE_SOUND_CHECK(X, Y) do { if (!(X)) { cs_error_reason = Y; goto ts_err; } } while (0)
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC && defined(__clang__)
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE && defined(__clang__)
 	#define CUTE_SOUND_ASSERT_INTERNAL __builtin_trap()
 #else
 	#define CUTE_SOUND_ASSERT_INTERNAL *(int*)0 = 0
@@ -525,7 +595,7 @@ cs_release_dsp_mixer_callback* cs_release_dsp_mixer = NULL;
 
 const char* cs_error_reason;
 
-static void* cs_read_file_to_memory(const char* path, int* size)
+static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 {
 	void* data = 0;
 	FILE* fp = fopen(path, "rb");
@@ -536,7 +606,7 @@ static void* cs_read_file_to_memory(const char* path, int* size)
 		fseek(fp, 0, SEEK_END);
 		sizeNum = (int)ftell(fp);
 		fseek(fp, 0, SEEK_SET);
-		data = CUTE_SOUND_ALLOC(sizeNum);
+		data = CUTE_SOUND_ALLOC(sizeNum, mem_ctx);
 		fread(data, sizeNum, 1, fp);
 		fclose(fp);
 	}
@@ -558,9 +628,9 @@ static char* cs_next(char* data)
 	return data + 8 + size;
 }
 
-static void* cs_malloc16(size_t size)
+static void* cs_malloc16(size_t size, void* mem_ctx)
 {
-	void* p = CUTE_SOUND_ALLOC(size + 16);
+	void* p = CUTE_SOUND_ALLOC(size + 16, mem_ctx);
 	if (!p) return 0;
 	unsigned char offset = (size_t)p & 15;
 	p = (void*)CUTE_SOUND_ALIGN(p + 1, 16);
@@ -569,10 +639,10 @@ static void* cs_malloc16(size_t size)
 	return p;
 }
 
-static void cs_free16(void* p)
+static void cs_free16(void* p, void* mem_ctx)
 {
 	if (!p) return;
-	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF));
+	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF), NULL);
 }
 
 static void cs_last_element(__m128* a, int i, int j, int16_t* samples, int offset)
@@ -665,7 +735,7 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		{
 		case 1:
 		{
-			sound->channels[0] = cs_malloc16(wide_count * sizeof(__m128));
+			sound->channels[0] = cs_malloc16(wide_count * sizeof(__m128), NULL);
 			sound->channels[1] = 0;
 			__m128* a = (__m128*)sound->channels[0];
 
@@ -683,7 +753,7 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 
 		case 2:
 		{
-			__m128* a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2);
+			__m128* a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2, NULL);
 			__m128* b = a + wide_count;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
@@ -722,9 +792,9 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 {
 	cs_loaded_sound_t sound = { 0 };
 	int size;
-	char* wav = (char*)cs_read_file_to_memory(path, &size);
+	char* wav = (char*)cs_read_file_to_memory(path, &size, NULL);
 	cs_read_mem_wav(wav, size, &sound);
-	CUTE_SOUND_FREE(wav);
+	CUTE_SOUND_FREE(wav, NULL);
 	return sound;
 }
 
@@ -732,10 +802,10 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 
 // Load an SDL_RWops object's data into memory.
 // Ripped straight from: https://wiki.libsdl.org/SDL_RWread
-static void* cs_read_rw_to_memory(SDL_RWops* rw, int* size)
+static void* cs_read_rw_to_memory(SDL_RWops* rw, int* size, void* mem_ctx)
 {
 	Sint64 res_size = SDL_RWsize(rw);
-	char* data = (char*)CUTE_SOUND_ALLOC((size_t)(res_size + 1));
+	char* data = (char*)CUTE_SOUND_ALLOC((size_t)(res_size + 1), mem_ctx);
 
 	Sint64 nb_read_total = 0, nb_read = 1;
 	char* buf = data;
@@ -750,7 +820,7 @@ static void* cs_read_rw_to_memory(SDL_RWops* rw, int* size)
 
 	if (nb_read_total != res_size)
 	{
-		CUTE_SOUND_FREE(data);
+		CUTE_SOUND_FREE(data, NULL);
 		return NULL;
 	}
 
@@ -762,9 +832,9 @@ cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context)
 {
 	cs_loaded_sound_t sound = { 0 };
 	int size;
-	char* wav = (char*)cs_read_rw_to_memory(context, &size);
+	char* wav = (char*)cs_read_rw_to_memory(context, &size, NULL);
 	cs_read_mem_wav(wav, size, &sound);
-	CUTE_SOUND_FREE(wav);
+	CUTE_SOUND_FREE(wav, NULL);
 	return sound;
 }
 
@@ -794,7 +864,7 @@ void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound)
 		{
 		case 1:
 		{
-			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128));
+			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128), NULL);
 			b = 0;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4)
@@ -810,7 +880,7 @@ void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound)
 		}	break;
 
 		case 2:
-			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2);
+			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2, NULL);
 			b = a + wide_count;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
@@ -853,10 +923,10 @@ ts_err:
 cs_loaded_sound_t cs_load_ogg(const char* path)
 {
 	int length;
-	void* memory = cs_read_file_to_memory(path, &length);
+	void* memory = cs_read_file_to_memory(path, &length, NULL);
 	cs_loaded_sound_t sound = { 0 };
 	cs_read_mem_ogg(memory, length, &sound);
-	CUTE_SOUND_FREE(memory);
+	CUTE_SOUND_FREE(memory, NULL);
 
 	return sound;
 }
@@ -866,10 +936,10 @@ cs_loaded_sound_t cs_load_ogg(const char* path)
 cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw)
 {
 	int length;
-	void* memory = cs_read_rw_to_memory(rw, &length);
+	void* memory = cs_read_rw_to_memory(rw, &length, NULL);
 	cs_loaded_sound_t sound = { 0 };
 	cs_read_mem_ogg(memory, length, &sound);
-	CUTE_SOUND_FREE(memory);
+	CUTE_SOUND_FREE(memory, NULL);
 
 	return sound;
 }
@@ -880,7 +950,7 @@ cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw)
 
 void cs_free_sound(cs_loaded_sound_t* sound)
 {
-	cs_free16(sound->channels[0]);
+	cs_free16(sound->channels[0], NULL);
 	memset(sound, 0, sizeof(cs_loaded_sound_t));
 }
 
@@ -899,13 +969,10 @@ cs_playing_sound_t cs_make_playing_sound(cs_loaded_sound_t* loaded)
 	playing.volume1 = 1.0f;
 	playing.pan0 = 0.5f;
 	playing.pan1 = 0.5f;
-	playing.pitch = 1.0f;
-	playing.pitch_filter[0] = 0;
-	playing.pitch_filter[1] = 0;
 	playing.sample_index = 0;
 	playing.loaded_sound = loaded;
 	playing.next = 0;
-	playing.dsp_mixer = 0;
+	for (int i = 0; i < CUTE_SOUND_PLUGINS_MAX; ++i) playing.plugin_udata[i] = NULL;
 	return playing;
 }
 
@@ -940,11 +1007,6 @@ void cs_set_pan(cs_playing_sound_t* sound, float pan)
 	sound->pan1 = right;
 }
 
-void cs_set_pitch(cs_playing_sound_t* sound, float pitch)
-{
-	sound->pitch = pitch;
-}
-
 void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_right)
 {
 	if (volume_left < 0.0f) volume_left = 0.0f;
@@ -952,8 +1014,6 @@ void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_ri
 	sound->volume0 = volume_left;
 	sound->volume1 = volume_right;
 }
-
-static void cs_remove_filter(cs_playing_sound_t* playing);
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
@@ -976,7 +1036,6 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
-	void* dsp_context;
 
 	// platform specific stuff
 	LPDIRECTSOUND dsound;
@@ -988,6 +1047,11 @@ struct cs_context_t
 	int separate_thread;
 	int running;
 	int sleep_milliseconds;
+
+	int plugin_count;
+	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
 };
 
 static void cs_release_context(cs_context_t* ctx)
@@ -1005,11 +1069,15 @@ static void cs_release_context(cs_context_t* ctx)
 	cs_playing_sound_t* playing = ctx->playing;
 	while (playing)
 	{
-		cs_remove_filter(playing);
+		for (int i = 0; i < ctx->plugin_count; ++i)
+		{
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+		}
 		playing = playing->next;
 	}
 
-	CUTE_SOUND_FREE(ctx);
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 }
 
 static DWORD WINAPI cs_ctx_thread(LPVOID lpParameter)
@@ -1037,22 +1105,11 @@ static void cs_unlock(cs_context_t* ctx)
 	if (ctx->separate_thread) LeaveCriticalSection(&ctx->critical_section);
 }
 
-void* cs_get_dsp_context(cs_context_t* ctx)
+cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	CUTE_SOUND_ASSERT(ctx);
-	return ctx->dsp_context;
-}
-
-void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
-{
-	CUTE_SOUND_ASSERT(ctx);
-	ctx->dsp_context = dsp_context;
-}
-
-cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
-{
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	int bps = sizeof(INT16) * 2;
-	int buffer_size = play_frequency_in_Hz * bps * num_buffered_seconds;
+	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
 	WAVEFORMATEX format = { 0 };
 	DSBUFFERDESC bufdesc = { 0 };
@@ -1104,13 +1161,13 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 #endif
 		CUTE_SOUND_CHECK(res == DS_OK, "Failed to set format on secondary buffer");
 
-		int sample_count = play_frequency_in_Hz * num_buffered_seconds;
+		int sample_count = buffered_samples;
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
 		int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 		int mix_buffers_size = sizeof(__m128) * wide_count * 2;
 		int sample_buffer_size = sizeof(__m128i) * wide_count;
-		ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size);
-		ctx->latency_samples = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
+		ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
+		ctx->latency_samples = 4096;
 		ctx->running_index = 0;
 		ctx->Hz = play_frequency_in_Hz;
 		ctx->bps = bps;
@@ -1128,7 +1185,8 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 		ctx->running = 1;
 		ctx->separate_thread = 0;
 		ctx->sleep_milliseconds = 0;
-		ctx->dsp_context = 0;
+		ctx->plugin_count = 0;
+		ctx->mem_ctx = user_allocator_ctx;
 
 		if (playing_pool_count)
 		{
@@ -1150,7 +1208,7 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int lat
 	}
 
 ts_err:
-	CUTE_SOUND_FREE(ctx);
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 	return 0;
 }
 
@@ -1162,7 +1220,7 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	CreateThread(0, 0, cs_ctx_thread, ctx, 0, 0);
 }
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 void cs_sleep(int milliseconds)
 {
@@ -1184,7 +1242,6 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
-	void* dsp_context;
 
 	// platform specific stuff
 	AudioComponentInstance inst;
@@ -1195,6 +1252,9 @@ struct cs_context_t
 	int separate_thread;
 	int running;
 	int sleep_milliseconds;
+
+	int plugin_count;
+	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
 };
 
 static void cs_release_context(cs_context_t* ctx)
@@ -1206,11 +1266,15 @@ static void cs_release_context(cs_context_t* ctx)
 	cs_playing_sound_t* playing = ctx->playing;
 	while (playing)
 	{
-		cs_remove_filter(playing);
+		for (int i = 0; i < ctx->plugin_count; ++i)
+		{
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+		}
 		playing = playing->next;
 	}
 
-	CUTE_SOUND_FREE(ctx);
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 }
 
 static void* cs_ctx_thread(void* udata)
@@ -1219,6 +1283,7 @@ static void* cs_ctx_thread(void* udata)
 
 	while (ctx->running)
 	{
+        printf("Entering mix...\n");
 		cs_mix(ctx);
 		if (ctx->sleep_milliseconds) cs_sleep(ctx->sleep_milliseconds);
 		else pthread_yield_np();
@@ -1241,20 +1306,9 @@ static void cs_unlock(cs_context_t* ctx)
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData);
 
-void* cs_get_dsp_context(cs_context_t* ctx)
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	CUTE_SOUND_ASSERT(ctx);
-	return ctx->dsp_context;
-}
-
-void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
-{
-	CUTE_SOUND_ASSERT(ctx);
-	ctx->dsp_context = dsp_context;
-}
-
-cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
-{
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	int bps = sizeof(uint16_t) * 2;
 
 	AudioComponentDescription comp_desc = { 0 };
@@ -1288,16 +1342,14 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 
 	ret = AudioComponentInstanceNew(comp, &inst);
 
-	int sample_count = play_frequency_in_Hz * num_buffered_seconds;
-	int latency_count = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
-	CUTE_SOUND_ASSERT(sample_count > latency_count);
+	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
 	int sample_buffer_size = sizeof(__m128i) * wide_count;
-	cs_context_t* ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size);
+	cs_context_t* ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ret == noErr, "AudioComponentInstanceNew failed");
-	ctx->latency_samples = latency_count;
+	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
 	ctx->Hz = play_frequency_in_Hz;
@@ -1314,7 +1366,8 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
-	ctx->dsp_context = 0;
+	ctx->plugin_count = 0;
+	ctx->mem_ctx = user_allocator_ctx;
 
 	ret = AudioUnitSetProperty(inst, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &stream_desc, sizeof(stream_desc));
 	CUTE_SOUND_CHECK(ret == noErr, "Failed to set stream forat");
@@ -1348,7 +1401,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	return ctx;
 
 ts_err:
-	CUTE_SOUND_FREE(ctx);
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 	return 0;
 }
 
@@ -1360,7 +1413,289 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	pthread_create(&ctx->thread, 0, cs_ctx_thread, ctx);
 }
 
-#else
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+void cs_sleep(int milliseconds)
+{
+	usleep(milliseconds * 1000);
+}
+
+// Load up ALSA functions manually, so nobody has to deal with compiler linker flags.
+typedef struct cs_pcm_functions_t
+{
+	int (*snd_pcm_open)(snd_pcm_t**, const char*, snd_pcm_stream_t, int);
+	int (*snd_pcm_close)(snd_pcm_t* pcm);
+	int (*snd_pcm_hw_params_any)(snd_pcm_t*, snd_pcm_hw_params_t*);
+	int (*snd_pcm_hw_params_set_access)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_access_t);
+	int (*snd_pcm_hw_params_set_format)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_format_t);
+	int (*snd_pcm_hw_params_set_rate_near)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+	int (*snd_pcm_hw_params_set_channels)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int);
+	int (*snd_pcm_hw_params_set_period_size_near)(snd_pcm_t*, snd_pcm_hw_params_t*, snd_pcm_uframes_t*, int*);
+	int (*snd_pcm_hw_params_set_periods_min)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+	int (*snd_pcm_hw_params_set_periods_first)(snd_pcm_t*, snd_pcm_hw_params_t*, unsigned int*, int*);
+    int (*snd_pcm_hw_params)(snd_pcm_t*, snd_pcm_hw_params_t*);
+	int (*snd_pcm_sw_params_current)(snd_pcm_t*, snd_pcm_sw_params_t*);
+	int (*snd_pcm_sw_params_set_avail_min)(snd_pcm_t*, snd_pcm_sw_params_t*, snd_pcm_uframes_t);
+	int (*snd_pcm_sw_params_set_start_threshold)(snd_pcm_t*, snd_pcm_sw_params_t*, snd_pcm_uframes_t);
+	int (*snd_pcm_sw_params)(snd_pcm_t*, snd_pcm_sw_params_t*);
+	snd_pcm_sframes_t (*snd_pcm_avail)(snd_pcm_t*);
+	snd_pcm_sframes_t (*snd_pcm_writei)(snd_pcm_t*, const void*, snd_pcm_uframes_t);
+	size_t (*snd_pcm_hw_params_sizeof)(void);
+	size_t (*snd_pcm_sw_params_sizeof)(void);
+	int (*snd_pcm_drain)(snd_pcm_t*);
+	int (*snd_pcm_recover)(snd_pcm_t*, int, int);
+} cs_pcm_functions_t;
+
+#define CUTE_SOUND_DLSYM(fn) \
+	do { \
+		void* ptr = dlsym(handle, #fn); \
+		assert(ptr); \
+		memcpy(&fns->fn, &ptr, sizeof(void*)); \
+	} while (0)
+
+static void* cs_load_alsa_functions(cs_pcm_functions_t* fns)
+{
+	void* handle = dlopen("libasound.so", RTLD_NOW);
+	if (!handle) return NULL;
+
+	memset(fns, 0, sizeof(*fns));
+
+	CUTE_SOUND_DLSYM(snd_pcm_open);
+	CUTE_SOUND_DLSYM(snd_pcm_close);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_any);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_access);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_format);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_rate_near);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_format);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_channels);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_period_size_near);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_periods_min);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_set_periods_first);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params);
+    CUTE_SOUND_DLSYM(snd_pcm_sw_params);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_current);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_set_avail_min);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_set_start_threshold);
+	CUTE_SOUND_DLSYM(snd_pcm_avail);
+	CUTE_SOUND_DLSYM(snd_pcm_writei);
+	CUTE_SOUND_DLSYM(snd_pcm_hw_params_sizeof);
+	CUTE_SOUND_DLSYM(snd_pcm_sw_params_sizeof);
+	CUTE_SOUND_DLSYM(snd_pcm_drain);
+	CUTE_SOUND_DLSYM(snd_pcm_recover);
+
+	return handle;
+}
+
+struct cs_context_t
+{
+	unsigned latency_samples;
+	unsigned index0; // read
+	unsigned index1; // write
+	unsigned running_index;
+	int Hz;
+	int bps;
+	int buffer_size;
+	int wide_count;
+	int sample_count;
+	cs_playing_sound_t* playing;
+	__m128* floatA;
+	__m128* floatB;
+	__m128i* samples;
+	cs_playing_sound_t* playing_pool;
+	cs_playing_sound_t* playing_free;
+
+	// Platform specific stuff.
+	snd_pcm_t* pcm_handle;
+	cs_pcm_functions_t fns;
+	void *alsa_so;
+
+	// data for cs_mix thread, enable these with cs_spawn_mix_thread
+	pthread_t thread;
+	pthread_mutex_t mutex;
+	int separate_thread;
+	int running;
+	int sleep_milliseconds;
+
+	int plugin_count;
+	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
+};
+
+static void cs_release_context(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_destroy(&ctx->mutex);
+	cs_playing_sound_t* playing = ctx->playing;
+	while (playing)
+	{
+		for (int i = 0; i < ctx->plugin_count; ++i)
+		{
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+		}
+		playing = playing->next;
+	}
+	ctx->fns.snd_pcm_drain(ctx->pcm_handle);
+	ctx->fns.snd_pcm_close(ctx->pcm_handle);
+	dlclose(ctx->alsa_so);
+
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
+}
+
+int cs_ctx_thread(void* udata)
+{
+	cs_context_t* ctx = (cs_context_t*)udata;
+
+	while (ctx->running)
+	{
+		cs_mix(ctx);
+		if (ctx->sleep_milliseconds) cs_sleep(ctx->sleep_milliseconds);
+		else cs_sleep(1);
+	}
+
+	ctx->separate_thread = 0;
+	return 0;
+}
+
+static void cs_lock(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+}
+
+static void cs_unlock(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+}
+
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
+{
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
+	(void)unused;
+	int sample_count = buffered_samples;
+	int bps;
+	int latency_count;
+	int wide_count;
+	int pool_size;
+	int mix_buffers_size;
+	int sample_buffer_size;
+	cs_context_t* ctx = NULL;
+
+	// Platform specific things.
+	snd_pcm_t* pcm_handle;
+	cs_pcm_functions_t fns;
+	snd_pcm_uframes_t period_size;
+	const char* default_device = "hw:0,0";
+	unsigned int periods = 2;
+    int dir = 0;
+	snd_pcm_hw_params_t *hw_params = NULL;
+	snd_pcm_sw_params_t *sw_params = NULL;
+
+// This hack is necessary for some inline'd code in ALSA's headers that tries to
+// call these sizeof functions, which we are loading into the cute sound context manually.
+#define snd_pcm_hw_params_sizeof fns.snd_pcm_hw_params_sizeof
+#define snd_pcm_sw_params_sizeof fns.snd_pcm_sw_params_sizeof
+
+	void* alsa_so = cs_load_alsa_functions(&fns);
+	CUTE_SOUND_CHECK(alsa_so, "Unable to load ALSA functions from shared library.");
+    printf("%p\n", fns.snd_pcm_open);
+	int res = fns.snd_pcm_open(&pcm_handle, default_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to open default audio device.");
+	snd_pcm_hw_params_alloca(&hw_params);
+	res = fns.snd_pcm_hw_params_any(pcm_handle, hw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set default parameters.");
+	res = fns.snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+	CUTE_SOUND_CHECK(res >= 0, "Only interleaved sample output is supported by cute_sound, and is not available.");
+	res = fns.snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_S16_LE);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set sample format.");
+	res = fns.snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, (unsigned*)&play_frequency_in_Hz, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set sample rate.");
+	res = fns.snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set channel count.");
+	period_size = (snd_pcm_uframes_t)sample_count;
+	res = fns.snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set buffer size, likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params_set_periods_min(pcm_handle, hw_params, &periods, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set double buffering (min), likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params_set_periods_first(pcm_handle, hw_params, &periods, &dir);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set double buffering (first), likely not enough RAM for these settings.");
+	res = fns.snd_pcm_hw_params(pcm_handle, hw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to send hardware parameters to the driver.");
+    snd_pcm_sw_params_alloca(&sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to allocate software parameters.");
+	res = fns.snd_pcm_sw_params_current(pcm_handle, sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to initialize software parameters.");
+	res = fns.snd_pcm_sw_params_set_avail_min(pcm_handle, sw_params, period_size);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set minimum available count.");
+	res = fns.snd_pcm_sw_params_set_start_threshold(pcm_handle, sw_params, 1);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to set start threshold.");
+	res = fns.snd_pcm_sw_params(pcm_handle, sw_params);
+	CUTE_SOUND_CHECK(res >= 0, "Failed to send software parameters to the driver.");
+
+	// Platform independent things.
+	sample_count = (int)period_size;
+	bps = sizeof(uint16_t) * 2;
+	wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
+	pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
+	mix_buffers_size = sizeof(__m128) * wide_count * 2;
+	sample_buffer_size = sizeof(__m128i) * wide_count;
+
+	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
+	CUTE_SOUND_CHECK(ctx != NULL, "Can't create audio context");
+	ctx->latency_samples = 4096;
+	ctx->index0 = 0;
+	ctx->index1 = 0;
+	ctx->Hz = play_frequency_in_Hz;
+	ctx->bps = bps;
+	ctx->wide_count = wide_count;
+	ctx->sample_count = wide_count * 4;
+	ctx->playing = 0;
+	ctx->floatA = (__m128*)(ctx + 1);
+	ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+	CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
+	ctx->floatB = ctx->floatA + wide_count;
+	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->running = 1;
+	ctx->separate_thread = 0;
+	ctx->sleep_milliseconds = 0;
+	ctx->plugin_count = 0;
+	ctx->mem_ctx = user_allocator_ctx;
+
+	// Platform dependent assignments.
+	ctx->fns = fns;
+	ctx->pcm_handle = pcm_handle;
+	ctx->alsa_so = alsa_so;
+
+	if (playing_pool_count)
+	{
+		ctx->playing_pool = (cs_playing_sound_t*)(ctx->samples + wide_count);
+		for (int i = 0; i < playing_pool_count - 1; ++i)
+			ctx->playing_pool[i].next = ctx->playing_pool + i + 1;
+		ctx->playing_pool[playing_pool_count - 1].next = 0;
+		ctx->playing_free = ctx->playing_pool;
+	}
+
+	else
+	{
+		ctx->playing_pool = 0;
+		ctx->playing_free = 0;
+	}
+
+	return ctx;
+
+ts_err:
+	if (ctx) CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
+	return 0;
+}
+
+void cs_spawn_mix_thread(cs_context_t* ctx)
+{
+	if (ctx->separate_thread) return;
+	pthread_mutex_init(&ctx->mutex, NULL);
+	ctx->separate_thread = 1;
+	pthread_create(&ctx->thread, NULL, (void* (*)(void*))cs_ctx_thread, ctx);
+}
+
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 void cs_sleep(int milliseconds)
 {
@@ -1384,7 +1719,6 @@ struct cs_context_t
 	__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
-	void* dsp_context;
 
 	// data for cs_mix thread, enable these with cs_spawn_mix_thread
 	SDL_Thread* thread;
@@ -1392,6 +1726,11 @@ struct cs_context_t
 	int separate_thread;
 	int running;
 	int sleep_milliseconds;
+
+	int plugin_count;
+	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
 };
 
 static void cs_release_context(cs_context_t* ctx)
@@ -1400,12 +1739,16 @@ static void cs_release_context(cs_context_t* ctx)
 	cs_playing_sound_t* playing = ctx->playing;
 	while (playing)
 	{
-		cs_remove_filter(playing);
+		for (int i = 0; i < ctx->plugin_count; ++i)
+		{
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+		}
 		playing = playing->next;
 	}
 	SDL_CloseAudio();
 
-	CUTE_SOUND_FREE(ctx);
+	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 }
 
 int cs_ctx_thread(void* udata)
@@ -1435,25 +1778,12 @@ static void cs_unlock(cs_context_t* ctx)
 
 static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
 
-void* cs_get_dsp_context(cs_context_t* ctx)
+cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	CUTE_SOUND_ASSERT(ctx);
-	return ctx->dsp_context;
-}
-
-void cs_set_dsp_context(cs_context_t* ctx, void* dsp_context)
-{
-	CUTE_SOUND_ASSERT(ctx);
-	ctx->dsp_context = dsp_context;
-}
-
-cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int latency_factor_in_Hz, int num_buffered_seconds, int playing_pool_count)
-{
+	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
 	(void)unused;
 	int bps = sizeof(uint16_t) * 2;
-	int sample_count = play_frequency_in_Hz * num_buffered_seconds;
-	int latency_count = (unsigned)CUTE_SOUND_ALIGN(play_frequency_in_Hz / latency_factor_in_Hz, 4);
-	CUTE_SOUND_ASSERT(sample_count > latency_count);
+	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
 	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
@@ -1463,9 +1793,9 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	int ret = SDL_Init(SDL_INIT_AUDIO);
 	CUTE_SOUND_CHECK(ret >= 0, "Can't init SDL audio");
 
-	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size);
+	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ctx != NULL, "Can't create audio context");
-	ctx->latency_samples = latency_count;
+	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
 	ctx->Hz = play_frequency_in_Hz;
@@ -1481,7 +1811,8 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
-	ctx->dsp_context = 0;
+	ctx->plugin_count = 0;
+	ctx->mem_ctx = user_allocator_ctx;
 
 	SDL_memset(&wanted, 0, sizeof(wanted));
 	wanted.freq = play_frequency_in_Hz;
@@ -1512,7 +1843,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int l
 	return ctx;
 
 ts_err:
-	if (ctx) CUTE_SOUND_FREE(ctx);
+	if (ctx) CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 	return 0;
 }
 
@@ -1521,12 +1852,12 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 	if (ctx->separate_thread) return;
 	ctx->mutex = SDL_CreateMutex();
 	ctx->separate_thread = 1;
-	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "TinySoundThread", ctx);
+	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", ctx);
 }
 
-#endif
+#endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
 
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 static int cs_samples_written(cs_context_t* ctx)
 {
@@ -1544,7 +1875,7 @@ static int cs_samples_unwritten(cs_context_t* ctx)
 	else return index0 - index1;
 }
 
-static int cs_sampels_to_mix(cs_context_t* ctx)
+static int cs_samples_to_mix(cs_context_t* ctx)
 {
 	int lat = ctx->latency_samples;
 	int written = cs_samples_written(ctx);
@@ -1642,6 +1973,17 @@ void cs_thread_sleep_delay(cs_context_t* ctx, int milliseconds)
 	ctx->sleep_milliseconds = milliseconds;
 }
 
+static void s_on_make_playing(cs_context_t* ctx, cs_playing_sound_t* sound)
+{
+	for (int i = 0; i < ctx->plugin_count; ++i)
+	{
+		cs_plugin_interface_t* plugin = ctx->plugins + i;
+		void* udata = NULL;
+		plugin->on_make_playing_sound_fn(ctx, plugin->plugin_instance, &udata, sound);
+		if (udata) sound->plugin_udata[i] = udata;
+	}
+}
+
 int cs_insert_sound(cs_context_t* ctx, cs_playing_sound_t* sound)
 {
 	// Cannot use cs_playing_sound_t if cs_make_context was passed non-zero for playing_pool_count
@@ -1656,7 +1998,11 @@ int cs_insert_sound(cs_context_t* ctx, cs_playing_sound_t* sound)
 	ctx->playing = sound;
 	sound->loaded_sound->playing_count += 1;
 	sound->active = 1;
+
+	s_on_make_playing(ctx, sound);
+
 	cs_unlock(ctx);
+
 	return 1;
 }
 
@@ -1676,10 +2022,8 @@ cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound)
 	def.volume_left = 1.0f;
 	def.volume_right = 1.0f;
 	def.pan = 0.5f;
-	def.pitch = 1.0f;
 	def.delay = 0.0f;
 	def.loaded = sound;
-	def.dsp_mixer_def = 0;
 	return def;
 }
 
@@ -1696,19 +2040,12 @@ cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def)
 	playing->looped = def.looped;
 	cs_set_volume(playing, def.volume_left, def.volume_right);
 	cs_set_pan(playing, def.pan);
-	cs_set_pitch(playing, def.pitch);
 	cs_set_delay(ctx, playing, def.delay);
 	playing->next = ctx->playing;
 	ctx->playing = playing;
 	playing->loaded_sound->playing_count += 1;
-	if(cs_make_dsp_mixer)
-	{
-		playing->dsp_mixer = cs_make_dsp_mixer(ctx->dsp_context, def.dsp_mixer_def);
-	}
-	else
-	{
-		playing->dsp_mixer = 0;
-	}
+
+	s_on_make_playing(ctx, playing);
 
 	cs_unlock(ctx);
 
@@ -1734,6 +2071,13 @@ void cs_stop_all_sounds(cs_context_t* ctx)
 	cs_unlock(ctx);
 }
 
+cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plugin)
+{
+	CUTE_SOUND_ASSERT(ctx->plugin_count < CUTE_SOUND_PLUGINS_MAX);
+	ctx->plugins[ctx->plugin_count++] = *plugin;
+	return ctx->plugin_count - 1;
+}
+
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 static void cs_position(cs_context_t* ctx, int* byte_to_lock, int* bytes_to_write)
@@ -1749,7 +2093,8 @@ static void cs_position(cs_context_t* ctx, int* byte_to_lock, int* bytes_to_writ
 	CUTE_SOUND_ASSERT(hr == DS_OK);
 
 	DWORD lock = (ctx->running_index * ctx->bps) % ctx->buffer_size;
-	DWORD target_cursor = (write_cursor + ctx->latency_samples * ctx->bps) % ctx->buffer_size;
+	DWORD target_cursor = (write_cursor + ctx->latency_samples * ctx->bps);
+	if (target_cursor > (DWORD)ctx->buffer_size) target_cursor %= ctx->buffer_size;
 	target_cursor = (DWORD)CUTE_SOUND_ALIGN(target_cursor, 16);
 	DWORD write;
 
@@ -1828,7 +2173,7 @@ static void cs_memcpy_to_directsound(cs_context_t* ctx, int16_t* samples, int by
 	}
 }
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData)
 {
@@ -1859,50 +2204,6 @@ static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len)
 
 #endif
 
-static void cs_pitch_shift(float pitchShift, int num_samples_to_process, float sampleRate, float* indata, cs_pitch_data_t** pitch_filter);
-
-// Pitch processing tunables
-#define CUTE_SOUND_MAX_FRAME_LENGTH 4096
-#define CUTE_SOUND_PITCH_FRAME_SIZE 512
-#define CUTE_SOUND_PITCH_QUALITY 8
-
-// interals
-#define CUTE_SOUND_STEPSIZE (CUTE_SOUND_PITCH_FRAME_SIZE / CUTE_SOUND_PITCH_QUALITY)
-#define CUTE_SOUND_OVERLAP (CUTE_SOUND_PITCH_FRAME_SIZE - CUTE_SOUND_STEPSIZE)
-#define CUTE_SOUND_EXPECTED_FREQUENCY (2.0f * 3.14159265359f * (float)CUTE_SOUND_STEPSIZE / (float)CUTE_SOUND_PITCH_FRAME_SIZE)
-
-// TODO:
-// Use a memory pool for these things. For now they are just cs_malloc16'd/cs_free16'd
-// Not high priority to use a pool, since pitch shifting is already really expensive,
-// and cost of malloc is dwarfed. But would be a nice-to-have for potential memory
-// fragmentation issues.
-typedef struct cs_pitch_data_t
-{
-	float pitch_shifted_output_samples[CUTE_SOUND_MAX_FRAME_LENGTH];
-	float in_FIFO[CUTE_SOUND_STEPSIZE + CUTE_SOUND_PITCH_FRAME_SIZE];
-	float out_FIFO[CUTE_SOUND_STEPSIZE + CUTE_SOUND_PITCH_FRAME_SIZE];
-	float fft_data[2 * CUTE_SOUND_PITCH_FRAME_SIZE];
-	float previous_phase[CUTE_SOUND_PITCH_FRAME_SIZE / 2 + 4];
-	float sum_phase[CUTE_SOUND_PITCH_FRAME_SIZE / 2 + 4];
-	float window_accumulator[CUTE_SOUND_STEPSIZE + CUTE_SOUND_PITCH_FRAME_SIZE];
-	float freq[CUTE_SOUND_PITCH_FRAME_SIZE];
-	float mag[CUTE_SOUND_PITCH_FRAME_SIZE];
-	float pitch_shift_workspace[CUTE_SOUND_PITCH_FRAME_SIZE];
-	int index;
-} cs_pitch_data_t;
-
-static void cs_remove_filter(cs_playing_sound_t* playing)
-{
-	for (int i = 0; i < 2; i++)
-	{
-		if (playing->pitch_filter[i])
-		{
-			cs_free16(playing->pitch_filter[i]);
-			playing->pitch_filter[i] = 0;
-		}
-	}
-}
-
 void cs_mix(cs_context_t* ctx)
 {
 	cs_lock(ctx);
@@ -1916,13 +2217,21 @@ void cs_mix(cs_context_t* ctx)
 	if (!bytes_to_write) goto unlock;
 	int samples_to_write = bytes_to_write / ctx->bps;
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
-	int samples_to_write = cs_sampels_to_mix(ctx);
+	int samples_to_write = cs_samples_to_mix(ctx);
 	if (!samples_to_write) goto unlock;
 	int bytes_to_write = samples_to_write * ctx->bps;
 
-#else
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+
+	snd_pcm_sframes_t frames = ctx->fns.snd_pcm_avail(ctx->pcm_handle);
+	if (frames == -EAGAIN) goto unlock; // No data yet.
+	else if (frames < 0) { /* Fatal error... How should this be handled? */ }
+	else if (frames == 0) goto unlock;
+	int samples_to_write = (int)frames;
+	if (samples_to_write > ctx->latency_samples) samples_to_write = ctx->latency_samples;
+
 #endif
 
 	// clear mixer buffers
@@ -2004,56 +2313,25 @@ void cs_mix(cs_context_t* ctx)
 			int mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
 			int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
 			int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
-
-			// use cs_pitch_shift to on-the-fly pitch shift some samples
-			// only call this function if the user set a custom pitch value
-			float pitch = playing->pitch;
 			int sample_count = (mix_wide - 2 * delay_wide) * 4;
 
-			// CUTE_SOUND_MAX_FRAME_LENGTH represents max samples we can pitch shift in one go. In the event
-			// that this process takes longer than the time required to play the actual sound, just
-			// fall back to the original sound (non-pitch shifted). This will sound very ugly. To
-			// prevent falling behind, make sure not to pitch shift too many sounds at once. Try tweaking
-			// CUTE_SOUND_PITCH_QUALITY to make it lower (must be a power of 2).
-			int falling_behind = sample_count > CUTE_SOUND_MAX_FRAME_LENGTH;
-
-			if (!falling_behind)
+			// Give all plugins a chance to inject altered samples into the mix streams.
+			for (int i = 0; i < ctx->plugin_count; ++i)
 			{
-				if(pitch != 1.0f)
-				{
-					cs_pitch_shift(pitch, sample_count, (float)ctx->Hz, (float*)(cA + delay_wide + offset_wide), playing->pitch_filter);
-					cA = (__m128 *)playing->pitch_filter[0]->pitch_shifted_output_samples;
+				cs_plugin_interface_t* plugin = ctx->plugins + i;
+				float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
+				float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
+				float* samples_out_channel_a = NULL;
+				float* samples_out_channel_b = NULL;
+				plugin->on_mix_fn(ctx, plugin->plugin_instance, 0, plugin_samples_in_channel_a, sample_count, &samples_out_channel_a, playing->plugin_udata[i], playing);
+				if (loaded->channel_count == 2) plugin->on_mix_fn(ctx, plugin->plugin_instance, 1, plugin_samples_in_channel_b, sample_count, &samples_out_channel_b, playing->plugin_udata[i], playing);
+				if (samples_out_channel_a) cA = (__m128*)samples_out_channel_a;
+				if (samples_out_channel_b) cB = (__m128*)samples_out_channel_b;
 
-					if (loaded->channel_count == 2)
-					{
-						cs_pitch_shift(pitch, sample_count, (float)ctx->Hz, (float*)(cB + delay_wide + offset_wide), playing->pitch_filter + 1);
-						cB = (__m128 *)playing->pitch_filter[1]->pitch_shifted_output_samples;
-					}
-
-					offset_wide = -delay_wide;
-				}
-
-				// handles dsp context
-				// handles both channels of audio
-				if (playing->dsp_mixer)
-				{
-#ifdef CUTE_DSP_H
-					cd_mixer_t* dsp_mixer = (cd_mixer_t *)playing->dsp_mixer;
-					cA = (__m128 *)cd_sample_mixer(playing->dsp_mixer, (float*)(cA + delay_wide + offset_wide), 0, sample_count);
-
-					// handle stereo audio
-					if (loaded->channel_count == 2)
-					{
-						cB = (__m128 *)cd_sample_mixer(playing->dsp_mixer, (float *)(cB + delay_wide + offset_wide), 1, sample_count);
-					}
-
-					// set offset_wide to cancel out delay_wide because cA and cB are now owned by the mixer.
-					offset_wide = -delay_wide;
-#endif
-				}
+				// Set offset_wide to cancel out delay_wide because cA and cB are now owned by the plugin,
+				// this elimineating the need for the delay offset.
+				if (!!samples_out_channel_a | !!samples_out_channel_b) offset_wide = -delay_wide;
 			}
-
-			
 
 			// apply volume, load samples into float buffers
 			switch (loaded->channel_count)
@@ -2115,10 +2393,12 @@ void cs_mix(cs_context_t* ctx)
 			CUTE_SOUND_ASSERT(playing->loaded_sound->playing_count >= 0);
 		}
 
-		cs_remove_filter(playing);
-		if(cs_release_dsp_mixer)
+		// Notify plugins of this playing sound instance being released.
+		for (int i = 0; i < ctx->plugin_count; ++i)
 		{
-			cs_release_dsp_mixer(ctx->dsp_context, &playing->dsp_mixer);
+			cs_plugin_interface_t* plugin = ctx->plugins + i;
+			plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
+			playing->plugin_udata[i] = NULL;
 		}
 
 		// if using high-level API manage the cs_playing_sound_t memory ourselves
@@ -2145,7 +2425,7 @@ void cs_mix(cs_context_t* ctx)
 	}
 	cs_memcpy_to_directsound(ctx, (int16_t*)samples, byte_to_lock, bytes_to_write);
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_MAC || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
 
 	// Since the ctx->samples array is already in use as a ring buffer
 	// reusing floatA to store output is a good way to temporarly store
@@ -2160,686 +2440,26 @@ void cs_mix(cs_context_t* ctx)
 		__m128i a2b2a3b3 = _mm_unpackhi_epi32(a, b);
 		samples[i] = _mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
-	cs_push_bytes(ctx, samples, bytes_to_write);
 
-#else
+	// SDL/CoreAudio use a callback mechanism communicating with cute sound
+	// over a ring buffer (accessed by cs_push_bytes and cs_pull_bytes), but
+	// ALSA on Linux has their own memcpy-style function to use... So we don't
+	// need a local ring buffer at all, and can directly hand over the samples.
+	#if CUTE_SOUND_PLATFORM != CUTE_SOUND_LINUX
+		cs_push_bytes(ctx, samples, bytes_to_write);
+	#else
+		int ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
+		if (ret < 0) ret = ctx->fns.snd_pcm_recover(ctx->pcm_handle, ret, 0);
+		if (ret < 0) {
+			// A fatal error occured.
+			ctx->separate_thread = 0;
+		}
+	#endif
+
 #endif
+
 	unlock:
 	cs_unlock(ctx);
-}
-
-// TODO:
-// Try this optimization out (2N POINT REAL FFT USING AN N POINT COMPLEX FFT)
-// http://www.fftguru.com/fftguru.com.tutorial2.pdf
-
-#include <math.h>
-
-static uint32_t cs_rev32(uint32_t x)
-{
-	uint32_t a = ((x & 0xAAAAAAAA) >> 1) | ((x & 0x55555555) << 1);
-	uint32_t b = ((a & 0xCCCCCCCC) >> 2) | ((a & 0x33333333) << 2);
-	uint32_t c = ((b & 0xF0F0F0F0) >> 4) | ((b & 0x0F0F0F0F) << 4);
-	uint32_t d = ((c & 0xFF00FF00) >> 8) | ((c & 0x00FF00FF) << 8);
-	return (d >> 16) | (d << 16);
-}
-
-static uint32_t cx_popcount(uint32_t x)
-{
-	uint32_t a = x - ((x >> 1) & 0x55555555);
-	uint32_t b = (((a >> 2) & 0x33333333) + (a & 0x33333333));
-	uint32_t c = (((b >> 4) + b) & 0x0F0F0F0F);
-	uint32_t d = c + (c >> 8);
-	uint32_t e = d + (d >> 16);
-	uint32_t f = e & 0x0000003F;
-	return f;
-}
-
-static uint32_t cs_log2(uint32_t x)
-{
-	uint32_t a = x | (x >> 1);
-	uint32_t b = a | (a >> 2);
-	uint32_t c = b | (b >> 4);
-	uint32_t d = c | (c >> 8);
-	uint32_t e = d | (d >> 16);
-	uint32_t f = e >> 1;
-	return cx_popcount(f);
-}
-
-// x contains real inputs
-// y contains imaginary inputs
-// count must be a power of 2
-// sign must be 1.0 (forward transform) or -1.0f (inverse transform)
-static void cs_fft(float* x, float* y, int count, float sign)
-{
-	int exponent = (int)cs_log2((uint32_t)count);
-
-	// bit reversal stage
-	// swap all elements with their bit reversed index within the
-	// lowest level of the Cooley-Tukey recursion tree
-	for (int i = 1; i < count - 1; i++)
-	{
-		uint32_t j = cs_rev32((uint32_t)i);
-		j >>= (32 - exponent);
-		if (i < (int)j)
-		{
-			float tx = x[i];
-			float ty = y[i];
-			x[i] = x[j];
-			y[i] = y[j];
-			x[j] = tx;
-			y[j] = ty;
-		}
-	}
-
-	// for each recursive iteration
-	for (int iter = 0, L = 1; iter < exponent; ++iter)
-	{
-		int Ls = L;
-		L <<= 1;
-		float ur = 1.0f; // cos(pi / 2)
-		float ui = 0;    // sin(pi / 2)
-		float arg = 3.14159265359f / (float)Ls;
-		float wr = cosf(arg);
-		float wi = -sign * sinf(arg);
-
-		// rows in DFT submatrix
-		for (int j = 0; j < Ls; ++j)
-		{
-			// do butterflies upon DFT row elements
-			for (int i = j; i < count; i += L)
-			{
-				int index = i + Ls;
-				float x_index = x[index];
-				float y_index = y[index];
-				float x_i = x[i];
-				float y_i = y[i];
-
-				float tr = ur * x_index - ui * y_index;
-				float ti = ur * y_index + ui * x_index;
-				float x_low = x_i - tr;
-				float x_high = x_i + tr;
-				float y_low = y_i - ti;
-				float y_high = y_i + ti;
-
-				x[index] = x_low;
-				y[index] = y_low;
-				x[i] = x_high;
-				y[i] = y_high;
-			}
-
-			// Rotate u1 and u2 via Givens rotations (2d planar rotation).
-			// This keeps cos/sin calls in the outermost loop.
-			// Floating point error is scaled proportionally to Ls.
-			float t = ur * wr - ui * wi;
-			ui = ur * wi + ui * wr;
-			ur = t;
-		}
-	}
-
-	// scale factor for forward transform
-	if (sign > 0)
-	{
-		float inv_count = 1.0f / (float)count;
-		for (int i = 0; i < count; i++)
-		{
-			x[i] *= inv_count;
-			y[i] *= inv_count;
-		}
-	}
-}
-
-#ifdef _MSC_VER
-
-#define CUTE_SOUND_ALIGN16_0 __declspec(align(16))
-#define CUTE_SOUND_ALIGN16_1
-
-#else
-
-#define CUTE_SOUND_ALIGN16_0
-#define CUTE_SOUND_ALIGN16_1 __attribute__((aligned(16)))
-
-#endif
-
-// SSE2 trig funcs from https://github.com/to-miz/sse_mathfun_extension/
-#define _PS_CONST(Name, Val) \
-	CUTE_SOUND_ALIGN16_0 float _ps_##Name[4] CUTE_SOUND_ALIGN16_1 = { Val, Val, Val, Val }
-
-#define _PS_CONST_TYPE(Name, Type, Val) \
-	CUTE_SOUND_ALIGN16_0 Type _ps_##Name[4] CUTE_SOUND_ALIGN16_1 = { Val, Val, Val, Val }
-
-#define _PI32_CONST(Name, Val) \
-	CUTE_SOUND_ALIGN16_0 int _pi32_##Name[4] CUTE_SOUND_ALIGN16_1 = { Val, Val, Val, Val }
-
-_PS_CONST_TYPE(sign_mask, int, (int)0x80000000);
-_PS_CONST_TYPE(inv_sign_mask, int, (int)~0x80000000);
-
-_PS_CONST(atanrange_hi, 2.414213562373095f);
-_PS_CONST(atanrange_lo, 0.4142135623730950f);
-_PS_CONST(cephes_PIO2F, 1.5707963267948966192f);
-_PS_CONST(cephes_PIO4F, 0.7853981633974483096f);
-_PS_CONST(1, 1.0f);
-_PS_CONST(0p5, 0.5f);
-_PS_CONST(0, 0);
-_PS_CONST(sincof_p0, -1.9515295891E-4f);
-_PS_CONST(sincof_p1, 8.3321608736E-3f);
-_PS_CONST(sincof_p2, -1.6666654611E-1f);
-_PS_CONST(atancof_p0, 8.05374449538e-2f);
-_PS_CONST(atancof_p1, 1.38776856032E-1f);
-_PS_CONST(atancof_p2, 1.99777106478E-1f);
-_PS_CONST(atancof_p3, 3.33329491539E-1f);
-_PS_CONST(cephes_PIF, 3.141592653589793238f);
-_PS_CONST(cephes_2PIF, 2.0f * 3.141592653589793238f);
-_PS_CONST(cephes_FOPI, 1.27323954473516f); // 4 / M_PI
-_PS_CONST(minus_cephes_DP1, -0.78515625f);
-_PS_CONST(minus_cephes_DP2, -2.4187564849853515625e-4f);
-_PS_CONST(minus_cephes_DP3, -3.77489497744594108e-8f);
-_PS_CONST(coscof_p0, 2.443315711809948E-005f);
-_PS_CONST(coscof_p1, -1.388731625493765E-003f);
-_PS_CONST(coscof_p2, 4.166664568298827E-002f);
-_PS_CONST(frame_size, (float)CUTE_SOUND_PITCH_FRAME_SIZE);
-
-_PI32_CONST(1, 1);
-_PI32_CONST(inv1, ~1);
-_PI32_CONST(2, 2);
-_PI32_CONST(4, 4);
-
-#if 0 /* temporary comment it out, remove "unused functions" warning */
-static __m128 _mm_atan_ps(__m128 x)
-{
-	__m128 sign_bit, y;
-
-	sign_bit = x;
-	/* take the absolute value */
-	x = _mm_and_ps(x, *(__m128*)_ps_inv_sign_mask);
-	/* extract the sign bit (upper one) */
-	sign_bit = _mm_and_ps(sign_bit, *(__m128*)_ps_sign_mask);
-
-	/* range reduction, init x and y depending on range */
-		/* x > 2.414213562373095 */
-	__m128 cmp0 = _mm_cmpgt_ps(x, *(__m128*)_ps_atanrange_hi);
-	/* x > 0.4142135623730950 */
-	__m128 cmp1 = _mm_cmpgt_ps(x, *(__m128*)_ps_atanrange_lo);
-
-	/* x > 0.4142135623730950 && !(x > 2.414213562373095) */
-	__m128 cmp2 = _mm_andnot_ps(cmp0, cmp1);
-
-	/* -(1.0/x) */
-	__m128 y0 = _mm_and_ps(cmp0, *(__m128*)_ps_cephes_PIO2F);
-	__m128 x0 = _mm_div_ps(*(__m128*)_ps_1, x);
-	x0 = _mm_xor_ps(x0, *(__m128*)_ps_sign_mask);
-
-	__m128 y1 = _mm_and_ps(cmp2, *(__m128*)_ps_cephes_PIO4F);
-	/* (x-1.0)/(x+1.0) */
-	__m128 x1_o = _mm_sub_ps(x, *(__m128*)_ps_1);
-	__m128 x1_u = _mm_add_ps(x, *(__m128*)_ps_1);
-	__m128 x1 = _mm_div_ps(x1_o, x1_u);
-
-	__m128 x2 = _mm_and_ps(cmp2, x1);
-	x0 = _mm_and_ps(cmp0, x0);
-	x2 = _mm_or_ps(x2, x0);
-	cmp1 = _mm_or_ps(cmp0, cmp2);
-	x2 = _mm_and_ps(cmp1, x2);
-	x = _mm_andnot_ps(cmp1, x);
-	x = _mm_or_ps(x2, x);
-
-	y = _mm_or_ps(y0, y1);
-
-	__m128 zz = _mm_mul_ps(x, x);
-	__m128 acc = *(__m128*)_ps_atancof_p0;
-	acc = _mm_mul_ps(acc, zz);
-	acc = _mm_sub_ps(acc, *(__m128*)_ps_atancof_p1);
-	acc = _mm_mul_ps(acc, zz);
-	acc = _mm_add_ps(acc, *(__m128*)_ps_atancof_p2);
-	acc = _mm_mul_ps(acc, zz);
-	acc = _mm_sub_ps(acc, *(__m128*)_ps_atancof_p3);
-	acc = _mm_mul_ps(acc, zz);
-	acc = _mm_mul_ps(acc, x);
-	acc = _mm_add_ps(acc, x);
-	y = _mm_add_ps(y, acc);
-
-	/* update the sign */
-	y = _mm_xor_ps(y, sign_bit);
-
-	return y;
-}
-
-static __m128 _mm_atan2_ps(__m128 y, __m128 x)
-{
-	__m128 x_eq_0 = _mm_cmpeq_ps(x, *(__m128*)_ps_0);
-	__m128 x_gt_0 = _mm_cmpgt_ps(x, *(__m128*)_ps_0);
-	__m128 x_le_0 = _mm_cmple_ps(x, *(__m128*)_ps_0);
-	__m128 y_eq_0 = _mm_cmpeq_ps(y, *(__m128*)_ps_0);
-	__m128 x_lt_0 = _mm_cmplt_ps(x, *(__m128*)_ps_0);
-	__m128 y_lt_0 = _mm_cmplt_ps(y, *(__m128*)_ps_0);
-
-	__m128 zero_mask = _mm_and_ps(x_eq_0, y_eq_0);
-	__m128 zero_mask_other_case = _mm_and_ps(y_eq_0, x_gt_0);
-	zero_mask = _mm_or_ps(zero_mask, zero_mask_other_case);
-
-	__m128 pio2_mask = _mm_andnot_ps(y_eq_0, x_eq_0);
-	__m128 pio2_mask_sign = _mm_and_ps(y_lt_0, *(__m128*)_ps_sign_mask);
-	__m128 pio2_result = *(__m128*)_ps_cephes_PIO2F;
-	pio2_result = _mm_xor_ps(pio2_result, pio2_mask_sign);
-	pio2_result = _mm_and_ps(pio2_mask, pio2_result);
-
-	__m128 pi_mask = _mm_and_ps(y_eq_0, x_le_0);
-	__m128 pi = *(__m128*)_ps_cephes_PIF;
-	__m128 pi_result = _mm_and_ps(pi_mask, pi);
-
-	__m128 swap_sign_mask_offset = _mm_and_ps(x_lt_0, y_lt_0);
-	swap_sign_mask_offset = _mm_and_ps(swap_sign_mask_offset, *(__m128*)_ps_sign_mask);
-
-	__m128 offset0 = _mm_setzero_ps();
-	__m128 offset1 = *(__m128*)_ps_cephes_PIF;
-	offset1 = _mm_xor_ps(offset1, swap_sign_mask_offset);
-
-	__m128 offset = _mm_andnot_ps(x_lt_0, offset0);
-	offset = _mm_and_ps(x_lt_0, offset1);
-
-	__m128 arg = _mm_div_ps(y, x);
-	__m128 atan_result = _mm_atan_ps(arg);
-	atan_result = _mm_add_ps(atan_result, offset);
-
-	/* select between zero_result, pio2_result and atan_result */
-
-	__m128 result = _mm_andnot_ps(zero_mask, pio2_result);
-	atan_result = _mm_andnot_ps(pio2_mask, atan_result);
-	atan_result = _mm_andnot_ps(pio2_mask, atan_result);
-	result = _mm_or_ps(result, atan_result);
-	result = _mm_or_ps(result, pi_result);
-
-	return result;
-}
-#endif
-
-static void _mm_sincos_ps(__m128 x, __m128 *s, __m128 *c)
-{
-	__m128 xmm1, xmm2, xmm3 = _mm_setzero_ps(), sign_bit_sin, y;
-	__m128i emm0, emm2, emm4;
-	sign_bit_sin = x;
-	/* take the absolute value */
-	x = _mm_and_ps(x, *(__m128*)_ps_inv_sign_mask);
-	/* extract the sign bit (upper one) */
-	sign_bit_sin = _mm_and_ps(sign_bit_sin, *(__m128*)_ps_sign_mask);
-
-	/* scale by 4/Pi */
-	y = _mm_mul_ps(x, *(__m128*)_ps_cephes_FOPI);
-
-	/* store the integer part of y in emm2 */
-	emm2 = _mm_cvttps_epi32(y);
-
-	/* j=(j+1) & (~1) (see the cephes sources) */
-	emm2 = _mm_add_epi32(emm2, *(__m128i*)_pi32_1);
-	emm2 = _mm_and_si128(emm2, *(__m128i*)_pi32_inv1);
-	y = _mm_cvtepi32_ps(emm2);
-
-	emm4 = emm2;
-
-	/* get the swap sign flag for the sine */
-	emm0 = _mm_and_si128(emm2, *(__m128i*)_pi32_4);
-	emm0 = _mm_slli_epi32(emm0, 29);
-	__m128 swap_sign_bit_sin = _mm_castsi128_ps(emm0);
-
-	/* get the polynom selection mask for the sine*/
-	emm2 = _mm_and_si128(emm2, *(__m128i*)_pi32_2);
-	emm2 = _mm_cmpeq_epi32(emm2, _mm_setzero_si128());
-	__m128 poly_mask = _mm_castsi128_ps(emm2);
-
-	/* The magic pass: "Extended precision modular arithmetic"
-		x = ((x - y * DP1) - y * DP2) - y * DP3; */
-	xmm1 = *(__m128*)_ps_minus_cephes_DP1;
-	xmm2 = *(__m128*)_ps_minus_cephes_DP2;
-	xmm3 = *(__m128*)_ps_minus_cephes_DP3;
-	xmm1 = _mm_mul_ps(y, xmm1);
-	xmm2 = _mm_mul_ps(y, xmm2);
-	xmm3 = _mm_mul_ps(y, xmm3);
-	x = _mm_add_ps(x, xmm1);
-	x = _mm_add_ps(x, xmm2);
-	x = _mm_add_ps(x, xmm3);
-
-	emm4 = _mm_sub_epi32(emm4, *(__m128i*)_pi32_2);
-	emm4 = _mm_andnot_si128(emm4, *(__m128i*)_pi32_4);
-	emm4 = _mm_slli_epi32(emm4, 29);
-	__m128 sign_bit_cos = _mm_castsi128_ps(emm4);
-
-	sign_bit_sin = _mm_xor_ps(sign_bit_sin, swap_sign_bit_sin);
-
-
-	/* Evaluate the first polynom  (0 <= x <= Pi/4) */
-	__m128 z = _mm_mul_ps(x, x);
-	y = *(__m128*)_ps_coscof_p0;
-
-	y = _mm_mul_ps(y, z);
-	y = _mm_add_ps(y, *(__m128*)_ps_coscof_p1);
-	y = _mm_mul_ps(y, z);
-	y = _mm_add_ps(y, *(__m128*)_ps_coscof_p2);
-	y = _mm_mul_ps(y, z);
-	y = _mm_mul_ps(y, z);
-	__m128 tmp = _mm_mul_ps(z, *(__m128*)_ps_0p5);
-	y = _mm_sub_ps(y, tmp);
-	y = _mm_add_ps(y, *(__m128*)_ps_1);
-
-	/* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-
-	__m128 y2 = *(__m128*)_ps_sincof_p0;
-	y2 = _mm_mul_ps(y2, z);
-	y2 = _mm_add_ps(y2, *(__m128*)_ps_sincof_p1);
-	y2 = _mm_mul_ps(y2, z);
-	y2 = _mm_add_ps(y2, *(__m128*)_ps_sincof_p2);
-	y2 = _mm_mul_ps(y2, z);
-	y2 = _mm_mul_ps(y2, x);
-	y2 = _mm_add_ps(y2, x);
-
-	/* select the correct result from the two polynoms */
-	xmm3 = poly_mask;
-	__m128 ysin2 = _mm_and_ps(xmm3, y2);
-	__m128 ysin1 = _mm_andnot_ps(xmm3, y);
-	y2 = _mm_sub_ps(y2, ysin2);
-	y = _mm_sub_ps(y, ysin1);
-
-	xmm1 = _mm_add_ps(ysin1, ysin2);
-	xmm2 = _mm_add_ps(y, y2);
-
-	/* update the sign */
-	*s = _mm_xor_ps(xmm1, sign_bit_sin);
-	*c = _mm_xor_ps(xmm2, sign_bit_cos);
-}
-
-static __m128i select_si(__m128i a, __m128i b, __m128i mask)
-{
-	return _mm_xor_si128(a, _mm_and_si128(mask, _mm_xor_si128(b, a)));
-}
-
-#define tsVonHann(i) (-0.5f * cosf(2.0f * 3.14159265359f * (float)(i) / (float)CUTE_SOUND_PITCH_FRAME_SIZE) + 0.5f)
-
-static __m128 cs_vonhann4(int i)
-{
-	__m128 k4 = _mm_set_ps((float)(i * 4 + 3), (float)(i * 4 + 2), (float)(i * 4 + 1), (float)(i * 4));
-	k4 = _mm_mul_ps(*(__m128*)_ps_cephes_2PIF, k4);
-	k4 = _mm_div_ps(k4, *(__m128*)_ps_frame_size);
-
-	// Seems like _mm_cos_ps and _mm_sincos_ps was causing some audio popping...
-	// I'm not really skilled enough to fix it, but feel free to try: http://gruntthepeon.free.fr/ssemath/sse_mathfun.h
-	// My guess is some large negative or positive values were causing some
-	// precision trouble. In this case manually calling 4 cosines is not
-	// really a big deal, since this function is not a bottleneck.
-
-#if 0
-	__m128 c = _mm_cos_ps(k4);
-#elif 0
-	__m128 s, c;
-	_mm_sincos_ps(k4, &s, &c);
-#else
-	__m128 c = k4;
-	float* cf = (float*)&c;
-	cf[0] = cosf(cf[0]);
-	cf[1] = cosf(cf[1]);
-	cf[2] = cosf(cf[2]);
-	cf[3] = cosf(cf[3]);
-#endif
-
-	__m128 von_hann = _mm_add_ps(_mm_mul_ps(_mm_set_ps1(-0.5f), c), _mm_set_ps1(0.5f));
-	return von_hann;
-}
-
-float smbAtan2f(float x, float y)
-{
-	float signx = x > 0 ? 1.0f : -1.0f;
-	if (x == 0) return 0;
-	if (y == 0) return signx * 3.14159265f / 2.0f;
-	return atan2f(x, y);
-}
-
-// Analysis and synthesis steps learned from Bernsee's wonderful blog post:
-// http://blogs.zynaptiq.com/bernsee/pitch-shifting-using-the-ft/
-static void cs_pitch_shift(float pitchShift, int num_samples_to_process, float sampleRate, float* indata, cs_pitch_data_t** pitch_filter)
-{
-	CUTE_SOUND_ASSERT(num_samples_to_process <= CUTE_SOUND_MAX_FRAME_LENGTH);
-
-	// make sure compiler didn't do anything weird with the member
-	// offsets of cs_pitch_data_t. All arrays must be 16 byte aligned
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->pitch_shifted_output_samples) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->fft_data) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->previous_phase) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->sum_phase) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->window_accumulator) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->freq) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->mag) & 15));
-	CUTE_SOUND_ASSERT(!((size_t)&(((cs_pitch_data_t*)0)->pitch_shift_workspace) & 15));
-
-	cs_pitch_data_t* pf;
-
-	if (*pitch_filter == NULL)
-	{
-		pf = (cs_pitch_data_t*)cs_malloc16(sizeof(cs_pitch_data_t));
-		memset(pf, 0, sizeof(cs_pitch_data_t));
-		*pitch_filter = pf;
-	}
-	else
-	{
-		pf = *pitch_filter;
-	}
-
-	float freqPerBin = sampleRate / (float)CUTE_SOUND_PITCH_FRAME_SIZE;
-	__m128 freq_per_bin = _mm_set_ps1(sampleRate / (float)CUTE_SOUND_PITCH_FRAME_SIZE);
-	__m128 pi = *(__m128*)_ps_cephes_PIF;
-	__m128 two_pi = *(__m128*)_ps_cephes_2PIF;
-	__m128 pitch_quality = _mm_set_ps1((float)CUTE_SOUND_PITCH_QUALITY);
-	float* out_samples = pf->pitch_shifted_output_samples;
-	if (pf->index == 0) pf->index = CUTE_SOUND_OVERLAP;
-
-	while (num_samples_to_process)
-	{
-		int copy_count = CUTE_SOUND_PITCH_FRAME_SIZE - pf->index;
-		if (num_samples_to_process < copy_count) copy_count = num_samples_to_process;
-
-		memcpy(pf->in_FIFO + pf->index, indata, sizeof(float) * copy_count);
-		memcpy(out_samples, pf->out_FIFO + pf->index - CUTE_SOUND_OVERLAP, sizeof(float) * copy_count);
-
-		int start_index = pf->index;
-		int offset = start_index & 3;
-		start_index += 4 - offset;
-
-		for (int i = 0; i < offset; ++i)
-			pf->in_FIFO[pf->index + i] /= 32768.0f;
-
-		int extra = copy_count & 3;
-		copy_count = copy_count / 4 - extra;
-		__m128* in_FIFO = (__m128*)(pf->in_FIFO + pf->index + offset);
-		CUTE_SOUND_ASSERT(!((size_t)in_FIFO & 15));
-		__m128 int16_max = _mm_set_ps1(32768.0f);
-
-		for (int i = 0; i < copy_count; ++i)
-		{
-			__m128 val = in_FIFO[i];
-			__m128 div = _mm_div_ps(val, int16_max);
-			in_FIFO[i] = div;
-		}
-
-		for (int i = 0, copy_count4 = copy_count * 4; i < extra; ++i)
-		{
-			int index = copy_count4 + i;
-			pf->in_FIFO[pf->index + index] /= 32768.0f;
-		}
-
-		CUTE_SOUND_ASSERT(!((size_t)out_samples & 15));
-		__m128* out_samples4 = (__m128*)out_samples;
-		for (int i = 0; i < copy_count; ++i)
-		{
-			__m128 val = out_samples4[i];
-			__m128 mul = _mm_mul_ps(val, int16_max);
-			out_samples4[i] = mul;
-		}
-
-		for (int i = 0, copy_count4 = copy_count * 4; i < extra; ++i)
-		{
-			int index = copy_count4 + i;
-			out_samples[index] *= 32768.0f;
-		}
-
-		copy_count = copy_count * 4 + extra;
-		num_samples_to_process -= copy_count;
-		pf->index += copy_count;
-		indata += copy_count;
-		out_samples += copy_count;
-
-		if (pf->index >= CUTE_SOUND_PITCH_FRAME_SIZE)
-		{
-			pf->index = CUTE_SOUND_OVERLAP;
-			{
-				__m128* fft_data = (__m128*)pf->fft_data;
-				__m128* in_FIFO = (__m128*)pf->in_FIFO;
-
-				for (int k = 0; k < CUTE_SOUND_PITCH_FRAME_SIZE / 4; k++)
-				{
-					__m128 von_hann = cs_vonhann4(k);
-					__m128 sample = in_FIFO[k];
-					__m128 windowed_sample = _mm_mul_ps(sample, von_hann);
-					fft_data[k] = windowed_sample;
-				}
-			}
-
-			memset(pf->fft_data + CUTE_SOUND_PITCH_FRAME_SIZE, 0, CUTE_SOUND_PITCH_FRAME_SIZE * sizeof(float));
-			cs_fft(pf->fft_data, pf->fft_data + CUTE_SOUND_PITCH_FRAME_SIZE, CUTE_SOUND_PITCH_FRAME_SIZE, 1.0f);
-
-			{
-				__m128* fft_data = (__m128*)pf->fft_data;
-				__m128* previous_phase = (__m128*)pf->previous_phase;
-				__m128* magnitudes = (__m128*)pf->mag;
-				__m128* frequencies = (__m128*)pf->freq;
-				int simd_count = (CUTE_SOUND_PITCH_FRAME_SIZE / 2) / 4;
-
-				for (int k = 0; k <= simd_count; k++)
-				{
-					__m128 real = fft_data[k];
-					__m128 imag = fft_data[(CUTE_SOUND_PITCH_FRAME_SIZE / 4) + k];
-					__m128 overlap_phase = _mm_set_ps((float)(k * 4 + 3) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4 + 2) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4 + 1) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4) * CUTE_SOUND_EXPECTED_FREQUENCY);
-					__m128 k4 = _mm_set_ps((float)(k * 4 + 3), (float)(k * 4 + 2), (float)(k * 4 + 1), (float)(k * 4));
-
-					__m128 mag = _mm_mul_ps(_mm_set_ps1(2.0f), _mm_sqrt_ps(_mm_add_ps(_mm_mul_ps(real, real), _mm_mul_ps(imag, imag))));
-#if 0
-					__m128 phase = _mm_atan2_ps(imag, real);
-#else
-					__m128 phase; // = _mm_atan2_ps(imag, real);
-					float *phasef = (float*)&phase;
-					float *realf = (float*)&real;
-					float *imagf = (float*)&imag;
-					for (int i = 0; i < 4; i++) phasef[i] = smbAtan2f(imagf[i], realf[i]);
-#endif
-					__m128 phase_dif = _mm_sub_ps(phase, previous_phase[k]);
-
-					previous_phase[k] = phase;
-					phase_dif = _mm_sub_ps(phase_dif, overlap_phase);
-
-					// map delta phase into +/- pi interval
-					__m128i qpd = _mm_cvttps_epi32(_mm_div_ps(phase_dif, pi));
-					__m128i zero = _mm_setzero_si128();
-					__m128i ltzero_mask = _mm_cmplt_epi32(qpd, zero);
-					__m128i ones_bit = _mm_and_si128(qpd, _mm_set1_epi32(1));
-					__m128i neg_qpd = _mm_sub_epi32(qpd, ones_bit);
-					__m128i pos_qpd = _mm_add_epi32(qpd, ones_bit);
-					qpd = select_si(pos_qpd, neg_qpd, ltzero_mask);
-					__m128 pi_range_offset = _mm_mul_ps(pi, _mm_cvtepi32_ps(qpd));
-					phase_dif = _mm_sub_ps(phase_dif, pi_range_offset);
-
-					__m128 deviation = _mm_div_ps(_mm_mul_ps(_mm_set_ps1((float)CUTE_SOUND_PITCH_QUALITY), phase_dif), two_pi);
-					__m128 true_freq_estimated = _mm_add_ps(_mm_mul_ps(k4, freq_per_bin), _mm_mul_ps(deviation, freq_per_bin));
-
-					magnitudes[k] = mag;
-					frequencies[k] = true_freq_estimated;
-				}
-			}
-
-			// actual pitch shifting work
-			// shift frequencies into workspace
-			memset(pf->pitch_shift_workspace, 0, (CUTE_SOUND_PITCH_FRAME_SIZE / 2) * sizeof(float));
-			for (int k = 0; k <= CUTE_SOUND_PITCH_FRAME_SIZE / 2; k++)
-			{
-				int index = (int)(k * pitchShift);
-				if (index <= CUTE_SOUND_PITCH_FRAME_SIZE / 2)
-					pf->pitch_shift_workspace[index] = pf->freq[k] * pitchShift;
-			}
-
-			// swap buffers around to reuse old pf->preq buffer as the new workspace
-			float* frequencies = pf->pitch_shift_workspace;
-			float* pitch_shift_workspace = pf->freq;
-			float* magnitudes = pf->mag;
-
-			// shift magnitudes into workspace
-			memset(pitch_shift_workspace, 0, CUTE_SOUND_PITCH_FRAME_SIZE * sizeof(float));
-			for (int k = 0; k <= CUTE_SOUND_PITCH_FRAME_SIZE / 2; k++)
-			{
-				int index = (int)(k * pitchShift);
-				if (index <= CUTE_SOUND_PITCH_FRAME_SIZE / 2)
-					pitch_shift_workspace[index] += magnitudes[k];
-			}
-
-			// track where the shifted magnitudes are
-			magnitudes = pitch_shift_workspace;
-
-			{
-				__m128* magnitudes4 = (__m128*)magnitudes;
-				__m128* frequencies4 = (__m128*)frequencies;
-				__m128* fft_data = (__m128*)pf->fft_data;
-				__m128* sum_phase = (__m128*)pf->sum_phase;
-				int simd_count = (CUTE_SOUND_PITCH_FRAME_SIZE / 2) / 4;
-
-				for (int k = 0; k <= simd_count; k++)
-				{
-					__m128 mag = magnitudes4[k];
-					__m128 freq = frequencies4[k];
-					__m128 freq_per_bin_k = _mm_set_ps((float)(k * 4 + 3) * freqPerBin, (float)(k * 4 + 2) * freqPerBin, (float)(k * 4 + 1) * freqPerBin, (float)(k * 4) * freqPerBin);
-
-					freq = _mm_sub_ps(freq, freq_per_bin_k);
-					freq = _mm_div_ps(freq, freq_per_bin);
-
-					freq = _mm_mul_ps(two_pi, freq);
-					freq = _mm_div_ps(freq, pitch_quality);
-
-					__m128 overlap_phase = _mm_set_ps((float)(k * 4 + 3) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4 + 2) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4 + 1) * CUTE_SOUND_EXPECTED_FREQUENCY, (float)(k * 4) * CUTE_SOUND_EXPECTED_FREQUENCY);
-					freq = _mm_add_ps(freq, overlap_phase);
-
-					__m128 phase = sum_phase[k];
-					phase = _mm_add_ps(phase, freq);
-					sum_phase[k] = phase;
-
-					__m128 c, s;
-					_mm_sincos_ps(phase, &s, &c);
-					__m128 real = _mm_mul_ps(mag, c);
-					__m128 imag = _mm_mul_ps(mag, s);
-
-					fft_data[k] = real;
-					fft_data[(CUTE_SOUND_PITCH_FRAME_SIZE / 4) + k] = imag;
-				}
-			}
-
-			for (int k = CUTE_SOUND_PITCH_FRAME_SIZE + 2; k < 2 * CUTE_SOUND_PITCH_FRAME_SIZE - 2; ++k)
-				pf->fft_data[k] = 0;
-
-			cs_fft(pf->fft_data, pf->fft_data + CUTE_SOUND_PITCH_FRAME_SIZE, CUTE_SOUND_PITCH_FRAME_SIZE, -1);
-
-			{
-				__m128* fft_data = (__m128*)pf->fft_data;
-				__m128* window_accumulator = (__m128*)pf->window_accumulator;
-
-				for (int k = 0; k < CUTE_SOUND_PITCH_FRAME_SIZE / 4; ++k)
-				{
-					__m128 von_hann = cs_vonhann4(k);
-					__m128 fft_data_segment = fft_data[k];
-					__m128 accumulator_segment = window_accumulator[k];
-					__m128 divisor = _mm_div_ps(pitch_quality, _mm_set_ps1(8.0f));
-					fft_data_segment = _mm_mul_ps(von_hann, fft_data_segment);
-					fft_data_segment = _mm_div_ps(fft_data_segment, divisor);
-					accumulator_segment = _mm_add_ps(accumulator_segment, fft_data_segment);
-					window_accumulator[k] = accumulator_segment;
-				}
-			}
-
-			memcpy(pf->out_FIFO, pf->window_accumulator, CUTE_SOUND_STEPSIZE * sizeof(float));
-			memmove(pf->window_accumulator, pf->window_accumulator + CUTE_SOUND_STEPSIZE, CUTE_SOUND_PITCH_FRAME_SIZE * sizeof(float));
-			memmove(pf->in_FIFO, pf->in_FIFO + CUTE_SOUND_STEPSIZE, CUTE_SOUND_OVERLAP * sizeof(float));
-		}
-	}
 }
 
 #endif // CUTE_SOUND_IMPLEMENTATION_ONCE

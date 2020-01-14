@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinyfiles.h - v1.0
+	cute_files.h - v1.0
 
 	To create implementation (the function definitions)
 		#define CUTE_FILES_IMPLEMENTATION
