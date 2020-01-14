@@ -1960,7 +1960,7 @@ void c2CapsuletoPolyManifold(c2Capsule A, const c2Poly* B, const c2x* bx_ptr, c2
 			return;
 		}
 
-		for (int i = 0; i < m->count; ++i) m->depths[i] += c2Sign(m->depths) * A.r;
+		for (int i = 0; i < m->count; ++i) m->depths[i] += A.r;
 	}
 
 	// shallow, use GJK results a and b to define manifold
