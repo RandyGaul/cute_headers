@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_coroutine.h - v1.00
+	cute_coroutine.h - v1.01
 
 	SUMMARY
 
@@ -50,8 +50,9 @@
 
 			void print(coroutine_t* co, float dt, const char* character_name, const char* string)
 			{
-				static index; // Not thread safe, but can easily be changed to a ptr as input param.
+				static int index; // Not thread safe, but can easily be changed to a ptr as input param.
 				int milliseconds = rand() % 10 + 20;
+				char c = 0;
 
 				COROUTINE_START(co);
 
@@ -61,7 +62,7 @@
 
 				COROUTINE_CASE(co, print_char);
 				if (string[index]) {
-					char c = string[index++];
+					c = string[index++];
 					printf("%c", c);
 					if (c == '.' || c == ',' || c == '?') COROUTINE_WAIT(co, 250, dt);
 					else COROUTINE_WAIT(co, milliseconds, dt);
@@ -154,12 +155,14 @@
 
 	Revision history:
 		1.0  (11/03/2018) initial release
+		1.01 (01/26/2020) added support for local variables
 */
 
 #ifndef CUTE_COROUTINE_H
 
 #define COROUTINE_MAX_DEPTH 8
 #define COROUTINE_CASE_OFFSET (1024 * 1024)
+#define COROUTINE_STACK_SIZE (512)
 
 #ifndef COROUTINE_ASSERT
 	#include <assert.h>
@@ -177,6 +180,8 @@ typedef struct
 	int flag;
 	int index;
 	int line[COROUTINE_MAX_DEPTH];
+	int stack_pointer;
+	char stack[COROUTINE_STACK_SIZE];
 } coroutine_t;
 
 /**
@@ -184,6 +189,11 @@ typedef struct
  * Must be called before the first time a coroutine is started, and can be used to
  * completely reset a coroutine. Since coroutines are simply cleared to 0 here,
  * static/file scope coroutines don't need to use this function.
+ *
+ * Since this function simply sets everything to 0, it's totally fine to set up a
+ * static coroutine knowing it's in a valid initial state.
+ *
+ * `static coroutine_t s_co;`
  */
 static inline void coroutine_init(coroutine_t* co)
 {
@@ -191,7 +201,93 @@ static inline void coroutine_init(coroutine_t* co)
 	co->flag = 0;
 	co->index = 0;
 	for (int i = 0; i < COROUTINE_MAX_DEPTH; ++i) co->line[i] = 0;
+	co->stack_pointer = 0;
+	/* No reason to clear the stack. */
 }
+
+/**
+ * Pops off `size` bytes from `co`'s fixed-size buffer for use as a local variable.
+ * Since local variables behave a little differently in the presence of a coroutine
+ * it's useful to be able to have a little working memory associated with the life-
+ * time of the coroutine itself.
+ *
+ * Here's an example.
+ *
+ *     void do_work(coroutine_t* co)
+ *     {
+ *         int* a = (int*)coroutine_local_var(co, sizeof(int));
+ *         int* b = (int*)coroutine_local_var(co, sizeof(int));
+ *
+ *         COROUTINE_START(co);
+ *         // Setup initial values here. This code runs just once. These persist.
+ *         *a = 3;
+ *         *b = 7;
+ *
+ *         // ...
+ *
+ *         COROUTINE_END(co);
+ *     }
+ *
+ * One annoying thing about the above example is constantly typing `*a` with the de-
+ * reference operator. Not only is the typing annoying, but it also does incur a real
+ * performance hit, especially once pointer aliasing is considered. This problem
+ * persists even when using references in C++ with the templated version of
+ * `coroutine_local_var`. The only workaround is to use a pattern of reading from
+ * pointers onto the actual CRT stack, and finally pushing the values back out to the
+ * coroutine stack.
+ *
+ *     void do_work(coroutine_t* co)
+ *     {
+ *         // Setup locals onto the CRT (C runtime) stack.
+ *         int* a_ptr = (int*)coroutine_local_var(co, sizeof(int));
+ *         int* b_ptr = (int*)coroutine_local_var(co, sizeof(int));
+ *         int a = *a_ptr;
+ *         int b = *b_ptr;
+ *
+ *         COROUTINE_START(co);
+ *         // ...
+ *         COROUTINE_END(co);
+ *
+ *         // Push locals back onto the coroutine's stack.
+ *         *a_ptr = a;
+ *         *b_ptr = b;
+ *     }
+ */
+static inline void* coroutine_local_var(coroutine_t* co, int size)
+{
+	COROUTINE_ASSERT(co->stack_pointer + size < COROUTINE_STACK_SIZE);
+	void* ptr = co->stack + co->stack_pointer;
+	co->stack_pointer += (int)size;
+	return ptr;
+}
+
+#ifdef __cplusplus
+/**
+ * Helper function to setup "local variables" as references.
+ *
+ * Here's an example.
+ *
+ *     void do_work(coroutine_t* co)
+ *     {
+ *         int& a = coroutine_local_var<int>(co);
+ *         int& b = coroutine_local_var<int>(co);
+ *
+ *         COROUTINE_START(co);
+ *         // Setup initial values here. This code runs just once. These persist.
+ *         *a = 3;
+ *         *b = 7;
+ *
+ *         // ...
+ *
+ *         COROUTINE_END(co);
+ *     }
+ */
+template <typename T>
+static inline T& coroutine_local_var(coroutine_t* co)
+{
+	return *(T*)coroutine_local_var(co, sizeof(T));
+}
+#endif
 
 /**
  * Begins the coroutine. Code written between here and the next sequence point will be run
@@ -246,8 +342,13 @@ static inline void coroutine_init(coroutine_t* co)
  * Must be called at the very end of the coroutine. Does not set a sequence point;
  * simply completes the coroutine syntax -- this is where code execution will resume
  * whenever control is exiting/yielding from the coroutine.
+ *
+ * If control flow naturally reaches `COROUTINE_END` without jumping, the sequence
+ * point will be reset to `COROUTINE_START` to simply reset the whole coroutine.
+ * However, the sequence point will not be set in the usual case of calling
+ * `COROUTINE_YIELD`, `COROUTINE_WAIT` or `COROUTINE_EXIT`.
  */
-#define COROUTINE_END(co)            } co->line[co->index] = 0; __co_end:; } while (0)
+#define COROUTINE_END(co)            } co->line[co->index] = 0; __co_end:; co->stack_pointer = 0; } while (0)
 
 #define CUTE_COROUTINE_H
 #endif // CUTE_COROUTINE_H
