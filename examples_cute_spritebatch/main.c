@@ -24,8 +24,8 @@
 
 spritebatch_t sb;
 SDL_Window* window;
-SDL_GLContext ctx_gl;
-gl_context_t* ctx_tg;
+SDL_GLContext ctx_sdl_gl;
+gl_context_t* ctx_gl;
 gl_shader_t sprite_shader;
 gl_renderable_t sprite_renderable;
 float projection[16];
@@ -188,8 +188,8 @@ void batch_report(spritebatch_sprite_t* sprites, int count, int texture_w, int t
 		out_verts[5].v = s->miny;
 	}
 
-	// submit call to cute_gl (does not get flushed to screen until `tgFlush` is called)
-	gl_push_draw_call(ctx_tg, call);
+	// submit call to cute_gl (does not get flushed to screen until `gl_flush` is called)
+	gl_push_draw_call(ctx_gl, call);
 }
 
 void get_pixels(SPRITEBATCH_U64 image_id, void* buffer, int bytes_to_fill, void* udata)
@@ -247,7 +247,7 @@ void setup_SDL_and_glad()
 	int centered_x = dm.w / 2 - screen_w / 2;
 	int centered_y = dm.h / 2 - screen_h / 2;
 	window = SDL_CreateWindow("cute_spritebatch example", centered_x, centered_y, screen_w, screen_h, SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);
-	ctx_gl = SDL_GL_CreateContext(window);
+	ctx_sdl_gl = SDL_GL_CreateContext(window);
 
 	gladLoadGLLoader(SDL_GL_GetProcAddress);
 
@@ -276,7 +276,7 @@ void setup_cute_gl()
 	// setup cute_gl
 	int clear_bits = GL_COLOR_BUFFER_BIT;
 	int settings_bits = 0;
-	ctx_tg = gl_make_ctx(32, clear_bits, settings_bits);
+	ctx_gl = gl_make_ctx(32, clear_bits, settings_bits);
 
 #define STR(x) #x
 
@@ -325,7 +325,7 @@ void setup_cute_gl()
 	glViewport(0, 0, 640, 480);
 
 	gl_send_matrix(&sprite_shader, "u_mvp", projection);
-	gl_line_mvp(ctx_tg, projection);
+	gl_line_mvp(ctx_gl, projection);
 }
 
 void swap_buffers()
@@ -515,7 +515,7 @@ int main(int argc, char** argv)
 		printf("Bytes in use: %d\n", CUTE_ALLOC_BYTES_IN_USE());
 
 		// sprite batches have been submit to cute_gl, go ahead and flush to screen
-		gl_flush(ctx_tg, swap_buffers, 0, 640, 480);
+		gl_flush(ctx_gl, swap_buffers, 0, 640, 480);
 		CUTE_GL_PRINT_GL_ERRORS();
 	}
 
