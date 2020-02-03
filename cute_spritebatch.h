@@ -187,9 +187,10 @@ typedef void (submit_batch_fn)(spritebatch_sprite_t* sprites, int count, int tex
 // from within the `spritebatch_defrag` function, and sometimes from `spritebatch_flush`.
 
 // Called when the pixels are needed from the user. `image_id` maps to a unique image, and is *not*
-// related to `texture_id` at all. `buffer` must be filled in with `bytes_to_fill` number of bytes.
-// The user is assumed to know the width/height of the image, and can optionally verify that
-// `bytes_to_fill` matches the user's w * h * stride for this particular image.
+// related to `texture_id` at all. The `texture_id` is the value returned by this function. `buffer`
+// must be filled in with `bytes_to_fill` number of bytes. The user is assumed to know the
+// width/height of the image, and can optionally verify that `bytes_to_fill` matches the user's
+// w * h * stride for this particular image.
 typedef void (get_pixels_fn)(SPRITEBATCH_U64 image_id, void* buffer, int bytes_to_fill, void* udata);
 
 // Called with a new texture handle is needed. This will happen whenever a new atlas is created,
@@ -198,7 +199,8 @@ typedef void (get_pixels_fn)(SPRITEBATCH_U64 image_id, void* buffer, int bytes_t
 typedef SPRITEBATCH_U64 (generate_texture_handle_fn)(void* pixels, int w, int h, void* udata);
 
 // Called whenever a texture handle is ready to be free'd up. This happens whenever a particular image
-// or a particular atlas has not been used for a while, and is ready to be released.
+// or a particular atlas has not been used for a while, and is ready to be released. `texture_id` is the
+// value returned by a previous call to `generate_texture_handle_fn`.
 typedef void (destroy_texture_handle_fn)(SPRITEBATCH_U64 texture_id, void* udata);
 
 // Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
@@ -228,7 +230,14 @@ struct spritebatch_config_t
 
 struct spritebatch_sprite_t
 {
+	// User-defined value to represent a unique sprite.
 	SPRITEBATCH_U64 image_id;
+
+	// Assigned by calling `generate_texture_handle_fn`. Does not map one-to-one with `image_id`,
+	// since a single sprite can be drawn, allocate a `texture_id`, and then not be drawn again
+	// for a long time. This would then trigger the `destroy_texture_handle_fn` and release the
+	// previously used `texture_id`. Then later, if the sprite is drawn again it will allocate a
+	// new `texture_id` by calling `generate_texture_handle_fn`.
 	SPRITEBATCH_U64 texture_id;
 
 	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
