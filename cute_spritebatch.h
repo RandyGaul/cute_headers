@@ -885,6 +885,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // end of hashtable.h
 
 
+#include <limits.h>
+
 int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udata)
 {
 	// read config params
@@ -1073,7 +1075,7 @@ static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATC
 		if (!sb->pixel_buffer) return;
 	}
 
-	memset(sb->pixel_buffer, size, 0);
+	memset(sb->pixel_buffer, 0, size);
 	int size_from_user = sb->pixel_stride * w * h;
 	sb->get_pixels_callback(image_id, sb->pixel_buffer, size_from_user, sb->udata);
 
