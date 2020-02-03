@@ -146,6 +146,9 @@
 		However, with some thought and familiarity, most of the instances where a local variable
 		is needed can be easily coaxed into a comfortable form (like in the above example code).
 
+		In version 1.01 explicit support for local variables was added via `coroutine_local_var`.
+		Check out the examples in the doc comments around the function definition.
+
 	RUNNING ON WINDOWS
 
 		There's a problem with MSCV. Since MSCV does some nonstandard stuff with their
