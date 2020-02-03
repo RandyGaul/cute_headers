@@ -277,8 +277,8 @@ static inline void* coroutine_local_var(coroutine_t* co, int size)
  *
  *         COROUTINE_START(co);
  *         // Setup initial values here. This code runs just once. These persist.
- *         *a = 3;
- *         *b = 7;
+ *         a = 3;
+ *         b = 7;
  *
  *         // ...
  *
