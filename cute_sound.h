@@ -483,6 +483,10 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 #ifndef CUTE_SOUND_IMPLEMENTATION_ONCE
 #define CUTE_SOUND_IMPLEMENTATION_ONCE
 
+#ifndef CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES
+#	define CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES 1024
+#endif
+
 #if !defined(CUTE_SOUND_ALLOC)
 	#include <stdlib.h>	// malloc, free
 	#define CUTE_SOUND_ALLOC(size, ctx) malloc(size)
@@ -1107,7 +1111,7 @@ static void cs_unlock(cs_context_t* ctx)
 
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
+	buffered_samples = buffered_samples < CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES ? CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES : buffered_samples;
 	int bps = sizeof(INT16) * 2;
 	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
@@ -1308,7 +1312,7 @@ static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* 
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
+	buffered_samples = buffered_samples < CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES ? CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES : buffered_samples;
 	int bps = sizeof(uint16_t) * 2;
 
 	AudioComponentDescription comp_desc = { 0 };
@@ -1569,7 +1573,7 @@ static void cs_unlock(cs_context_t* ctx)
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
+	buffered_samples = buffered_samples < CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES ? CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES : buffered_samples;
 	(void)unused;
 	int sample_count = buffered_samples;
 	int bps;
@@ -1780,7 +1784,7 @@ static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
 {
-	buffered_samples = buffered_samples < 8192 ? 8192 : buffered_samples;
+	buffered_samples = buffered_samples < CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES ? CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES : buffered_samples;
 	(void)unused;
 	int bps = sizeof(uint16_t) * 2;
 	int sample_count = buffered_samples;
