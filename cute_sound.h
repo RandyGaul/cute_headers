@@ -2043,7 +2043,10 @@ cs_playing_sound_t* cs_play_sound(cs_context_t* ctx, cs_play_sound_def_t def)
 	cs_lock(ctx);
 
 	cs_playing_sound_t* playing = ctx->playing_free;
-	if (!playing) return 0;
+	if (!playing) {
+		cs_unlock(ctx);
+		return 0;
+	}
 	ctx->playing_free = playing->next;
 	*playing = cs_make_playing_sound(def.loaded);
 	playing->active = 1;
