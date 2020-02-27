@@ -14,7 +14,7 @@
 	SUMMARY
 
 		cute_sound is a C API for loading, playing, looping, panning and fading mono
-		and stero sounds, without any external dependencies other than things that ship
+		and stereo sounds, without any external dependencies other than things that ship
 		with standard OSs, or SDL2 for more uncommon OSs.
 
 		For Windows cute_sound uses DirectSound.
