@@ -14,15 +14,24 @@
 	SUMMARY
 
 		cute_sound is a C API for loading, playing, looping, panning and fading mono
-		and stero sounds. This means cute_sound imparts no external DLLs or large
-		libraries that adversely effect shipping size. cute_sound can also run on
-		Windows XP since DirectSound ships with all recent versions of Windows.
-		cute_sound implements a custom SSE2 mixer. cute_sound uses CoreAudio for Apple
-		machines (like OSX and iOS). ALSA is used on Linux (though it may be buggy
-		currently).
+		and stero sounds, without any external dependencies other than things that ship
+		with standard OSs, or SDL2 for more uncommon OSs.
 
-		SDL is used for all other platforms. Define CUTE_SOUND_FORCE_SDL before placaing
-		the CUTE_SOUND_IMPLEMENTATION in order to force the use of SDL.
+		For Windows cute_sound uses DirectSound.
+
+		For Apple machines cute_sound uses CoreAudio.
+
+		For Linux builds cute_sound uses ALSA (implementation is currently buggy, and
+		cute_sound's SDL2 implementation is recommended instead, more on this below).
+
+		An SDL2 implementation of cute_sound is available on platforms SDL2 is available,
+		which is pretty much everywhere. To use the SDL2 implementation of cute_sound
+		define CUTE_SOUND_FORCE_SDL before placing the CUTE_SOUND_IMPLEMENTATION into a
+		translation unit in order to force the use of SDL. Here is an example:
+
+			#define CUTE_SOUND_FORCE_SDL
+			#define CUTE_SOUND_IMPLEMENTATION
+			#include <cute_sound.h>
 
 
 	REVISION HISTORY
