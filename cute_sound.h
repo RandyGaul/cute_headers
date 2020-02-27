@@ -85,7 +85,7 @@
 		3. play sounds
 		4. free context
 
-		1. cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, N);
+		1. cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, N, NULL);
 		2. cs_play_sound_def_t def = cs_make_def(&cs_load_wav("path_to_file/filename.wav"));
 		3. cs_play_sound(ctx, def);
 		4. cs_shutdown_context(ctx);
@@ -110,13 +110,13 @@
 	High-level API
 
 		First create a context and pass in non-zero to the final parameter. This
-		final parameter controls how large of a memory pool to use for cs_playing_sound_ts.
+		final parameter controls how large of a memory pool to use for cs_playing_sound_t's.
 		Here's an example where N is the size of the internal pool:
 
-		cs_context_t* ctx = cs_make_context(hwnd, frequency, latency, seconds, N);
+		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, N, NULL);
 
-		We create cs_playing_sound_ts indirectly with tsPlayDef structs. tsPlayDef is a
-		POD struct so feel free to make them straight on the stack. The tsPlayDef
+		We create cs_playing_sound_t's indirectly with cs_play_def structs. cs_play_def is a
+		POD struct so feel free to make them straight on the stack. The cs_play_def
 		sets up initialization parameters. Here's an example to load a wav and
 		play it:
 
@@ -133,13 +133,14 @@
 		First create a context and pass 0 in the final parameter (0 here means
 		the context will *not* allocate a cs_playing_sound_t memory pool):
 
-		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, 0);
+		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, 0, NULL);
 
 		parameters:
 			hwnd             --  HWND, handle to window (on OSX just pass in 0)
 			frequency        --  int, represents Hz frequency rate in which samples are played
 			buffered_samples --  int, number of samples the internal ring buffers can hold at once
-			0 (last param)   --  int, number of elements in cs_playing_sound_t pool
+			0                --  int, number of elements in cs_playing_sound_t pool
+			NULL             --  optional pointer for custom allocator, just set to NULL
 
 		We create a cs_playing_sound_t like so:
 		cs_loaded_sound_t loaded = cs_load_wav("path_to_file/filename.wav");
@@ -187,9 +188,6 @@
 		* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
 			to float, mix all samples, and write back to audio API as 16 bit integers. In
 			practice this works very well and clipping is not often a big problem.
-		* I'm not super familiar with good ways to avoid the DirectSound play cursor from going
-			past the write cursor. To mitigate this pass in a larger number to cs_make_context's 4th
-			parameter (buffer scale in seconds).
 
 
 	FAQ
