@@ -115,7 +115,7 @@
 
 		cs_context_t* ctx = cs_make_context(hwnd, frequency, buffered_samples, N, NULL);
 
-		We create cs_playing_sound_t's indirectly with cs_play_def structs. cs_play_def is a
+		We create cs_playing_sound_t's indirectly with cs_play_def_t structs. cs_play_def_t is a
 		POD struct so feel free to make them straight on the stack. The cs_play_def
 		sets up initialization parameters. Here's an example to load a wav and
 		play it:
