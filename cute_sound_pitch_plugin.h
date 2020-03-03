@@ -16,6 +16,14 @@
 		some other tricks, but ultimately is quite an expensive operation. Use
 		with care.
 
+		Please note this plugin is for *real-time* pitch shifting, meaning the
+		quality of the pitch shifting will not sound nearly as good as an off-
+		line preprocessor like Audacity's pitch shifter. If you want really high
+		quality pitch shifting, it's best to preprocess your audio offline and
+		simply save different samples at different pitches to disk, and then play
+		them at run-time. This pitch shifter is just for small variations or
+		other use-cases requiring a cheap-and-quick pitch adjustment.
+
 	EXAMPLE
 
 		https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_sound/pitch
