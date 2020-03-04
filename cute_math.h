@@ -59,6 +59,8 @@
 #define CUTE_MATH_FLT_MAX 3.402823466e+38F
 #define CUTE_MATH_FLT_EPSILON 1.19209290E-07f
 
+namespace cute {
+
 // -------------------------------------------------------------------------------------------------
 // Scalar operations.
 
@@ -713,6 +715,8 @@ void CUTE_MATH_CALL mul_vector4_by_matrix4x4(float* a_matrix4x4, float* b_vector
 void CUTE_MATH_CALL mul_matrix4x4_by_matrix4x4(float* a, float* b, float* out);
 void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, float viewport_w, float viewport_h, float* cam_inv, float near_plane_dist, v3* mouse_pos, v3* mouse_dir);
 void CUTE_MATH_CALL axis_angle_from_m3(m3 m, v3* axis, float* angle_radians);
+	
+} // namespace cute
 
 #define CUTE_MATH_H
 #endif
@@ -720,6 +724,8 @@ void CUTE_MATH_CALL axis_angle_from_m3(m3 m, v3* axis, float* angle_radians);
 #ifdef CUTE_MATH_IMPLEMENTATION
 #ifndef CUTE_MATH_IMPLEMENTATION_ONCE
 #define CUTE_MATH_IMPLEMENTATION_ONCE
+
+namespace cute {
 
 void CUTE_MATH_CALL look_at(float* world_to_cam, v3 eye, v3 target, v3 up, float* cam_to_world)
 {
@@ -854,6 +860,8 @@ void CUTE_MATH_CALL axis_angle_from_m3(m3 m, v3* axis, float* angle_radians)
 		*axis = v3(v[0], v[1], v[2]);
 	}
 }
+	
+} // namespace cute
 
 #endif // CUTE_MATH_IMPLEMENTATION_ONCE
 #endif // CUTE_MATH_IMPLEMENTATION
