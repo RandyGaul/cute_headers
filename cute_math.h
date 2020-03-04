@@ -64,6 +64,9 @@ namespace cute {
 // -------------------------------------------------------------------------------------------------
 // Scalar operations.
 
+#ifndef CUTE_MATH_SCALAR_OPS
+#define CUTE_MATH_SCALAR_OPS
+
 CUTE_MATH_INLINE float min(float a, float b) { return a < b ? a : b; }
 CUTE_MATH_INLINE float max(float a, float b) { return b < a ? a : b; }
 CUTE_MATH_INLINE float clamp(float a, float lo, float hi) { return max(lo, min(a, hi)); }
@@ -75,6 +78,8 @@ CUTE_MATH_INLINE int min(int a, int b) { return a < b ? a : b; }
 CUTE_MATH_INLINE int max(int a, int b) { return b < a ? a : b; }
 CUTE_MATH_INLINE int clamp(int a, int lo, int hi) { return max(lo, min(a, hi)); }
 CUTE_MATH_INLINE int sign(int a) { return a < 0 ? -1 : 1; }
+
+#endif // CUTE_MATH_SCALAR_OPS
 
 // -------------------------------------------------------------------------------------------------
 // 3-Vector definition.
