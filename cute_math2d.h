@@ -100,12 +100,18 @@ struct aabb_t
 #include <cmath>
 
 // scalar ops
+
+#ifndef CUTE_MATH_SCALAR_OPS
+#define CUTE_MATH_SCALAR_OPS
+
 CUTE_MATH2D_INLINE float min(float a, float b) { return a < b ? a : b; }
 CUTE_MATH2D_INLINE float max(float a, float b) { return b < a ? a : b; }
 CUTE_MATH2D_INLINE float clamp(float a, float lo, float hi) { return max(lo, min(a, hi)); }
 CUTE_MATH2D_INLINE float sign(float a) { return a < 0 ? -1.0f : 1.0f; }
 CUTE_MATH2D_INLINE float intersect(float da, float db) { return da / (da - db); }
 CUTE_MATH2D_INLINE float invert_safe(float a) { return a != 0 ? a / 1.0f : 0; }
+
+#endif // CUTE_MATH_SCALAR_OPS
 
 CUTE_MATH2D_INLINE int min(int a, int b) { return a < b ? a : b; }
 CUTE_MATH2D_INLINE int max(int a, int b) { return b < a ? a : b; }
