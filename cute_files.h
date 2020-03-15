@@ -73,7 +73,6 @@
 
 #define CUTE_FILES_MAX_PATH 1024
 #define CUTE_FILES_MAX_FILENAME 256
-#define CUTE_FILES_MAX_EXT 32
 
 struct cf_file_t;
 struct cf_dir_t;
@@ -137,7 +136,7 @@ void cf_do_unit_tests();
 	{
 		char path[CUTE_FILES_MAX_PATH];
 		char name[CUTE_FILES_MAX_FILENAME];
-		char ext[CUTE_FILES_MAX_EXT];
+		char * ext;
 		int is_dir;
 		int is_reg;
 		size_t size;
@@ -167,7 +166,7 @@ void cf_do_unit_tests();
 	{
 		char path[CUTE_FILES_MAX_PATH];
 		char name[CUTE_FILES_MAX_FILENAME];
-		char ext[CUTE_FILES_MAX_EXT];
+		char * ext;
 		int is_dir;
 		int is_reg;
 		int size;
@@ -225,11 +224,15 @@ static int cf_safe_strcpy_internal(char* dst, const char* src, int n, int max, c
 
 const char* cf_get_ext(cf_file_t* file)
 {
+	char c;
 	char* name = file->name;
-	char* period = NULL;
-	while (*name++) if (*name == '.') period = name;
-	if (period) cf_safe_strcpy(file->ext, period, 0, CUTE_FILES_MAX_EXT);
-	else file->ext[0] = 0;
+	file->ext = file->name;
+	while (c = *name) {
+		++name;
+		if (c == '.')
+			file->ext = name;
+	}
+	if(file->ext == file->name) file->ext = name;
 	return file->ext;
 }
 
