@@ -123,7 +123,6 @@
 		SPRITEBATCH_ASSERT
 		SPRITEBATCH_ATLAS_FLIP_Y_AXIS_FOR_UV
 		SPRITEBATCH_ATLAS_EMPTY_COLOR
-		SPRITEBATCH_ALLOCA
 		SPRITEBATCH_LOG
 
 	Revision history:
@@ -463,15 +462,6 @@ struct spritebatch_t
 
 #ifndef SPRITEBATCH_ATLAS_EMPTY_COLOR
 	#define SPRITEBATCH_ATLAS_EMPTY_COLOR 0x000000FF
-#endif
-
-#ifndef SPRITEBATCH_ALLOCA
-	#ifdef _WIN32
-		#include <malloc.h>
-	#else
-		#include <alloca.h>
-	#endif
-	#define SPRITEBATCH_ALLOCA(ctx, size) alloca(size)
 #endif
 
 #ifndef SPRITEBATCH_LOG
