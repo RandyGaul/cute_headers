@@ -133,6 +133,7 @@
 		                  inverted get pixels callback to let users have an easier time
 		                  with memory management, added support for pixel padding along
 		                  the edges of all textures (useful for certain shader effects)
+	        1.02 (04/09/2020) Compilation fix for FreeBSD - Remove unused alloca header and define
 */
 
 #ifndef SPRITEBATCH_H
