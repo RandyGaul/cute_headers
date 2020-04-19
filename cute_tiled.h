@@ -515,7 +515,7 @@ struct strpool_embedded_t
 #ifndef STRPOOL_EMBEDDED_STRNICMP
     #ifdef _WIN32
         #include <string.h>
-        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strnicmp( s1, s2, len ) )
+        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( _strnicmp( s1, s2, len ) )
     #else
         #include <string.h>
         #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )        
