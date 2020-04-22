@@ -17,7 +17,8 @@
 		and stereo sounds, without any external dependencies other than things that ship
 		with standard OSs, or SDL2 for more uncommon OSs.
 
-		For Windows cute_sound uses DirectSound.
+		For Windows cute_sound uses DirectSound. Due to the use of SSE intrinsics, MinGW
+		builds must be made with the compiler option: -march=native
 
 		For Apple machines cute_sound uses CoreAudio.
 
@@ -32,6 +33,11 @@
 			#define CUTE_SOUND_FORCE_SDL
 			#define CUTE_SOUND_IMPLEMENTATION
 			#include <cute_sound.h>
+
+		If you want to use cute_sound with SDL_RWops, you must enable it by putting this
+		before you #include cute_sound.h:
+
+			#define CUTE_SOUND_SDL_RWOPS
 
 
 	REVISION HISTORY
@@ -379,7 +385,7 @@ void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_ri
 // void cs_set_delay(cs_playing_sound_t* sound, float delay, int samples_per_second)
 void cs_set_delay(cs_context_t* ctx, cs_playing_sound_t* sound, float delay_in_seconds);
 
-// Portable sleep function
+// Portable sleep function. Do not call this with milliseconds > 999.
 void cs_sleep(int milliseconds);
 
 // LOW-LEVEL API
@@ -403,7 +409,7 @@ cs_play_sound_def_t cs_make_def(cs_loaded_sound_t* sound);
 void cs_stop_all_sounds(cs_context_t* ctx);
 
 // SDL_RWops specific functions
-#ifdef SDL_rwops_h_
+#if defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
 
 	// Provides the ability to use cs_load_wav with an SDL_RWops object.
 	cs_loaded_sound_t cs_load_wav_rw(SDL_RWops* context);
@@ -553,7 +559,7 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 		#ifndef WIN32_LEAN_AND_MEAN
 			#define WIN32_LEAN_AND_MEAN
 		#endif
-		#include <Windows.h>
+		#include <windows.h>
 	#endif
 
 	#ifndef _WAVEFORMATEX_
@@ -579,14 +585,20 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 
 	#define ALSA_PCM_NEW_HW_PARAMS_API
 	#include <alsa/asoundlib.h>
-	#include <unistd.h> // usleep
+	#include <unistd.h> // nanosleep
 	#include <dlfcn.h> // dlopen, dclose, dlsym
+	#define timespec // Avoids duplicate definitions.
+	#undef timespec // You must compile with POSIX features enabled.
 	#include <pthread.h>
+	#include <alloca.h>
 	#include <assert.h>
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	#include <SDL2/SDL.h>
+	#ifndef _WIN32
+		#include <alloca.h>
+	#endif
 
 #else
 
@@ -608,6 +620,7 @@ const char* cs_error_reason;
 
 static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 {
+	(void)mem_ctx;
 	void* data = 0;
 	FILE* fp = fopen(path, "rb");
 	int sizeNum = 0;
@@ -618,7 +631,7 @@ static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 		sizeNum = (int)ftell(fp);
 		fseek(fp, 0, SEEK_SET);
 		data = CUTE_SOUND_ALLOC(sizeNum, mem_ctx);
-		fread(data, sizeNum, 1, fp);
+		(void)(fread(data, sizeNum, 1, fp) + 1);
 		fclose(fp);
 	}
 
@@ -641,6 +654,7 @@ static char* cs_next(char* data)
 
 static void* cs_malloc16(size_t size, void* mem_ctx)
 {
+	(void)mem_ctx;
 	void* p = CUTE_SOUND_ALLOC(size + 16, mem_ctx);
 	if (!p) return 0;
 	unsigned char offset = (size_t)p & 15;
@@ -652,6 +666,7 @@ static void* cs_malloc16(size_t size, void* mem_ctx)
 
 static void cs_free16(void* p, void* mem_ctx)
 {
+	(void)mem_ctx;
 	if (!p) return;
 	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF), NULL);
 }
@@ -801,7 +816,7 @@ ts_err:
 
 cs_loaded_sound_t cs_load_wav(const char* path)
 {
-	cs_loaded_sound_t sound = { 0 };
+	cs_loaded_sound_t sound = { 0, 0, 0, 0, { NULL, NULL } };
 	int size;
 	char* wav = (char*)cs_read_file_to_memory(path, &size, NULL);
 	cs_read_mem_wav(wav, size, &sound);
@@ -809,7 +824,7 @@ cs_loaded_sound_t cs_load_wav(const char* path)
 	return sound;
 }
 
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
 
 // Load an SDL_RWops object's data into memory.
 // Ripped straight from: https://wiki.libsdl.org/SDL_RWread
@@ -942,7 +957,7 @@ cs_loaded_sound_t cs_load_ogg(const char* path)
 	return sound;
 }
 
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
 
 cs_loaded_sound_t cs_load_ogg_rw(SDL_RWops* rw)
 {
@@ -1122,8 +1137,8 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buf
 	int bps = sizeof(INT16) * 2;
 	int buffer_size = buffered_samples * bps;
 	cs_context_t* ctx = 0;
-	WAVEFORMATEX format = { 0 };
-	DSBUFFERDESC bufdesc = { 0 };
+	WAVEFORMATEX format = { 0, 0, 0, 0, 0, 0, 0 };
+	DSBUFFERDESC bufdesc = { 0, 0, 0, 0, 0, { 0, 0, 0, 0 } };
 	LPDIRECTSOUND dsound;
 
 	CUTE_SOUND_CHECK(hwnd, "Invalid hwnd passed to cs_make_context.");
@@ -1235,7 +1250,8 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 
 void cs_sleep(int milliseconds)
 {
-	usleep(milliseconds * 1000);
+	struct timespec ts = { 0, milliseconds * 1000000 };
+	nanosleep(&ts, NULL);
 }
 
 struct cs_context_t
@@ -1428,7 +1444,8 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 
 void cs_sleep(int milliseconds)
 {
-	usleep(milliseconds * 1000);
+	struct timespec ts = { 0, milliseconds * 1000000 };
+	nanosleep(&ts, NULL);
 }
 
 // Load up ALSA functions manually, so nobody has to deal with compiler linker flags.
@@ -1584,11 +1601,11 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	(void)unused;
 	int sample_count = buffered_samples;
 	int bps;
-	int latency_count;
 	int wide_count;
 	int pool_size;
 	int mix_buffers_size;
 	int sample_buffer_size;
+	int res;
 	cs_context_t* ctx = NULL;
 
 	// Platform specific things.
@@ -1609,7 +1626,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	void* alsa_so = cs_load_alsa_functions(&fns);
 	CUTE_SOUND_CHECK(alsa_so, "Unable to load ALSA functions from shared library.");
     printf("%p\n", fns.snd_pcm_open);
-	int res = fns.snd_pcm_open(&pcm_handle, default_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+	res = fns.snd_pcm_open(&pcm_handle, default_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
 	CUTE_SOUND_CHECK(res >= 0, "Failed to open default audio device.");
 	snd_pcm_hw_params_alloca(&hw_params);
 	res = fns.snd_pcm_hw_params_any(pcm_handle, hw_params);
@@ -2220,6 +2237,16 @@ static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len)
 
 void cs_mix(cs_context_t* ctx)
 {
+	// These variables have to be declared before any gotos to compile
+	// as C++.
+	cs_playing_sound_t** ptr;
+	__m128i* samples;
+	__m128* floatA;
+	__m128* floatB;
+	__m128 zero;
+	int wide_count;
+	int samples_to_write;
+
 	cs_lock(ctx);
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
@@ -2229,32 +2256,34 @@ void cs_mix(cs_context_t* ctx)
 	cs_position(ctx, &byte_to_lock, &bytes_to_write);
 
 	if (!bytes_to_write) goto unlock;
-	int samples_to_write = bytes_to_write / ctx->bps;
+	samples_to_write = bytes_to_write / ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
-	int samples_to_write = cs_samples_to_mix(ctx);
+	int bytes_to_write;
+	samples_to_write = cs_samples_to_mix(ctx);
 	if (!samples_to_write) goto unlock;
-	int bytes_to_write = samples_to_write * ctx->bps;
+	bytes_to_write = samples_to_write * ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
 
+	int ret;
 	snd_pcm_sframes_t frames = ctx->fns.snd_pcm_avail(ctx->pcm_handle);
 	if (frames == -EAGAIN) goto unlock; // No data yet.
 	else if (frames < 0) { /* Fatal error... How should this be handled? */ }
 	else if (frames == 0) goto unlock;
-	int samples_to_write = (int)frames;
-	if (samples_to_write > ctx->latency_samples) samples_to_write = ctx->latency_samples;
+	samples_to_write = (int)frames;
+	if (samples_to_write > (int)ctx->latency_samples) samples_to_write = ctx->latency_samples;
 
 #endif
 
 	// clear mixer buffers
-	int wide_count = samples_to_write / 4;
+	wide_count = samples_to_write / 4;
 	CUTE_SOUND_ASSERT(!(samples_to_write & 3));
 
-	__m128* floatA = ctx->floatA;
-	__m128* floatB = ctx->floatB;
-	__m128 zero = _mm_set1_ps(0.0f);
+	floatA = ctx->floatA;
+	floatB = ctx->floatB;
+	zero = _mm_set1_ps(0.0f);
 
 	for (int i = 0; i < wide_count; ++i)
 	{
@@ -2263,7 +2292,7 @@ void cs_mix(cs_context_t* ctx)
 	}
 
 	// mix all playing sounds into the mixer buffers
-	cs_playing_sound_t** ptr = &ctx->playing;
+	ptr = &ctx->playing;
 	while (*ptr)
 	{
 		cs_playing_sound_t* playing = *ptr;
@@ -2428,7 +2457,7 @@ void cs_mix(cs_context_t* ctx)
 	// load all floats into 16 bit packed interleaved samples
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
-	__m128i* samples = ctx->samples;
+	samples = ctx->samples;
 	for (int i = 0; i < wide_count; ++i)
 	{
 		__m128i a = _mm_cvtps_epi32(floatA[i]);
@@ -2445,7 +2474,7 @@ void cs_mix(cs_context_t* ctx)
 	// reusing floatA to store output is a good way to temporarly store
 	// the final samples. Then a single ring buffer push can be used
 	// afterwards. Pretty hacky, but whatever :)
-	__m128i* samples = (__m128i*)floatA;
+	samples = (__m128i*)floatA;
 	for (int i = 0; i < wide_count; ++i)
 	{
 		__m128i a = _mm_cvtps_epi32(floatA[i]);
@@ -2462,7 +2491,7 @@ void cs_mix(cs_context_t* ctx)
 	#if CUTE_SOUND_PLATFORM != CUTE_SOUND_LINUX
 		cs_push_bytes(ctx, samples, bytes_to_write);
 	#else
-		int ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
+		ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
 		if (ret < 0) ret = ctx->fns.snd_pcm_recover(ctx->pcm_handle, ret, 0);
 		if (ret < 0) {
 			// A fatal error occured.
