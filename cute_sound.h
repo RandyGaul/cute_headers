@@ -24,7 +24,7 @@
 		For Apple machines cute_sound uses CoreAudio.
 
 		For Linux builds cute_sound uses ALSA (implementation is currently buggy, and
-		cute_sound's SDL2 implementation is recommended instead, more on this below).
+		cute_sound's SDL2 implementation is recommended instead).
 
 		An SDL2 implementation of cute_sound is available on platforms SDL2 is available,
 		which is pretty much everywhere. To use the SDL2 implementation of cute_sound
