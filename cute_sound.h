@@ -508,8 +508,6 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 
 #include <stdio.h>	// fopen, fclose
 #include <string.h>	// memcmp, memset, memcpy
-#include <xmmintrin.h>
-#include <emmintrin.h>
 
 // Platform detection.
 #define CUTE_SOUND_WINDOWS 1
@@ -606,8 +604,141 @@ cs_plugin_id_t cs_add_plugin(cs_context_t* ctx, const cs_plugin_interface_t* plu
 
 #endif
 
+#ifdef CUTE_SOUND_SCALAR_MODE
+
+	#include <limits.h>
+
+	#define CS_SATURATE16(X) (int16_t)((X) > SHRT_MAX ? SHRT_MAX : ((X) < SHRT_MIN ? SHRT_MIN : (X)))
+
+	typedef struct cs__m128
+	{
+		float a, b, c, d;
+	} cs__m128;
+
+	typedef struct cs__m128i
+	{
+		int32_t a, b, c, d;
+	} cs__m128i;
+
+	cs__m128 cs_mm_set_ps(float e3, float e2, float e1, float e0)
+	{
+		cs__m128 a;
+		a.a = e0;
+		a.b = e1;
+		a.c = e2;
+		a.d = e3;
+		return a;
+	}
+
+	cs__m128 cs_mm_set1_ps(float e)
+	{
+		cs__m128 a;
+		a.a = e;
+		a.b = e;
+		a.c = e;
+		a.d = e;
+		return a;
+	}
+
+	cs__m128 cs_mm_load_ps(float const* mem_addr)
+	{
+		cs__m128 a;
+		a.a = mem_addr[0];
+		a.b = mem_addr[1];
+		a.c = mem_addr[2];
+		a.d = mem_addr[3];
+		return a;
+	}
+
+	cs__m128 cs_mm_add_ps(cs__m128 a, cs__m128 b)
+	{
+		cs__m128 c;
+		c.a = a.a + b.a;
+		c.b = a.b + b.b;
+		c.c = a.c + b.c;
+		c.d = a.d + b.d;
+		return c;
+	}
+
+	cs__m128 cs_mm_mul_ps(cs__m128 a, cs__m128 b)
+	{
+		cs__m128 c;
+		c.a = a.a * b.a;
+		c.b = a.b * b.b;
+		c.c = a.c * b.c;
+		c.d = a.d * b.d;
+		return c;
+	}
+
+	cs__m128i cs_mm_cvtps_epi32(cs__m128 a)
+	{
+		cs__m128i b;
+		b.a = a.a;
+		b.b = a.b;
+		b.c = a.c;
+		b.d = a.d;
+		return b;
+	}
+
+	cs__m128i cs_mm_unpacklo_epi32(cs__m128i a, cs__m128i b)
+	{
+		cs__m128i c;
+		c.a = a.a;
+		c.b = b.a;
+		c.c = a.b;
+		c.d = b.b;
+		return c;
+	}
+
+	cs__m128i cs_mm_unpackhi_epi32(cs__m128i a, cs__m128i b)
+	{
+		cs__m128i c;
+		c.a = a.c;
+		c.b = b.c;
+		c.c = a.d;
+		c.d = b.d;
+		return c;
+	}
+
+	cs__m128i cs_mm_packs_epi32(cs__m128i a, cs__m128i b)
+	{
+		union {
+			int16_t c[8];
+			cs__m128i m;
+		} dst;
+		dst.c[0] = CS_SATURATE16(a.a);
+		dst.c[1] = CS_SATURATE16(a.b);
+		dst.c[2] = CS_SATURATE16(a.c);
+		dst.c[3] = CS_SATURATE16(a.d);
+		dst.c[4] = CS_SATURATE16(b.a);
+		dst.c[5] = CS_SATURATE16(b.b);
+		dst.c[6] = CS_SATURATE16(b.c);
+		dst.c[7] = CS_SATURATE16(b.d);
+		return dst.m;
+	}
+
+#else
+
+	#include <xmmintrin.h>
+	#include <emmintrin.h>
+
+	#define cs__m128 __m128
+	#define cs__m128i __m128i
+
+	#define cs_mm_set_ps _mm_set_ps
+	#define cs_mm_set1_ps _mm_set1_ps
+	#define cs_mm_load_ps _mm_load_ps
+	#define cs_mm_add_ps _mm_add_ps
+	#define cs_mm_mul_ps _mm_mul_ps
+	#define cs_mm_cvtps_epi32 _mm_cvtps_epi32
+	#define cs_mm_unpacklo_epi32 _mm_unpacklo_epi32
+	#define cs_mm_unpackhi_epi32 _mm_unpackhi_epi32
+	#define cs_mm_packs_epi32 _mm_packs_epi32
+
+#endif // CUTE_SOUND_SCALAR_MODE
+
 #define CUTE_SOUND_CHECK(X, Y) do { if (!(X)) { cs_error_reason = Y; goto ts_err; } } while (0)
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE && defined(__clang__)
+#ifdef __clang__
 	#define CUTE_SOUND_ASSERT_INTERNAL __builtin_trap()
 #else
 	#define CUTE_SOUND_ASSERT_INTERNAL *(int*)0 = 0
@@ -671,24 +802,24 @@ static void cs_free16(void* p, void* mem_ctx)
 	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF), NULL);
 }
 
-static void cs_last_element(__m128* a, int i, int j, int16_t* samples, int offset)
+static void cs_last_element(cs__m128* a, int i, int j, int16_t* samples, int offset)
 {
 	switch (offset)
 	{
 	case 1:
-		a[i] = _mm_set_ps(samples[j], 0.0f, 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps(samples[j], 0.0f, 0.0f, 0.0f);
 		break;
 
 	case 2:
-		a[i] = _mm_set_ps(samples[j], samples[j + 1], 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], 0.0f, 0.0f);
 		break;
 
 	case 3:
-		a[i] = _mm_set_ps(samples[j], samples[j + 1], samples[j + 2], 0.0f);
+		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], 0.0f);
 		break;
 
 	case 0:
-		a[i] = _mm_set_ps(samples[j], samples[j + 1], samples[j + 2], samples[j + 3]);
+		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], samples[j + 3]);
 		break;
 	}
 }
@@ -761,9 +892,9 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 		{
 		case 1:
 		{
-			sound->channels[0] = cs_malloc16(wide_count * sizeof(__m128), NULL);
+			sound->channels[0] = cs_malloc16(wide_count * sizeof(cs__m128), NULL);
 			sound->channels[1] = 0;
-			__m128* a = (__m128*)sound->channels[0];
+			cs__m128* a = (cs__m128*)sound->channels[0];
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4)
 			{
@@ -771,7 +902,7 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 				sample[1] = (float)samples[j + 1];
 				sample[2] = (float)samples[j + 2];
 				sample[3] = (float)samples[j + 3];
-				a[i] = _mm_load_ps(sample);
+				a[i] = cs_mm_load_ps(sample);
 			}
 
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
@@ -779,8 +910,8 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 
 		case 2:
 		{
-			__m128* a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2, NULL);
-			__m128* b = a + wide_count;
+			cs__m128* a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2, NULL);
+			cs__m128* b = a + wide_count;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
 			{
@@ -788,13 +919,13 @@ void cs_read_mem_wav(const void* memory, int size, cs_loaded_sound_t* sound)
 				sample[1] = (float)samples[j + 2];
 				sample[2] = (float)samples[j + 4];
 				sample[3] = (float)samples[j + 6];
-				a[i] = _mm_load_ps(sample);
+				a[i] = cs_mm_load_ps(sample);
 
 				sample[0] = (float)samples[j + 1];
 				sample[1] = (float)samples[j + 3];
 				sample[2] = (float)samples[j + 5];
 				sample[3] = (float)samples[j + 7];
-				b[i] = _mm_load_ps(sample);
+				b[i] = cs_mm_load_ps(sample);
 			}
 
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
@@ -883,14 +1014,14 @@ void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound)
 		int wide_offset = sample_count & 3;
 		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
-		__m128* a;
-		__m128* b;
+		cs__m128* a;
+		cs__m128* b;
 
 		switch (channel_count)
 		{
 		case 1:
 		{
-			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128), NULL);
+			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128), NULL);
 			b = 0;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4)
@@ -899,14 +1030,14 @@ void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound)
 				sample[1] = (float)samples[j + 1];
 				sample[2] = (float)samples[j + 2];
 				sample[3] = (float)samples[j + 3];
-				a[i] = _mm_load_ps(sample);
+				a[i] = cs_mm_load_ps(sample);
 			}
 
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 		}	break;
 
 		case 2:
-			a = (__m128*)cs_malloc16(wide_count * sizeof(__m128) * 2, NULL);
+			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2, NULL);
 			b = a + wide_count;
 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
@@ -915,13 +1046,13 @@ void cs_read_mem_ogg(const void* memory, int length, cs_loaded_sound_t* sound)
 				sample[1] = (float)samples[j + 2];
 				sample[2] = (float)samples[j + 4];
 				sample[3] = (float)samples[j + 6];
-				a[i] = _mm_load_ps(sample);
+				a[i] = cs_mm_load_ps(sample);
 
 				sample[0] = (float)samples[j + 1];
 				sample[1] = (float)samples[j + 3];
 				sample[2] = (float)samples[j + 5];
 				sample[3] = (float)samples[j + 7];
-				b[i] = _mm_load_ps(sample);
+				b[i] = cs_mm_load_ps(sample);
 			}
 
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
@@ -1057,9 +1188,9 @@ struct cs_context_t
 	int buffer_size;
 	int wide_count;
 	cs_playing_sound_t* playing;
-	__m128* floatA;
-	__m128* floatB;
-	__m128i* samples;
+	cs__m128* floatA;
+	cs__m128* floatB;
+	cs__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
 
@@ -1190,8 +1321,8 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buf
 		int sample_count = buffered_samples;
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
 		int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
-		int mix_buffers_size = sizeof(__m128) * wide_count * 2;
-		int sample_buffer_size = sizeof(__m128i) * wide_count;
+		int mix_buffers_size = sizeof(cs__m128) * wide_count * 2;
+		int sample_buffer_size = sizeof(cs__m128i) * wide_count;
 		ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 		ctx->latency_samples = 4096;
 		ctx->running_index = 0;
@@ -1203,11 +1334,11 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buf
 		ctx->buffer = secondary_buffer;
 		ctx->primary = primary_buffer;
 		ctx->playing = 0;
-		ctx->floatA = (__m128*)(ctx + 1);
-		ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+		ctx->floatA = (cs__m128*)(ctx + 1);
+		ctx->floatA = (cs__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
 		CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
 		ctx->floatB = ctx->floatA + wide_count;
-		ctx->samples = (__m128i*)ctx->floatB + wide_count;
+		ctx->samples = (cs__m128i*)ctx->floatB + wide_count;
 		ctx->running = 1;
 		ctx->separate_thread = 0;
 		ctx->sleep_milliseconds = 0;
@@ -1264,9 +1395,9 @@ struct cs_context_t
 	int wide_count;
 	int sample_count;
 	cs_playing_sound_t* playing;
-	__m128* floatA;
-	__m128* floatB;
-	__m128i* samples;
+	cs__m128* floatA;
+	cs__m128* floatB;
+	cs__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
 
@@ -1372,8 +1503,8 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
-	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
-	int sample_buffer_size = sizeof(__m128i) * wide_count;
+	int mix_buffers_size = sizeof(cs__m128) * wide_count * 2;
+	int sample_buffer_size = sizeof(cs__m128i) * wide_count;
 	cs_context_t* ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ret == noErr, "AudioComponentInstanceNew failed");
 	ctx->latency_samples = 4096;
@@ -1385,11 +1516,11 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->sample_count = wide_count * 4;
 	ctx->inst = inst;
 	ctx->playing = 0;
-	ctx->floatA = (__m128*)(ctx + 1);
-	ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+	ctx->floatA = (cs__m128*)(ctx + 1);
+	ctx->floatA = (cs__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
 	CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
 	ctx->floatB = ctx->floatA + wide_count;
-	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->samples = (cs__m128i*)ctx->floatB + wide_count;
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
@@ -1526,9 +1657,9 @@ struct cs_context_t
 	int wide_count;
 	int sample_count;
 	cs_playing_sound_t* playing;
-	__m128* floatA;
-	__m128* floatB;
-	__m128i* samples;
+	cs__m128* floatA;
+	cs__m128* floatB;
+	cs__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
 
@@ -1664,8 +1795,8 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	bps = sizeof(uint16_t) * 2;
 	wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
-	mix_buffers_size = sizeof(__m128) * wide_count * 2;
-	sample_buffer_size = sizeof(__m128i) * wide_count;
+	mix_buffers_size = sizeof(cs__m128) * wide_count * 2;
+	sample_buffer_size = sizeof(cs__m128i) * wide_count;
 
 	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
 	CUTE_SOUND_CHECK(ctx != NULL, "Can't create audio context");
@@ -1677,11 +1808,11 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->wide_count = wide_count;
 	ctx->sample_count = wide_count * 4;
 	ctx->playing = 0;
-	ctx->floatA = (__m128*)(ctx + 1);
-	ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+	ctx->floatA = (cs__m128*)(ctx + 1);
+	ctx->floatA = (cs__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
 	CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
 	ctx->floatB = ctx->floatA + wide_count;
-	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->samples = (cs__m128i*)ctx->floatB + wide_count;
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
@@ -1742,9 +1873,9 @@ struct cs_context_t
 	int wide_count;
 	int sample_count;
 	cs_playing_sound_t* playing;
-	__m128* floatA;
-	__m128* floatB;
-	__m128i* samples;
+	cs__m128* floatA;
+	cs__m128* floatB;
+	cs__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
 
@@ -1814,8 +1945,8 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	int sample_count = buffered_samples;
 	int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 	int pool_size = playing_pool_count * sizeof(cs_playing_sound_t);
-	int mix_buffers_size = sizeof(__m128) * wide_count * 2;
-	int sample_buffer_size = sizeof(__m128i) * wide_count;
+	int mix_buffers_size = sizeof(cs__m128) * wide_count * 2;
+	int sample_buffer_size = sizeof(cs__m128i) * wide_count;
 	cs_context_t* ctx = 0;
 	SDL_AudioSpec wanted;
 	int ret = SDL_Init(SDL_INIT_AUDIO);
@@ -1831,11 +1962,11 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->wide_count = wide_count;
 	ctx->sample_count = wide_count * 4;
 	ctx->playing = 0;
-	ctx->floatA = (__m128*)(ctx + 1);
-	ctx->floatA = (__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
+	ctx->floatA = (cs__m128*)(ctx + 1);
+	ctx->floatA = (cs__m128*)CUTE_SOUND_ALIGN(ctx->floatA, 16);
 	CUTE_SOUND_ASSERT(!((size_t)ctx->floatA & 15));
 	ctx->floatB = ctx->floatA + wide_count;
-	ctx->samples = (__m128i*)ctx->floatB + wide_count;
+	ctx->samples = (cs__m128i*)ctx->floatB + wide_count;
 	ctx->running = 1;
 	ctx->separate_thread = 0;
 	ctx->sleep_milliseconds = 0;
@@ -2240,10 +2371,10 @@ void cs_mix(cs_context_t* ctx)
 	// These variables have to be declared before any gotos to compile
 	// as C++.
 	cs_playing_sound_t** ptr;
-	__m128i* samples;
-	__m128* floatA;
-	__m128* floatB;
-	__m128 zero;
+	cs__m128i* samples;
+	cs__m128* floatA;
+	cs__m128* floatB;
+	cs__m128 zero;
 	int wide_count;
 	int samples_to_write;
 
@@ -2283,7 +2414,7 @@ void cs_mix(cs_context_t* ctx)
 
 	floatA = ctx->floatA;
 	floatB = ctx->floatB;
-	zero = _mm_set1_ps(0.0f);
+	zero = cs_mm_set1_ps(0.0f);
 
 	for (int i = 0; i < wide_count; ++i)
 	{
@@ -2310,8 +2441,8 @@ void cs_mix(cs_context_t* ctx)
 			goto get_next_playing_sound;
 
 		{
-			__m128* cA = (__m128*)loaded->channels[0];
-			__m128* cB = (__m128*)loaded->channels[1];
+			cs__m128* cA = (cs__m128*)loaded->channels[0];
+			cs__m128* cB = (cs__m128*)loaded->channels[1];
 
 			// Attempted to play a sound with no audio.
 			// Make sure the audio file was loaded properly. Check for
@@ -2326,8 +2457,8 @@ void cs_mix(cs_context_t* ctx)
 
 			float vA0 = playing->volume0 * playing->pan0;
 			float vB0 = playing->volume1 * playing->pan1;
-			__m128 vA = _mm_set1_ps(vA0);
-			__m128 vB = _mm_set1_ps(vB0);
+			cs__m128 vA = cs_mm_set1_ps(vA0);
+			cs__m128 vB = cs_mm_set1_ps(vB0);
 
 			// skip sound if it's delay is longer than mix_count and
 			// handle various delay cases
@@ -2368,8 +2499,8 @@ void cs_mix(cs_context_t* ctx)
 				float* samples_out_channel_b = NULL;
 				plugin->on_mix_fn(ctx, plugin->plugin_instance, 0, plugin_samples_in_channel_a, sample_count, &samples_out_channel_a, playing->plugin_udata[i], playing);
 				if (loaded->channel_count == 2) plugin->on_mix_fn(ctx, plugin->plugin_instance, 1, plugin_samples_in_channel_b, sample_count, &samples_out_channel_b, playing->plugin_udata[i], playing);
-				if (samples_out_channel_a) cA = (__m128*)samples_out_channel_a;
-				if (samples_out_channel_b) cB = (__m128*)samples_out_channel_b;
+				if (samples_out_channel_a) cA = (cs__m128*)samples_out_channel_a;
+				if (samples_out_channel_b) cB = (cs__m128*)samples_out_channel_b;
 
 				// Set offset_wide to cancel out delay_wide because cA and cB are now owned by the plugin,
 				// this elimineating the need for the delay offset.
@@ -2382,11 +2513,11 @@ void cs_mix(cs_context_t* ctx)
 			case 1:
 				for (int i = delay_wide; i < mix_wide - delay_wide; ++i)
 				{
-					__m128 A = cA[i + offset_wide];
-					__m128 B = _mm_mul_ps(A, vB);
-					A = _mm_mul_ps(A, vA);
-					floatA[i] = _mm_add_ps(floatA[i], A);
-					floatB[i] = _mm_add_ps(floatB[i], B);
+					cs__m128 A = cA[i + offset_wide];
+					cs__m128 B = cs_mm_mul_ps(A, vB);
+					A = cs_mm_mul_ps(A, vA);
+					floatA[i] = cs_mm_add_ps(floatA[i], A);
+					floatB[i] = cs_mm_add_ps(floatB[i], B);
 				}
 				break;
 
@@ -2394,13 +2525,13 @@ void cs_mix(cs_context_t* ctx)
 			{
 				for (int i = delay_wide; i < mix_wide - delay_wide; ++i)
 				{
-					__m128 A = cA[i + offset_wide];
-					__m128 B = cB[i + offset_wide];
+					cs__m128 A = cA[i + offset_wide];
+					cs__m128 B = cB[i + offset_wide];
 
-					A = _mm_mul_ps(A, vA);
-					B = _mm_mul_ps(B, vB);
-					floatA[i] = _mm_add_ps(floatA[i], A);
-					floatB[i] = _mm_add_ps(floatB[i], B);
+					A = cs_mm_mul_ps(A, vA);
+					B = cs_mm_mul_ps(B, vB);
+					floatA[i] = cs_mm_add_ps(floatA[i], A);
+					floatB[i] = cs_mm_add_ps(floatB[i], B);
 				}
 			}	break;
 			}
@@ -2460,11 +2591,11 @@ void cs_mix(cs_context_t* ctx)
 	samples = ctx->samples;
 	for (int i = 0; i < wide_count; ++i)
 	{
-		__m128i a = _mm_cvtps_epi32(floatA[i]);
-		__m128i b = _mm_cvtps_epi32(floatB[i]);
-		__m128i a0b0a1b1 = _mm_unpacklo_epi32(a, b);
-		__m128i a2b2a3b3 = _mm_unpackhi_epi32(a, b);
-		samples[i] = _mm_packs_epi32(a0b0a1b1, a2b2a3b3);
+		cs__m128i a = cs_mm_cvtps_epi32(floatA[i]);
+		cs__m128i b = cs_mm_cvtps_epi32(floatB[i]);
+		cs__m128i a0b0a1b1 = cs_mm_unpacklo_epi32(a, b);
+		cs__m128i a2b2a3b3 = cs_mm_unpackhi_epi32(a, b);
+		samples[i] = cs_mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
 	cs_memcpy_to_directsound(ctx, (int16_t*)samples, byte_to_lock, bytes_to_write);
 
@@ -2474,14 +2605,14 @@ void cs_mix(cs_context_t* ctx)
 	// reusing floatA to store output is a good way to temporarly store
 	// the final samples. Then a single ring buffer push can be used
 	// afterwards. Pretty hacky, but whatever :)
-	samples = (__m128i*)floatA;
+	samples = (cs__m128i*)floatA;
 	for (int i = 0; i < wide_count; ++i)
 	{
-		__m128i a = _mm_cvtps_epi32(floatA[i]);
-		__m128i b = _mm_cvtps_epi32(floatB[i]);
-		__m128i a0b0a1b1 = _mm_unpacklo_epi32(a, b);
-		__m128i a2b2a3b3 = _mm_unpackhi_epi32(a, b);
-		samples[i] = _mm_packs_epi32(a0b0a1b1, a2b2a3b3);
+		cs__m128i a = cs_mm_cvtps_epi32(floatA[i]);
+		cs__m128i b = cs_mm_cvtps_epi32(floatB[i]);
+		cs__m128i a0b0a1b1 = cs_mm_unpacklo_epi32(a, b);
+		cs__m128i a2b2a3b3 = cs_mm_unpackhi_epi32(a, b);
+		samples[i] = cs_mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
 
 	// SDL/CoreAudio use a callback mechanism communicating with cute sound
