@@ -71,6 +71,7 @@
 		                  Ref counting for playing sounds
 		1.10 (08/24/2019) Introduced plugin interface, reimplemented pitch shifting
 		                  as a plugin, added optional `ctx` to alloc functions
+		1.11 (04/23/2020) scalar SIMD mode and various compiler warning/error fixes
 
 
 	CONTRIBUTORS
@@ -82,6 +83,7 @@
 		RobLoach          1.08 - SDL_RWops support
 		Matt Rosen        1.10 - Initial experiments with cute_dsp to figure out plugin
 		                         interface needs and use-cases
+		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 
 
 	DOCUMENTATION (very quick intro)
@@ -184,6 +186,16 @@
 		Cute sound can add plugins at run-time to modify audio before it gets mixed. Please
 		refer to all the documentation near `cs_plugin_interface_t`.
 
+	DISABLE SSE SIMD ACCELERATION
+
+		If for whatever reason you don't want to use SSE intrinsics and instead would prefer
+		plain C (for example if your platform does not support SSE) then define
+		CUTE_SOUND_SCALAR_MODE before including cute_sound.h while also defining the
+		symbol definitions. Here's an example:
+
+			#define CUTE_SOUND_IMPLEMENTATION
+			#define CUTE_SOUND_SCALAR_MODE
+			#include <cute_sound.h>
 
 	KNOWN LIMITATIONS
 
