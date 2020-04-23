@@ -18,7 +18,8 @@
 		with standard OSs, or SDL2 for more uncommon OSs.
 
 		For Windows cute_sound uses DirectSound. Due to the use of SSE intrinsics, MinGW
-		builds must be made with the compiler option: -march=native
+		builds must be made with the compiler option: -march=native, or optionally SSE
+		can be disabled with CUTE_SOUND_SCALAR_MODE. More on this mode written below.
 
 		For Apple machines cute_sound uses CoreAudio.
 
