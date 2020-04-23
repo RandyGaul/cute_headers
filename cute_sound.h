@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v1.10
+	cute_sound.h - v1.11
 
 
 	To create implementation (the function definitions)
