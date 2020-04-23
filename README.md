@@ -6,7 +6,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 |---------|-------------|---------------|-------------
 **[cute_c2](cute_c2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation, shape cast/sweep test, raycasts | 1.08 | C/C++
 **[cute_coroutine](cute_coroutine.h)** | Implementation of Duff's device for cooperative style programming - useful for state machines and "linear" style coding | 1.01 | C/C++
-**[cute_sound](cute_sound.h)** | Load/play/loop/pitch (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time, done via plugin, see [cute_sound_pitch_plugin](cute_sound_pitch_plugin.h)) | 1.10 | C/C++
+**[cute_sound](cute_sound.h)** | Load/play/loop/pitch (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time, done via plugin, see [cute_sound_pitch_plugin](cute_sound_pitch_plugin.h)) | 1.11 | C/C++
 **[cute_time](cute_time.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
 **[cute_memfile](cute_memfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
 **[cute_files](cute_files.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
