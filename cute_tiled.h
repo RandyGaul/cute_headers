@@ -1343,7 +1343,6 @@ static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 {
 	int count = 0;
 	int done = 0;
-
 	cute_tiled_expect(m, '"');
 
 	while (!done)
