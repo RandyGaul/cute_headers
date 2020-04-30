@@ -94,6 +94,7 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
+extern int cute_tiled_error_cline;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
@@ -1143,6 +1144,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 const char* cute_tiled_error_reason;
+int cute_tiled_error_cline;
 
 #ifdef CUTE_TILED_DEFAULT_WARNING
 	#include <stdio.h>
@@ -1244,7 +1246,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 	return map;
 }
 
-#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; goto cute_tiled_err; } } while (0)
+#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; cute_tiled_error_cline = __LINE__; goto cute_tiled_err; } } while (0)
 #define CUTE_TILED_FAIL_IF(X) do { if (X) { goto cute_tiled_err; } } while (0)
 
 static int cute_tiled_isspace(char c)
@@ -1284,7 +1286,7 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 
 #define cute_tiled_expect(m, expect) \
 	do { \
-		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), "Found unexpected token (is this a valid JSON file?)."); \
+		CUTE_TILED_CHECK(cute_tiled_next(m) == expect, "Found unexpected token (is this a valid JSON file?)."); \
 	} while (0)
 
 char cute_tiled_parse_char(char c)
