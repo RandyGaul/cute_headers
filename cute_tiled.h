@@ -1305,10 +1305,42 @@ char cute_tiled_parse_char(char c)
 	}
 }
 
+static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
+{
+	int depth = 1;
+	cute_tiled_expect(m, '{');
+
+	while (depth) {
+		char c = cute_tiled_next(m);
+		switch(c)
+		{
+		case '{':
+			depth += 1;
+			break;
+		case '}':
+			depth -= 1;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_skip_object(m) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_skip_object_internal(m)); \
+	} while (0)
+
 static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 {
 	int count = 0;
 	int done = 0;
+
 	cute_tiled_expect(m, '"');
 
 	while (!done)
@@ -2129,6 +2161,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		cute_tiled_read_int(m, &compressionlevel);
 		CUTE_TILED_CHECK(compressionlevel == -1, "Compression is not yet supported.");
 	}	break;
+
+	case 13648382824248632287U: // editorsettings
+		cute_tiled_skip_object(m);
+		break;
 
 	case 17465100621023921744U: // backgroundcolor
 		cute_tiled_expect(m, '"');
