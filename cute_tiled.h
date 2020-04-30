@@ -1312,14 +1312,17 @@ static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
 
 	while (depth) {
 		char c = cute_tiled_next(m);
+
 		switch(c)
 		{
 		case '{':
 			depth += 1;
 			break;
+
 		case '}':
 			depth -= 1;
 			break;
+
 		default:
 			break;
 		}
