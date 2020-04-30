@@ -2123,6 +2123,13 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
  	switch (h)
 	{
+	case 5549108793316760247U: // compressionlevel
+	{
+		int compressionlevel;
+		cute_tiled_read_int(m, &compressionlevel);
+		CUTE_TILED_CHECK(compressionlevel == -1, "Compression is not yet supported.");
+	}	break;
+
 	case 17465100621023921744U: // backgroundcolor
 		cute_tiled_expect(m, '"');
 		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
