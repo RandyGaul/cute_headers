@@ -1286,7 +1286,7 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 
 #define cute_tiled_expect(m, expect) \
 	do { \
-		CUTE_TILED_CHECK(cute_tiled_next(m) == expect, "Found unexpected token (is this a valid JSON file?)."); \
+		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), "Found unexpected token (is this a valid JSON file?)."); \
 	} while (0)
 
 char cute_tiled_parse_char(char c)
