@@ -4,3 +4,8 @@
 # Executables
 example
 tests
+
+# vim
+*.swp
+*.swo
+*.orig

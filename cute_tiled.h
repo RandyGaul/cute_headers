@@ -94,6 +94,7 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
+extern int cute_tiled_error_cline;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
@@ -515,7 +516,7 @@ struct strpool_embedded_t
 #ifndef STRPOOL_EMBEDDED_STRNICMP
     #ifdef _WIN32
         #include <string.h>
-        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strnicmp( s1, s2, len ) )
+        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( _strnicmp( s1, s2, len ) )
     #else
         #include <string.h>
         #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )        
@@ -1143,6 +1144,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 const char* cute_tiled_error_reason;
+int cute_tiled_error_cline;
 
 #ifdef CUTE_TILED_DEFAULT_WARNING
 	#include <stdio.h>
@@ -1244,7 +1246,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 	return map;
 }
 
-#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; goto cute_tiled_err; } } while (0)
+#define CUTE_TILED_CHECK(X, Y) do { if (!(X)) { cute_tiled_error_reason = Y; cute_tiled_error_cline = __LINE__; goto cute_tiled_err; } } while (0)
 #define CUTE_TILED_FAIL_IF(X) do { if (X) { goto cute_tiled_err; } } while (0)
 
 static int cute_tiled_isspace(char c)
@@ -1302,6 +1304,40 @@ char cute_tiled_parse_char(char c)
 		default: return c;
 	}
 }
+
+static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
+{
+	int depth = 1;
+	cute_tiled_expect(m, '{');
+
+	while (depth) {
+		char c = cute_tiled_next(m);
+
+		switch(c)
+		{
+		case '{':
+			depth += 1;
+			break;
+
+		case '}':
+			depth -= 1;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_skip_object(m) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_skip_object_internal(m)); \
+	} while (0)
 
 static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 {
@@ -2121,6 +2157,17 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
  	switch (h)
 	{
+	case 5549108793316760247U: // compressionlevel
+	{
+		int compressionlevel;
+		cute_tiled_read_int(m, &compressionlevel);
+		CUTE_TILED_CHECK(compressionlevel == -1, "Compression is not yet supported.");
+	}	break;
+
+	case 13648382824248632287U: // editorsettings
+		cute_tiled_skip_object(m);
+		break;
+
 	case 17465100621023921744U: // backgroundcolor
 		cute_tiled_expect(m, '"');
 		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
