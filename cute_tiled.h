@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.03
+	cute_tiled.h - v1.04
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -29,6 +29,7 @@
 		1.01 (05/04/2018) tile descriptors in tilesets for collision geometry
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
+		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
 */
 
 /*
@@ -36,6 +37,7 @@
 		ZenToad           1.02 - Bug reports and goto statement errors for g++
 		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
+		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
 */
 
 /*
