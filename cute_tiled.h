@@ -1313,6 +1313,8 @@ static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
 	cute_tiled_expect(m, '{');
 
 	while (depth) {
+		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
+
 		char c = cute_tiled_next(m);
 
 		switch(c)
