@@ -1343,6 +1343,42 @@ cute_tiled_err:
 		CUTE_TILED_FAIL_IF(!cute_tiled_skip_object_internal(m)); \
 	} while (0)
 
+static int cute_tiled_skip_array_internal(cute_tiled_map_internal_t* m)
+{
+	int depth = 1;
+	cute_tiled_expect(m, '[');
+
+	while (depth) {
+		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
+
+		char c = cute_tiled_next(m);
+
+		switch(c)
+		{
+		case '[':
+			depth += 1;
+			break;
+
+		case ']':
+			depth -= 1;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_skip_array(m) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_skip_array_internal(m)); \
+	} while (0)
+
 static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 {
 	int count = 0;
@@ -2139,6 +2175,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			}
 			cute_tiled_expect(m, '}');
 		}	break;
+
+		case 6029584663444593209U: // wangsets: used by tiled editor only
+			cute_tiled_skip_array(m);
+			break;
 
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
