@@ -18,7 +18,7 @@
 		struct collection is then handed to the user.
 
 		This header is up to date with Tiled's documentation Revision cb92f36d and
-		verified to work with Tiled stable version 1.2.1.
+		verified to work with Tiled stable version 1.3.3.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
