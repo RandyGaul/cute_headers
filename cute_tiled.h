@@ -1637,10 +1637,8 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_intern_string(m, &prop.name);
 
-		// Read in the property type. The value type is deduced while parsing, this is only used for float because the JSON format omits decimals on round floats.
-		cute_tiled_skip_until_after(m, ':');
-		cute_tiled_expect(m, '"');
-		char type_char = cute_tiled_next(m);
+		// Skip the property type. This is unnecessary information since we can deduce the property type while parsing.
+                cute_tiled_skip_until_after(m, ':');
 
 		// Skip extraneous JSON information and go find the actual value data.
 		cute_tiled_skip_until_after(m, ':');
@@ -1711,7 +1709,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 				}
 			}
 
-			if (is_float || type_char == 'f')
+			if (is_float)
 			{
 				cute_tiled_read_float(m, &prop.data.floating);
 				prop.type = CUTE_TILED_PROPERTY_FLOAT;
