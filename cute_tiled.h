@@ -2164,6 +2164,17 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 104417158474046698U: // tiles
 		{
+			// The JSON format is sorted alphabetically, tiledversion should always be parsed before tiles
+			const char *tiledversion = strpool_embedded_cstr(&m->strpool, m->map.tiledversion.hash_id);
+			CUTE_TILED_CHECK(tiledversion, "Tiled version missing (is this a valid JSON file?).");
+
+			// Different format in tiled version 1.3.x, but needed in the editor for terrain. Skip for use in the tiled editor only.
+			if (tiledversion[2] >= '3')
+			{
+				cute_tiled_skip_array(m);
+				break;
+			}
+
 			cute_tiled_expect(m, '{');
 			while (cute_tiled_peak(m) != '}')
 			{
@@ -2174,7 +2185,12 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 				cute_tiled_try(m, ',');
 			}
 			cute_tiled_expect(m, '}');
+
 		}	break;
+
+		case 14766449174202642533U: // terrains: used by tiled editor only
+			cute_tiled_skip_array(m);
+			break;
 
 		case 6029584663444593209U: // wangsets: used by tiled editor only
 			cute_tiled_skip_array(m);
