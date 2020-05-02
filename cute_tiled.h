@@ -247,7 +247,7 @@ struct cute_tiled_object_t
  * Helper for processing tile data in /ref `cute_tiled_layer_t` `data`. Unsets all of
  * the image flipping flags in the higher bit of /p `tile_data_gid`.
  */
-CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
+static CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
 {
 	const int flags = ~(CUTE_TILED_FLIPPED_HORIZONTALLY_FLAG | CUTE_TILED_FLIPPED_VERTICALLY_FLAG | CUTE_TILED_FLIPPED_DIAGONALLY_FLAG);
 	return tile_data_gid & flags;
@@ -257,7 +257,7 @@ CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
  * Helper for processing tile data in /ref `cute_tiled_layer_t` `data`. Flags are
  * stored in the GID array `data` for flipping the image. Retrieves all three flag types.
  */
-CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
+static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
 {
 	*flip_horizontal = !!(tile_data_gid & CUTE_TILED_FLIPPED_HORIZONTALLY_FLAG);
 	*flip_vertical = !!(tile_data_gid & CUTE_TILED_FLIPPED_VERTICALLY_FLAG);
