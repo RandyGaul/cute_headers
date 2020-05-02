@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.03
+	cute_tiled.h - v1.04
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -29,6 +29,7 @@
 		1.01 (05/04/2018) tile descriptors in tilesets for collision geometry
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
+		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
 */
 
 /*
@@ -36,6 +37,7 @@
 		ZenToad           1.02 - Bug reports and goto statement errors for g++
 		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
+		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
 */
 
 /*
@@ -1311,6 +1313,8 @@ static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
 	cute_tiled_expect(m, '{');
 
 	while (depth) {
+		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
+
 		char c = cute_tiled_next(m);
 
 		switch(c)
@@ -1633,8 +1637,10 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_intern_string(m, &prop.name);
 
-		// Skip the property type. This is unnecessary information since we can deduce the property type while parsing.
+		// Read in the property type. The value type is deduced while parsing, this is only used for float because the JSON format omits decimals on round floats.
 		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_expect(m, '"');
+		char type_char = cute_tiled_next(m);
 
 		// Skip extraneous JSON information and go find the actual value data.
 		cute_tiled_skip_until_after(m, ':');
@@ -1705,7 +1711,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 				}
 			}
 
-			if (is_float)
+			if (is_float || type_char == 'f')
 			{
 				cute_tiled_read_float(m, &prop.data.floating);
 				prop.type = CUTE_TILED_PROPERTY_FLOAT;
