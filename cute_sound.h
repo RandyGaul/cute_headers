@@ -409,6 +409,10 @@ cs_playing_sound_t cs_make_playing_sound(cs_loaded_sound_t* loaded);
 int cs_insert_sound(cs_context_t* ctx, cs_playing_sound_t* sound); // returns 1 if sound was successfully inserted, 0 otherwise
 
 // HIGH-LEVEL API
+
+// This def struct is just used to pass parameters to `cs_play_sound`.
+// Be careful since `loaded` points to a `cs_loaded_sound_t` struct, so make
+// sure the `cs_loaded_sound_t` struct persists in memory!
 typedef struct cs_play_sound_def_t
 {
 	int paused;
