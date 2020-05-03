@@ -398,6 +398,9 @@ void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_ri
 // void cs_set_delay(cs_playing_sound_t* sound, float delay, int samples_per_second)
 void cs_set_delay(cs_context_t* ctx, cs_playing_sound_t* sound, float delay_in_seconds);
 
+// Return the linked list ctx->playing
+cs_playing_sound_t* cs_get_playing(cs_context_t* ctx);
+
 // Portable sleep function. Do not call this with milliseconds > 999.
 void cs_sleep(int milliseconds);
 
@@ -406,10 +409,6 @@ cs_playing_sound_t cs_make_playing_sound(cs_loaded_sound_t* loaded);
 int cs_insert_sound(cs_context_t* ctx, cs_playing_sound_t* sound); // returns 1 if sound was successfully inserted, 0 otherwise
 
 // HIGH-LEVEL API
-
-// This def struct is just used to pass parameters to `cs_play_sound`.
-// Be careful since `loaded` points to a `cs_loaded_sound_t` struct, so make
-// sure the `cs_loaded_sound_t` struct persists in memory!
 typedef struct cs_play_sound_def_t
 {
 	int paused;
@@ -1098,7 +1097,7 @@ cs_loaded_sound_t cs_load_ogg(const char* path)
 {
 	int length;
 	void* memory = cs_read_file_to_memory(path, &length, NULL);
-	cs_loaded_sound_t sound = { 0 };
+	cs_loaded_sound_t sound = { 0, 0, 0, 0, { NULL, NULL } };
 	cs_read_mem_ogg(memory, length, &sound);
 	CUTE_SOUND_FREE(memory, NULL);
 
@@ -2032,6 +2031,13 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 }
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
+
+// Platform-agnostic functions that access cs_context_t members go here.
+
+cs_playing_sound_t* cs_get_playing(cs_context_t* ctx)
+{
+	return ctx->playing;
+}
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
