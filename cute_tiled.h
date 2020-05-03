@@ -1153,7 +1153,7 @@ int cute_tiled_error_cline;
 
 	void cute_tiled_warning(const char* warning)
 	{
-		printf("WARNING (cute_tiled): %s\n", warning);
+		printf("WARNING (cute_tiled:%i): %s\n", cute_tiled_error_cline, warning);
 	}
 #endif
 
