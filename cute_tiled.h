@@ -2014,11 +2014,6 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 	cute_tiled_tile_descriptor_t* tile_descriptor = (cute_tiled_tile_descriptor_t*)cute_tiled_alloc(m, sizeof(cute_tiled_tile_descriptor_t));
 	CUTE_TILED_MEMSET(tile_descriptor, 0, sizeof(cute_tiled_tile_descriptor_t));
 
-	cute_tiled_expect(m, '"');
-	cute_tiled_read_int(m, &tile_descriptor->tile_index);
-	cute_tiled_expect(m, '"');
-	cute_tiled_expect(m, ':');
-
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
@@ -2028,6 +2023,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 
 		switch (h)
 		{
+		case 3133932603199444032U: // id
+			cute_tiled_read_int(m, &tile_descriptor->tile_index);
+			break;
+
 		case 8368542207491637236U: // properties
 			cute_tiled_read_properties(m, &tile_descriptor->properties, &tile_descriptor->property_count);
 			break;
@@ -2042,6 +2041,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 
 		case 6875414612738028948: // probability
 			cute_tiled_read_float(m, &tile_descriptor->probability);
+			break;
+
+		case 2784044778313316778U: // terrain: used by tiled editor only
+			cute_tiled_skip_array(m);
 			break;
 
 		default:
@@ -2164,8 +2167,8 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 104417158474046698U: // tiles
 		{
-			cute_tiled_expect(m, '{');
-			while (cute_tiled_peak(m) != '}')
+			cute_tiled_expect(m, '[');
+			while (cute_tiled_peak(m) != ']')
 			{
 				cute_tiled_tile_descriptor_t* tile_descriptor = cute_tiled_read_tile_descriptor(m);
 				CUTE_TILED_FAIL_IF(!tile_descriptor);
@@ -2173,7 +2176,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 				tileset->tiles = tile_descriptor;
 				cute_tiled_try(m, ',');
 			}
-			cute_tiled_expect(m, '}');
+			cute_tiled_expect(m, ']');
 		}	break;
 
 		case 14766449174202642533U: // terrains: used by tiled editor only
