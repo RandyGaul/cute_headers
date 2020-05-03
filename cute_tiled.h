@@ -1153,7 +1153,7 @@ int cute_tiled_error_cline;
 
 	void cute_tiled_warning(const char* warning)
 	{
-		printf("WARNING (cute_tiled): %s\n", warning);
+		printf("WARNING (cute_tiled:%i): %s\n", cute_tiled_error_cline, warning);
 	}
 #endif
 
@@ -2207,6 +2207,12 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
  	switch (h)
 	{
+	case 17465100621023921744U: // backgroundcolor
+		cute_tiled_expect(m, '"');
+		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
+		cute_tiled_expect(m, '"');
+		break;
+
 	case 5549108793316760247U: // compressionlevel
 	{
 		int compressionlevel;
@@ -2216,12 +2222,6 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
 	case 13648382824248632287U: // editorsettings
 		cute_tiled_skip_object(m);
-		break;
-
-	case 17465100621023921744U: // backgroundcolor
-		cute_tiled_expect(m, '"');
-		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
-		cute_tiled_expect(m, '"');
 		break;
 
 	case 809651598226485190U: // height
