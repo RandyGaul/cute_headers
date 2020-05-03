@@ -2176,6 +2176,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_expect(m, '}');
 		}	break;
 
+		case 14766449174202642533U: // terrains: used by tiled editor only
+			cute_tiled_skip_array(m);
+			break;
+
 		case 6029584663444593209U: // wangsets: used by tiled editor only
 			cute_tiled_skip_array(m);
 			break;
