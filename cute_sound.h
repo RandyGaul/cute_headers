@@ -2042,8 +2042,8 @@ ts_err:
 void cs_spawn_mix_thread(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) return;
-	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", ctx);
 	ctx->separate_thread = 1;
+	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", ctx);
 }
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
