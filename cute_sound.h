@@ -409,7 +409,8 @@ void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_ri
 // void cs_set_delay(cs_playing_sound_t* sound, float delay, int samples_per_second)
 void cs_set_delay(cs_context_t* ctx, cs_playing_sound_t* sound, float delay_in_seconds);
 
-// Return the linked list ctx->playing
+// Return the linked list ctx->playing, be sure to use cs_lock or cs_unlock if mixing on
+// another thread.
 cs_playing_sound_t* cs_get_playing(cs_context_t* ctx);
 
 // Portable sleep function. Do not call this with milliseconds > 999.
