@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.03
+	cute_tiled.h - v1.04
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -18,7 +18,7 @@
 		struct collection is then handed to the user.
 
 		This header is up to date with Tiled's documentation Revision cb92f36d and
-		verified to work with Tiled stable version 1.2.1.
+		verified to work with Tiled stable version 1.3.3.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
@@ -29,6 +29,7 @@
 		1.01 (05/04/2018) tile descriptors in tilesets for collision geometry
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
+		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
 */
 
 /*
@@ -36,6 +37,7 @@
 		ZenToad           1.02 - Bug reports and goto statement errors for g++
 		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
+		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
 */
 
 /*
@@ -245,7 +247,7 @@ struct cute_tiled_object_t
  * Helper for processing tile data in /ref `cute_tiled_layer_t` `data`. Unsets all of
  * the image flipping flags in the higher bit of /p `tile_data_gid`.
  */
-CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
+static CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
 {
 	const int flags = ~(CUTE_TILED_FLIPPED_HORIZONTALLY_FLAG | CUTE_TILED_FLIPPED_VERTICALLY_FLAG | CUTE_TILED_FLIPPED_DIAGONALLY_FLAG);
 	return tile_data_gid & flags;
@@ -255,7 +257,7 @@ CUTE_TILED_INLINE int cute_tiled_unset_flags(int tile_data_gid)
  * Helper for processing tile data in /ref `cute_tiled_layer_t` `data`. Flags are
  * stored in the GID array `data` for flipping the image. Retrieves all three flag types.
  */
-CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
+static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_horizontal, int* flip_vertical, int* flip_diagonal)
 {
 	*flip_horizontal = !!(tile_data_gid & CUTE_TILED_FLIPPED_HORIZONTALLY_FLAG);
 	*flip_vertical = !!(tile_data_gid & CUTE_TILED_FLIPPED_VERTICALLY_FLAG);
@@ -1151,7 +1153,7 @@ int cute_tiled_error_cline;
 
 	void cute_tiled_warning(const char* warning)
 	{
-		printf("WARNING (cute_tiled): %s\n", warning);
+		printf("WARNING (cute_tiled:%i): %s\n", cute_tiled_error_cline, warning);
 	}
 #endif
 
@@ -1311,6 +1313,8 @@ static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
 	cute_tiled_expect(m, '{');
 
 	while (depth) {
+		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
+
 		char c = cute_tiled_next(m);
 
 		switch(c)
@@ -1337,6 +1341,42 @@ cute_tiled_err:
 #define cute_tiled_skip_object(m) \
 	do { \
 		CUTE_TILED_FAIL_IF(!cute_tiled_skip_object_internal(m)); \
+	} while (0)
+
+static int cute_tiled_skip_array_internal(cute_tiled_map_internal_t* m)
+{
+	int depth = 1;
+	cute_tiled_expect(m, '[');
+
+	while (depth) {
+		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
+
+		char c = cute_tiled_next(m);
+
+		switch(c)
+		{
+		case '[':
+			depth += 1;
+			break;
+
+		case ']':
+			depth -= 1;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_skip_array(m) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_skip_array_internal(m)); \
 	} while (0)
 
 static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
@@ -1633,8 +1673,10 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_intern_string(m, &prop.name);
 
-		// Skip the property type. This is unnecessary information since we can deduce the property type while parsing.
+		// Read in the property type. The value type is deduced while parsing, this is only used for float because the JSON format omits decimals on round floats.
 		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_expect(m, '"');
+		char type_char = cute_tiled_next(m);
 
 		// Skip extraneous JSON information and go find the actual value data.
 		cute_tiled_skip_until_after(m, ':');
@@ -1705,7 +1747,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 				}
 			}
 
-			if (is_float)
+			if (is_float || type_char == 'f')
 			{
 				cute_tiled_read_float(m, &prop.data.floating);
 				prop.type = CUTE_TILED_PROPERTY_FLOAT;
@@ -1972,11 +2014,6 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 	cute_tiled_tile_descriptor_t* tile_descriptor = (cute_tiled_tile_descriptor_t*)cute_tiled_alloc(m, sizeof(cute_tiled_tile_descriptor_t));
 	CUTE_TILED_MEMSET(tile_descriptor, 0, sizeof(cute_tiled_tile_descriptor_t));
 
-	cute_tiled_expect(m, '"');
-	cute_tiled_read_int(m, &tile_descriptor->tile_index);
-	cute_tiled_expect(m, '"');
-	cute_tiled_expect(m, ':');
-
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
@@ -1986,6 +2023,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 
 		switch (h)
 		{
+		case 3133932603199444032U: // id
+			cute_tiled_read_int(m, &tile_descriptor->tile_index);
+			break;
+
 		case 8368542207491637236U: // properties
 			cute_tiled_read_properties(m, &tile_descriptor->properties, &tile_descriptor->property_count);
 			break;
@@ -2000,6 +2041,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 
 		case 6875414612738028948: // probability
 			cute_tiled_read_float(m, &tile_descriptor->probability);
+			break;
+
+		case 2784044778313316778U: // terrain: used by tiled editor only
+			cute_tiled_skip_array(m);
 			break;
 
 		default:
@@ -2122,8 +2167,8 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 104417158474046698U: // tiles
 		{
-			cute_tiled_expect(m, '{');
-			while (cute_tiled_peak(m) != '}')
+			cute_tiled_expect(m, '[');
+			while (cute_tiled_peak(m) != ']')
 			{
 				cute_tiled_tile_descriptor_t* tile_descriptor = cute_tiled_read_tile_descriptor(m);
 				CUTE_TILED_FAIL_IF(!tile_descriptor);
@@ -2131,8 +2176,16 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 				tileset->tiles = tile_descriptor;
 				cute_tiled_try(m, ',');
 			}
-			cute_tiled_expect(m, '}');
+			cute_tiled_expect(m, ']');
 		}	break;
+
+		case 14766449174202642533U: // terrains: used by tiled editor only
+			cute_tiled_skip_array(m);
+			break;
+
+		case 6029584663444593209U: // wangsets: used by tiled editor only
+			cute_tiled_skip_array(m);
+			break;
 
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
@@ -2157,6 +2210,12 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
  	switch (h)
 	{
+	case 17465100621023921744U: // backgroundcolor
+		cute_tiled_expect(m, '"');
+		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
+		cute_tiled_expect(m, '"');
+		break;
+
 	case 5549108793316760247U: // compressionlevel
 	{
 		int compressionlevel;
@@ -2166,12 +2225,6 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
 	case 13648382824248632287U: // editorsettings
 		cute_tiled_skip_object(m);
-		break;
-
-	case 17465100621023921744U: // backgroundcolor
-		cute_tiled_expect(m, '"');
-		cute_tiled_read_hex_int(m, &m->map.backgroundcolor);
-		cute_tiled_expect(m, '"');
 		break;
 
 	case 809651598226485190U: // height

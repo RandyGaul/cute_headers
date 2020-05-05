@@ -136,6 +136,11 @@
 		The same def can be used to play as many sounds as desired (even simultaneously)
 		as long as the context playing sound pool is large enough.
 
+		You can work with some low-level functionality by iterating through the linked list
+		ctx->playing, which can be accessed by calling cs_get_playing(ctx). If you spawned a
+		thread via cs_spawn_mix_thread, remember to call cs_lock before you work with
+		cs_get_playing and call cs_unlock afterwards so sound can play again.
+
 
 	Low-level API
 
@@ -364,6 +369,12 @@ void cs_spawn_mix_thread(cs_context_t* ctx);
 // 60 fps is 16 ms, so about 1-5 should work well in most cases.
 void cs_thread_sleep_delay(cs_context_t* ctx, int milliseconds);
 
+// Lock the thread before working with some of the lower-level stuff.
+void cs_lock(cs_context_t* ctx);
+
+// Unlock the thread after you've done that stuff.
+void cs_unlock(cs_context_t* ctx);
+
 // Call this manually, once per game tick recommended, if you haven't ever
 // called cs_spawn_mix_thread. Otherwise the thread will call cs_mix itself.
 // num_samples_to_write is not used on Windows. On Mac it is used to push
@@ -397,6 +408,10 @@ void cs_set_volume(cs_playing_sound_t* sound, float volume_left, float volume_ri
 // If one were so inclined another version could be implemented like:
 // void cs_set_delay(cs_playing_sound_t* sound, float delay, int samples_per_second)
 void cs_set_delay(cs_context_t* ctx, cs_playing_sound_t* sound, float delay_in_seconds);
+
+// Return the linked list ctx->playing, be sure to use cs_lock or cs_unlock if mixing on
+// another thread.
+cs_playing_sound_t* cs_get_playing(cs_context_t* ctx);
 
 // Portable sleep function. Do not call this with milliseconds > 999.
 void cs_sleep(int milliseconds);
@@ -1098,7 +1113,7 @@ cs_loaded_sound_t cs_load_ogg(const char* path)
 {
 	int length;
 	void* memory = cs_read_file_to_memory(path, &length, NULL);
-	cs_loaded_sound_t sound = { 0 };
+	cs_loaded_sound_t sound = { 0, 0, 0, 0, { NULL, NULL } };
 	cs_read_mem_ogg(memory, length, &sound);
 	CUTE_SOUND_FREE(memory, NULL);
 
@@ -1269,14 +1284,14 @@ static DWORD WINAPI cs_ctx_thread(LPVOID lpParameter)
 	return 0;
 }
 
-static void cs_lock(cs_context_t* ctx)
+void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) EnterCriticalSection(&ctx->critical_section);
+	EnterCriticalSection(&ctx->critical_section);
 }
 
-static void cs_unlock(cs_context_t* ctx)
+void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) LeaveCriticalSection(&ctx->critical_section);
+	LeaveCriticalSection(&ctx->critical_section);
 }
 
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
@@ -1469,14 +1484,14 @@ static void* cs_ctx_thread(void* udata)
 	return 0;
 }
 
-static void cs_lock(cs_context_t* ctx)
+void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+	pthread_mutex_lock(&ctx->mutex);
 }
 
-static void cs_unlock(cs_context_t* ctx)
+void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+	pthread_mutex_unlock(&ctx->mutex);
 }
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData);
@@ -1733,14 +1748,14 @@ int cs_ctx_thread(void* udata)
 	return 0;
 }
 
-static void cs_lock(cs_context_t* ctx)
+void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+	pthread_mutex_lock(&ctx->mutex);
 }
 
-static void cs_unlock(cs_context_t* ctx)
+void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+	pthread_mutex_unlock(&ctx->mutex);
 }
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
@@ -1942,14 +1957,14 @@ int cs_ctx_thread(void* udata)
 	return 0;
 }
 
-static void cs_lock(cs_context_t* ctx)
+void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) SDL_LockMutex(ctx->mutex);
+	SDL_LockMutex(ctx->mutex);
 }
 
-static void cs_unlock(cs_context_t* ctx)
+void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) SDL_UnlockMutex(ctx->mutex);
+	SDL_UnlockMutex(ctx->mutex);
 }
 
 static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
@@ -2032,6 +2047,13 @@ void cs_spawn_mix_thread(cs_context_t* ctx)
 }
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
+
+// Platform-agnostic functions that access cs_context_t members go here.
+
+cs_playing_sound_t* cs_get_playing(cs_context_t* ctx)
+{
+	return ctx->playing;
+}
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 
