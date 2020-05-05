@@ -1361,6 +1361,7 @@ cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buf
 		ctx->sleep_milliseconds = 0;
 		ctx->plugin_count = 0;
 		ctx->mem_ctx = user_allocator_ctx;
+		InitializeCriticalSectionAndSpinCount(&ctx->critical_section, 0x00000400);
 
 		if (playing_pool_count)
 		{
@@ -1389,7 +1390,6 @@ ts_err:
 void cs_spawn_mix_thread(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) return;
-	InitializeCriticalSectionAndSpinCount(&ctx->critical_section, 0x00000400);
 	ctx->separate_thread = 1;
 	CreateThread(0, 0, cs_ctx_thread, ctx, 0, 0);
 }
@@ -1434,7 +1434,7 @@ struct cs_context_t
 
 static void cs_release_context(cs_context_t* ctx)
 {
-	if (ctx->separate_thread)	pthread_mutex_destroy(&ctx->mutex);
+	pthread_mutex_destroy(&ctx->mutex);
 	AudioOutputUnitStop(ctx->inst);
 	AudioUnitUninitialize(ctx->inst);
 	AudioComponentInstanceDispose(ctx->inst);
@@ -1557,6 +1557,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 
 	ret = AudioOutputUnitStart(inst);
 	CUTE_SOUND_CHECK(ret == noErr, "Couldn't start output unit");
+	pthread_mutex_init(&ctx->mutex, NULL);
 
 	if (playing_pool_count)
 	{
@@ -1583,7 +1584,6 @@ ts_err:
 void cs_spawn_mix_thread(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) return;
-	pthread_mutex_init(&ctx->mutex, 0);
 	ctx->separate_thread = 1;
 	pthread_create(&ctx->thread, 0, cs_ctx_thread, ctx);
 }
@@ -1840,6 +1840,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->fns = fns;
 	ctx->pcm_handle = pcm_handle;
 	ctx->alsa_so = alsa_so;
+	pthread_mutex_init(&ctx->mutex, NULL);
 
 	if (playing_pool_count)
 	{
@@ -1866,7 +1867,6 @@ ts_err:
 void cs_spawn_mix_thread(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) return;
-	pthread_mutex_init(&ctx->mutex, NULL);
 	ctx->separate_thread = 1;
 	pthread_create(&ctx->thread, NULL, (void* (*)(void*))cs_ctx_thread, ctx);
 }
@@ -2000,6 +2000,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ret = SDL_OpenAudio(&wanted, NULL);
 	CUTE_SOUND_CHECK(ret >= 0, "Can't open SDL audio");
 	SDL_PauseAudio(0);
+	ctx->mutex = SDL_CreateMutex();
 
 	if (playing_pool_count)
 	{
@@ -2026,9 +2027,8 @@ ts_err:
 void cs_spawn_mix_thread(cs_context_t* ctx)
 {
 	if (ctx->separate_thread) return;
-	ctx->mutex = SDL_CreateMutex();
-	ctx->separate_thread = 1;
 	ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", ctx);
+	ctx->separate_thread = 1;
 }
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_***
