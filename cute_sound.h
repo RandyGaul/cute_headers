@@ -1245,7 +1245,7 @@ struct cs_context_t
 
 static void cs_release_context(cs_context_t* ctx)
 {
-	if (ctx->separate_thread)	DeleteCriticalSection(&ctx->critical_section);
+	DeleteCriticalSection(&ctx->critical_section);
 #ifdef __cplusplus
 	ctx->buffer->Release();
 	ctx->primary->Release();
@@ -1715,7 +1715,7 @@ struct cs_context_t
 
 static void cs_release_context(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_destroy(&ctx->mutex);
+	pthread_mutex_destroy(&ctx->mutex);
 	cs_playing_sound_t* playing = ctx->playing;
 	while (playing)
 	{
@@ -1926,7 +1926,7 @@ struct cs_context_t
 
 static void cs_release_context(cs_context_t* ctx)
 {
-	if (ctx->separate_thread)	SDL_DestroyMutex(ctx->mutex);
+	SDL_DestroyMutex(ctx->mutex);
 	cs_playing_sound_t* playing = ctx->playing;
 	while (playing)
 	{
