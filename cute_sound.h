@@ -1286,12 +1286,12 @@ static DWORD WINAPI cs_ctx_thread(LPVOID lpParameter)
 
 void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) EnterCriticalSection(&ctx->critical_section);
+	EnterCriticalSection(&ctx->critical_section);
 }
 
 void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) LeaveCriticalSection(&ctx->critical_section);
+	LeaveCriticalSection(&ctx->critical_section);
 }
 
 cs_context_t* cs_make_context(void* hwnd, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
@@ -1486,12 +1486,12 @@ static void* cs_ctx_thread(void* udata)
 
 void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+	pthread_mutex_lock(&ctx->mutex);
 }
 
 void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+	pthread_mutex_unlock(&ctx->mutex);
 }
 
 static OSStatus cs_memcpy_to_coreaudio(void* udata, AudioUnitRenderActionFlags* ioActionFlags, const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList* ioData);
@@ -1750,12 +1750,12 @@ int cs_ctx_thread(void* udata)
 
 void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_lock(&ctx->mutex);
+	pthread_mutex_lock(&ctx->mutex);
 }
 
 void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) pthread_mutex_unlock(&ctx->mutex);
+	pthread_mutex_unlock(&ctx->mutex);
 }
 
 cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int buffered_samples, int playing_pool_count, void* user_allocator_ctx)
@@ -1959,12 +1959,12 @@ int cs_ctx_thread(void* udata)
 
 void cs_lock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) SDL_LockMutex(ctx->mutex);
+	SDL_LockMutex(ctx->mutex);
 }
 
 void cs_unlock(cs_context_t* ctx)
 {
-	if (ctx->separate_thread) SDL_UnlockMutex(ctx->mutex);
+	SDL_UnlockMutex(ctx->mutex);
 }
 
 static void cs_sdl_audio_callback(void* udata, Uint8* stream, int len);
