@@ -1437,6 +1437,7 @@ static int cute_tiled_read_int_internal(cute_tiled_map_internal_t* m, int* out)
 {
 	char* end;
 	int val = (int)strtoll(m->in, &end, 10);
+	if (*end == '.') strtod(m->in, &end); // If we're reading a float as an int, then just skip the decimal part.
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
