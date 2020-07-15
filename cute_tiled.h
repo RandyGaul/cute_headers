@@ -306,6 +306,7 @@ struct cute_tiled_tile_descriptor_t
 	cute_tiled_tile_descriptor_t* next; // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
+// Make sure to export your map with tilesets embedded!
 struct cute_tiled_tileset_t
 {
 	int columns;                        // The number of tile columns in the tileset.
