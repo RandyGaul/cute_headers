@@ -617,7 +617,7 @@ int main(int argc, char** argv)
 	CUTE_TILED_UNUSED(argc);
 	CUTE_TILED_UNUSED(argv);
 
-	test_map("test_map.json");
+	test_map("city.json");
 
 	setup_SDL_and_glad();
 	setup_cute_gl();

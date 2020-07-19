@@ -135,6 +135,7 @@ void cute_tiled_free_map(cute_tiled_map_t* map);
 
 typedef struct cute_tiled_layer_t cute_tiled_layer_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
+typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
 typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
@@ -291,10 +292,17 @@ struct cute_tiled_layer_t
 	cute_tiled_layer_t* next;           // Pointer to the next layer. NULL if final layer.
 };
 
+struct cute_tiled_frame_t
+{
+	int duration;                       // Frame duration in milliseconds.
+	int tileid;                         // Local tile ID representing this frame.
+};
+
 struct cute_tiled_tile_descriptor_t
 {
 	int tile_index;                     // ID of the tile local to the associated tileset.
-	/* animation */                     // Not currently supported.
+	int frame_count;
+	cute_tiled_frame_t* animation;
 	/* image */                         // Not currently supported.
 	/* imageheight */                   // Not currently supported.
 	/* imagewidth */                    // Not currently supported.
@@ -322,8 +330,6 @@ struct cute_tiled_tileset_t
 	/* terrains */                      // Not currently supported.
 	int tilecount;                      // The number of tiles in this tileset.
 	int tileheight;                     // Maximum height of tiles in this set.
-	/* tileproperties */                // Not currently supported.
-	/* tilepropertytypes */             // Not currently supported.
 	/* tileoffset */                    // Not currently supported.
 	cute_tiled_tile_descriptor_t* tiles;// Linked list of tile descriptors. Can be NULL.
 	int tilewidth;                      // Maximum width of tiles in this set.
@@ -1775,7 +1781,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 	}
 
 	cute_tiled_expect(m, ']');
-	cute_tiled_expect(m, ',');
+	cute_tiled_try(m, ',');
 
 	*out_properties = props;
 	*out_count = count;
@@ -2009,6 +2015,58 @@ cute_tiled_err:
 	return 0;
 }
 
+int cute_tiled_read_animation_frames_internal(cute_tiled_map_internal_t* m, cute_tiled_frame_t** out_frames, int* out_count)
+{
+	int count = 0;
+	int capacity = 32;
+	cute_tiled_frame_t* frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
+
+	cute_tiled_expect(m, '[');
+
+	while (cute_tiled_peak(m) != ']')
+	{
+		cute_tiled_expect(m, '{');
+
+		cute_tiled_frame_t frame;
+
+		// Read in the duration and tileid.
+		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_read_int(m, &frame.duration);
+		cute_tiled_expect(m, ',');
+		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_read_int(m, &frame.tileid);
+
+		if (count == capacity)
+		{
+			capacity *= 2;
+			cute_tiled_frame_t* new_frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
+			CUTE_TILED_MEMCPY(new_frames, frames, sizeof(cute_tiled_frame_t) * count);
+			CUTE_TILED_FREE(frames, m->mem_ctx);
+			frames = new_frames;
+		}
+		frames[count++] = frame;
+
+		cute_tiled_expect(m, '}');
+		cute_tiled_try(m, ',');
+	}
+
+	cute_tiled_expect(m, ']');
+	cute_tiled_try(m, ',');
+
+	*out_frames = frames;
+	*out_count = count;
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_read_animation_frames(m, out_frames, out_count) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_read_animation_frames_internal(m, out_frames, out_count)); \
+	} while (0)
+
 cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_tile_descriptor_t* tile_descriptor = (cute_tiled_tile_descriptor_t*)cute_tiled_alloc(m, sizeof(cute_tiled_tile_descriptor_t));
@@ -2045,6 +2103,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 
 		case 2784044778313316778U: // terrain: used by tiled editor only
 			cute_tiled_skip_array(m);
+			break;
+
+		case 3115399308714904519U: // animation
+			cute_tiled_read_animation_frames(m, &tile_descriptor->animation, &tile_descriptor->frame_count);
 			break;
 
 		default:
