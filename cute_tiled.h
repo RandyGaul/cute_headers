@@ -1154,13 +1154,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 const char* cute_tiled_error_reason;
 int cute_tiled_error_cline;
+const char* cute_tiled_error_file = NULL;
+int cute_tiled_error_line;
 
 #ifdef CUTE_TILED_DEFAULT_WARNING
 	#include <stdio.h>
 
 	void cute_tiled_warning(const char* warning)
 	{
-		printf("WARNING (cute_tiled:%i): %s\n", cute_tiled_error_cline, warning);
+		const char *error_file = cute_tiled_error_file ? cute_tiled_error_file : "MEMORY";
+		printf("WARNING (cute_tiled:%i): %s (%s:%i)\n", cute_tiled_error_cline, warning, error_file, cute_tiled_error_line);
 	}
 #endif
 
@@ -1247,11 +1250,16 @@ static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path,
 
 cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 {
+	cute_tiled_error_file = path;
+
 	int size;
 	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
 	if (!file) CUTE_TILED_WARNING("unable to find map file.");
 	cute_tiled_map_t* map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
+
+	cute_tiled_error_file = NULL;
+
 	return map;
 }
 
@@ -1260,6 +1268,8 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 
 static int cute_tiled_isspace(char c)
 {
+	cute_tiled_error_line += c == '\n';
+
 	return (c == ' ') |
 		(c == '\t') |
 		(c == '\n') |
@@ -1295,7 +1305,9 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 
 #define cute_tiled_expect(m, expect) \
 	do { \
-		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), "Found unexpected token (is this a valid JSON file?)."); \
+		static char error[128]; \
+		snprintf(error, sizeof(error), "Found unexpected token '%c', expected '%c' (is this a valid JSON file?).", *m->in, expect); \
+		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), error); \
 	} while (0)
 
 char cute_tiled_parse_char(char c)
@@ -1432,6 +1444,7 @@ static int cute_tiled_read_int_internal(cute_tiled_map_internal_t* m, int* out)
 {
 	char* end;
 	int val = (int)strtoll(m->in, &end, 10);
+	if (*end == '.') strtod(m->in, &end); // If we're reading a float as an int, then just skip the decimal part.
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
@@ -1648,7 +1661,10 @@ cute_tiled_err:
 
 int cute_tiled_skip_until_after_internal(cute_tiled_map_internal_t* m, char c)
 {
-	while (*m->in != c) m->in++;
+	while (*m->in != c) {
+		cute_tiled_error_line += *m->in == '\n';
+		m->in++;
+	}
 	cute_tiled_expect(m, c);
 	return 1;
 
@@ -2537,6 +2553,8 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map)
 
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
+	cute_tiled_error_line = 1;
+
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_map_internal_t), mem_ctx);
 	CUTE_TILED_MEMSET(m, 0, sizeof(cute_tiled_map_internal_t));
 	m->in = (char*)memory;
