@@ -80,6 +80,13 @@
 		syntax is encountered (which can happen if cute_tiled is used on a newer
 		and unsupported version of Tiled), undefined behavior may occur (crashes).
 
+		If you would like a certain feature to be supported simply open an issue on
+		GitHub and provide a JSON exported map with the unsupported features. Changing
+		the parser to support new fields and objects is quite easy, as long as a map
+		file is provided for debugging and testing!
+
+		GitHub : https://github.com/RandyGaul/cute_headers/
+
 		Compression of the tile GIDs is *not* supported in this header. Exporting
 		a map from Tiled will create a JSON file. This JSON file itself can very
 		trivially be compressed in its entirety, thus making Tiled's internal
