@@ -104,7 +104,6 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
-extern int cute_tiled_error_cline;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
