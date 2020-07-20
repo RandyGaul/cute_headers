@@ -310,7 +310,7 @@ struct cute_tiled_tile_descriptor_t
 {
 	int tile_index;                      // ID of the tile local to the associated tileset.
 	int frame_count;                     // The number of animation frames in the `animation` array.
-	cute_tiled_frame_t* animation;       // An array of `cute_tiled_frame_t`'s.
+	cute_tiled_frame_t* animation;       // An array of `cute_tiled_frame_t`'s. Can be NULL.
 	/* image */                          // Not currently supported.
 	/* imageheight */                    // Not currently supported.
 	/* imagewidth */                     // Not currently supported.
