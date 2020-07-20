@@ -399,6 +399,26 @@ void print_tilesets(cute_tiled_tileset_t* tileset)
 		print(tileset, type.ptr, %s);
 		print(tileset, source.ptr, %s);
 
+		cute_tiled_tile_descriptor_t* tile = tileset->tiles;
+		print_category("tiles"); ++tab_count;
+		while (tile) {
+			print(tile, tile_index, %d);
+			print(tile, frame_count, %d);
+			print_category("frame"); ++tab_count;
+			for (int i = 0; i < tile->frame_count; ++i) {
+				cute_tiled_frame_t* frame = tile->animation + i;
+				print(frame, duration, %d);
+				print(frame, tileid, %d);
+			}
+			--tab_count;
+			print_layer(tile->objectgroup);
+			print_properties(tile->properties, tile->property_count);
+			print(tile, probability, %f);
+
+			tile = tile->next;
+		}
+		--tab_count;
+
 		tileset = tileset->next;
 		--tab_count;
 	}
