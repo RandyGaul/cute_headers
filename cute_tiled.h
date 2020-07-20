@@ -17,8 +17,8 @@
 		is loaded up in entirety and used to fill in a set of structs. The entire
 		struct collection is then handed to the user.
 
-		This header is up to date with Tiled's documentation Revision cb92f36d and
-		verified to work with Tiled stable version 1.3.3.
+		This header is up to date with Tiled's documentation Revision 40049fd5 and
+		verified to work with Tiled stable version 1.4.1.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
