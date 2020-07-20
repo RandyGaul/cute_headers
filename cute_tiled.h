@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.04
+	cute_tiled.h - v1.05
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -17,8 +17,8 @@
 		is loaded up in entirety and used to fill in a set of structs. The entire
 		struct collection is then handed to the user.
 
-		This header is up to date with Tiled's documentation Revision cb92f36d and
-		verified to work with Tiled stable version 1.3.3.
+		This header is up to date with Tiled's documentation Revision 40049fd5 and
+		verified to work with Tiled stable version 1.4.1.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
@@ -104,7 +104,6 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
-extern int cute_tiled_error_cline;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
