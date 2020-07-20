@@ -201,7 +201,7 @@ struct cute_tiled_object_t
 {
 	int ellipse;                         // 0 or 1. Used to mark an object as an ellipse.
 	int gid;                             // GID, only if object comes from a Tilemap.
-	int height;                          // Height in pixels. Ignored if using a gid.
+	float height;                        // Height in pixels. Ignored if using a gid.
 	int id;                              // Incremental id - unique across all objects.
 	cute_tiled_string_t name;            // String assigned to name field in editor.
 	int point;                           // 0 or 1. Used to mark an object as a point.
@@ -226,7 +226,7 @@ struct cute_tiled_object_t
 	/* text */                           // Not currently supported.
 	cute_tiled_string_t type;            // String assigned to type field in editor.
 	int visible;                         // 0 or 1. Whether object is shown in editor.
-	int width;                           // Width in pixels. Ignored if using a gid.
+	float width;                         // Width in pixels. Ignored if using a gid.
 	float x;                             // x coordinate in pixels.
 	float y;                             // y coordinate in pixels.
 	cute_tiled_object_t* next;           // Pointer to next object. NULL if final object.
@@ -1380,7 +1380,8 @@ static int cute_tiled_skip_array_internal(cute_tiled_map_internal_t* m)
 	int depth = 1;
 	cute_tiled_expect(m, '[');
 
-	while (depth) {
+	while (depth)
+	{
 		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
 
 		char c = cute_tiled_next(m);
@@ -1850,7 +1851,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 809651598226485190U: // height
-			cute_tiled_read_int(m, &object->height);
+			cute_tiled_read_float(m, &object->height);
 			break;
 
 		case 3133932603199444032U: // id
@@ -1898,7 +1899,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 7400839267610537869U: // width
-			cute_tiled_read_int(m, &object->width);
+			cute_tiled_read_float(m, &object->width);
 			break;
 
 		case 644252274336276709U: // x

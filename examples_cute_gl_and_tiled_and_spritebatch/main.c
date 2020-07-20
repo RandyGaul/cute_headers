@@ -323,7 +323,7 @@ void print_objects(cute_tiled_object_t* o)
 		++tab_count;
 		print(o, ellipse, %d);
 		print(o, gid, %d);
-		print(o, height, %d);
+		print(o, height, %f);
 		print(o, id, %d);
 		print(o, name.ptr, %s);
 		print(o, point, %d);
@@ -342,7 +342,7 @@ void print_objects(cute_tiled_object_t* o)
 		print(o, rotation, %f);
 		print(o, type.ptr, %s);
 		print(o, visible, %d);
-		print(o, width, %d);
+		print(o, width, %f);
 		print(o, x, %f);
 		print(o, y, %f);
 
