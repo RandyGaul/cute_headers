@@ -398,6 +398,7 @@ void print_tilesets(cute_tiled_tileset_t* tileset)
 		print(tileset, tilewidth, %d);
 		print(tileset, type.ptr, %s);
 		print(tileset, source.ptr, %s);
+		print(tileset, objectalignment.ptr, %s);
 
 		cute_tiled_tile_descriptor_t* tile = tileset->tiles;
 		print_category("tiles"); ++tab_count;
