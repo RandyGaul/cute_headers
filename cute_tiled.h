@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.04
+	cute_tiled.h - v1.05
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -17,8 +17,8 @@
 		is loaded up in entirety and used to fill in a set of structs. The entire
 		struct collection is then handed to the user.
 
-		This header is up to date with Tiled's documentation Revision cb92f36d and
-		verified to work with Tiled stable version 1.3.3.
+		This header is up to date with Tiled's documentation Revision 40049fd5 and
+		verified to work with Tiled stable version 1.4.1.
 		http://doc.mapeditor.org/en/latest/reference/json-map-format/
 
 		Here is a past discussion thread on this header:
@@ -30,6 +30,7 @@
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
 		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
+		1.05 (07/19/2020) support for Tiled 1.4.1 support, support for tileset tile animations
 */
 
 /*
@@ -79,6 +80,13 @@
 		syntax is encountered (which can happen if cute_tiled is used on a newer
 		and unsupported version of Tiled), undefined behavior may occur (crashes).
 
+		If you would like a certain feature to be supported simply open an issue on
+		GitHub and provide a JSON exported map with the unsupported features. Changing
+		the parser to support new fields and objects is quite easy, as long as a map
+		file is provided for debugging and testing!
+
+		GitHub : https://github.com/RandyGaul/cute_headers/
+
 		Compression of the tile GIDs is *not* supported in this header. Exporting
 		a map from Tiled will create a JSON file. This JSON file itself can very
 		trivially be compressed in its entirety, thus making Tiled's internal
@@ -96,7 +104,6 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
-extern int cute_tiled_error_cline;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
@@ -135,6 +142,7 @@ void cute_tiled_free_map(cute_tiled_map_t* map);
 
 typedef struct cute_tiled_layer_t cute_tiled_layer_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
+typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
 typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
@@ -191,12 +199,12 @@ struct cute_tiled_property_t
 
 struct cute_tiled_object_t
 {
-	int ellipse;                        // 0 or 1. Used to mark an object as an ellipse.
-	int gid;                            // GID, only if object comes from a Tilemap.
-	int height;                         // Height in pixels. Ignored if using a gid.
-	int id;                             // Incremental id - unique across all objects.
-	cute_tiled_string_t name;           // String assigned to name field in editor.
-	int point;                          // 0 or 1. Used to mark an object as a point.
+	int ellipse;                         // 0 or 1. Used to mark an object as an ellipse.
+	int gid;                             // GID, only if object comes from a Tilemap.
+	float height;                        // Height in pixels. Ignored if using a gid.
+	int id;                              // Incremental id - unique across all objects.
+	cute_tiled_string_t name;            // String assigned to name field in editor.
+	int point;                           // 0 or 1. Used to mark an object as a point.
 
 	// Example to index each vert of a polygon/polyline:
 	/*
@@ -208,20 +216,20 @@ struct cute_tiled_object_t
 		}
 	*/
 	int vert_count;
-	float* vertices;                    // Represents both type `polyline` and `polygon`.
-	int vert_type;                      // 1 for `polygon` and 0 for `polyline`.
+	float* vertices;                     // Represents both type `polyline` and `polygon`.
+	int vert_type;                       // 1 for `polygon` and 0 for `polyline`.
 
-	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;  // Array of properties.
-	float rotation;                     // Angle in degrees clockwise.
-	/* template */                      // Not currently supported.
-	/* text */                          // Not currently supported.
-	cute_tiled_string_t type;           // String assigned to type field in editor.
-	int visible;                        // 0 or 1. Whether object is shown in editor.
-	int width;                          // Width in pixels. Ignored if using a gid.
-	float x;                            // x coordinate in pixels.
-	float y;                            // y coordinate in pixels.
-	cute_tiled_object_t* next;          // Pointer to next object. NULL if final object.
+	int property_count;                  // Number of elements in the `properties` array.
+	cute_tiled_property_t* properties;   // Array of properties.
+	float rotation;                      // Angle in degrees clockwise.
+	/* template */                       // Not currently supported.
+	/* text */                           // Not currently supported.
+	cute_tiled_string_t type;            // String assigned to type field in editor.
+	int visible;                         // 0 or 1. Whether object is shown in editor.
+	float width;                         // Width in pixels. Ignored if using a gid.
+	float x;                             // x coordinate in pixels.
+	float y;                             // y coordinate in pixels.
+	cute_tiled_object_t* next;           // Pointer to next object. NULL if final object.
 };
 
 /*!
@@ -266,95 +274,106 @@ static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_
 
 struct cute_tiled_layer_t
 {
-	/* chunks */                        // Not currently supported.
-	/* compression; */                  // Not currently supported.
-	int data_count;                     // Number of integers in `data`.
-	int* data;                          // Array of GIDs. `tilelayer` only. Only support CSV style exports.
-	cute_tiled_string_t draworder;      // `topdown` (default) or `index`. `objectgroup` only.
-	/* encoding; */                     // Not currently supported.
-	int height;                         // Row count. Same as map height for fixed-size maps.
-	cute_tiled_layer_t* layers;         // Linked list of layers. Only appears if `type` is `group`.
-	cute_tiled_string_t name;           // Name assigned to this layer.
-	cute_tiled_object_t* objects;       // Linked list of objects. `objectgroup` only.
-	/* offsetx */                       // Not currently supported.
-	/* offsety */                       // Not currently supported.
-	float opacity;                      // Value between 0 and 1.
-	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;  // Array of properties.
-	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	cute_tiled_string_t type;           // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
-	int visible;                        // 0 or 1. Whether layer is shown or hidden in editor.
-	int width;                          // Column count. Same as map width for fixed-size maps.
-	int x;                              // Horizontal layer offset in tiles. Always 0.
-	int y;                              // Vertical layer offset in tiles. Always 0.
-	int id;                             // ID of the layer.
-	cute_tiled_layer_t* next;           // Pointer to the next layer. NULL if final layer.
+	/* chunks */                         // Not currently supported.
+	/* compression; */                   // Not currently supported.
+	int data_count;                      // Number of integers in `data`.
+	int* data;                           // Array of GIDs. `tilelayer` only. Only support CSV style exports.
+	cute_tiled_string_t draworder;       // `topdown` (default) or `index`. `objectgroup` only.
+	/* encoding; */                      // Not currently supported.
+	int height;                          // Row count. Same as map height for fixed-size maps.
+	cute_tiled_layer_t* layers;          // Linked list of layers. Only appears if `type` is `group`.
+	cute_tiled_string_t name;            // Name assigned to this layer.
+	cute_tiled_object_t* objects;        // Linked list of objects. `objectgroup` only.
+	/* offsetx */                        // Not currently supported.
+	/* offsety */                        // Not currently supported.
+	float opacity;                       // Value between 0 and 1.
+	int property_count;                  // Number of elements in the `properties` array.
+	cute_tiled_property_t* properties;   // Array of properties.
+	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
+	int visible;                         // 0 or 1. Whether layer is shown or hidden in editor.
+	int width;                           // Column count. Same as map width for fixed-size maps.
+	int x;                               // Horizontal layer offset in tiles. Always 0.
+	int y;                               // Vertical layer offset in tiles. Always 0.
+	int id;                              // ID of the layer.
+	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
+};
+
+struct cute_tiled_frame_t
+{
+	int duration;                        // Frame duration in milliseconds.
+	int tileid;                          // Local tile ID representing this frame.
 };
 
 struct cute_tiled_tile_descriptor_t
 {
-	int tile_index;                     // ID of the tile local to the associated tileset.
-	/* animation */                     // Not currently supported.
-	/* image */                         // Not currently supported.
-	/* imageheight */                   // Not currently supported.
-	/* imagewidth */                    // Not currently supported.
-	cute_tiled_layer_t* objectgroup;    // Linked list of layers of type `objectgroup` only. Useful for holding collision info.
-	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;  // Array of properties.
-	/* terrain */                       // Not currently supported.
-	float probability;                  // The probability used when painting with the terrain brush in `Random Mode`.
-	cute_tiled_tile_descriptor_t* next; // Pointer to the next tile descriptor. NULL if final tile descriptor.
+	int tile_index;                      // ID of the tile local to the associated tileset.
+	int frame_count;                     // The number of animation frames in the `animation` array.
+	cute_tiled_frame_t* animation;       // An array of `cute_tiled_frame_t`'s. Can be NULL.
+	/* image */                          // Not currently supported.
+	/* imageheight */                    // Not currently supported.
+	/* imagewidth */                     // Not currently supported.
+	cute_tiled_layer_t* objectgroup;     // Linked list of layers of type `objectgroup` only. Useful for holding collision info.
+	int property_count;                  // Number of elements in the `properties` array.
+	cute_tiled_property_t* properties;   // Array of properties.
+	/* terrain */                        // Not currently supported.
+	float probability;                   // The probability used when painting with the terrain brush in `Random Mode`.
+	cute_tiled_tile_descriptor_t* next;  // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
+// IMPORTANT NOTE
+// Make sure to export your map with tilesets embedded!
 struct cute_tiled_tileset_t
 {
-	int columns;                        // The number of tile columns in the tileset.
-	int firstgid;                       // GID corresponding to the first tile in the set.
-	/* grid */                          // Not currently supported.
-	cute_tiled_string_t image;          // Image used for tiles in this set (relative path from map file to source image).
-	int imagewidth;                     // Width of source image in pixels.
-	int imageheight;                    // Height of source image in pixels.
-	int margin;                         // Buffer between image edge and first tile (pixels).
-	cute_tiled_string_t name;           // Name given to this tileset.
-	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;  // Array of properties.
-	int spacing;                        // Spacing between adjacent tiles in image (pixels).
-	/* terrains */                      // Not currently supported.
-	int tilecount;                      // The number of tiles in this tileset.
-	int tileheight;                     // Maximum height of tiles in this set.
-	/* tileproperties */                // Not currently supported.
-	/* tilepropertytypes */             // Not currently supported.
-	/* tileoffset */                    // Not currently supported.
-	cute_tiled_tile_descriptor_t* tiles;// Linked list of tile descriptors. Can be NULL.
-	int tilewidth;                      // Maximum width of tiles in this set.
-	int transparentcolor;               // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	cute_tiled_string_t type;           // `tileset` (for tileset files, since 1.0).
-	cute_tiled_string_t source;         // Relative path to tileset, when saved externally from the map file.
-	cute_tiled_tileset_t* next;         // Pointer to next tileset. NULL if final tileset.
+	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	int columns;                         // The number of tile columns in the tileset.
+	int firstgid;                        // GID corresponding to the first tile in the set.
+	/* grid */                           // Not currently supported.
+	cute_tiled_string_t image;           // Image used for tiles in this set (relative path from map file to source image).
+	int imagewidth;                      // Width of source image in pixels.
+	int imageheight;                     // Height of source image in pixels.
+	int margin;                          // Buffer between image edge and first tile (pixels).
+	cute_tiled_string_t name;            // Name given to this tileset.
+	cute_tiled_string_t objectalignment; // Alignment to use for tile objects (unspecified (default), topleft, top, topright, left, center, right, bottomleft, bottom or bottomright) (since 1.4).
+	int property_count;                  // Number of elements in the `properties` array.
+	cute_tiled_property_t* properties;   // Array of properties.
+	int spacing;                         // Spacing between adjacent tiles in image (pixels).
+	/* terrains */                       // Not currently supported.
+	int tilecount;                       // The number of tiles in this tileset.
+	cute_tiled_string_t tiledversion;    // The Tiled version used to save the tileset.
+	int tileheight;                      // Maximum height of tiles in this set.
+	/* tileoffset */                     // Not currently supported.
+	cute_tiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
+	int tilewidth;                       // Maximum width of tiles in this set.
+	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t type;            // `tileset` (for tileset files, since 1.0).
+	cute_tiled_string_t source;          // Relative path to tileset, when saved externally from the map file.
+	cute_tiled_tileset_t* next;          // Pointer to next tileset. NULL if final tileset.
+	float version;                       // The JSON format version (like 1.2).
 };
 
 struct cute_tiled_map_t
 {
-	int backgroundcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	int height;                         // Number of tile rows.
-	/* hexsidelength */                 // Not currently supported.
-	int infinite;                       // Whether the map has infinite dimensions.
-	cute_tiled_layer_t* layers;         // Linked list of layers. Can be NULL.
-	int nextobjectid;                   // Auto-increments for each placed object.
-	cute_tiled_string_t orientation;    // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
-	int property_count;                 // Number of elements in the `properties` array.
-	cute_tiled_property_t* properties;  // Array of properties.
-	cute_tiled_string_t renderorder;    // Rendering direction (orthogonal maps only).
-	/* staggeraxis */                   // Not currently supported.
-	/* staggerindex */                  // Not currently supported.
-	cute_tiled_string_t tiledversion;   // The Tiled version used to save the file.
-	int tileheight;                     // Map grid height.
-	cute_tiled_tileset_t* tilesets;     // Linked list of tilesets.
-	int tilewidth;                      // Map grid width.
-	cute_tiled_string_t type;           // `map` (since 1.0).
-	float version;                      // The JSON format version (like 1.2).
-	int width;                          // Number of tile columns.
-	int nextlayerid;                    // The ID of the following layer.
+	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	int height;                          // Number of tile rows.
+	/* hexsidelength */                  // Not currently supported.
+	int infinite;                        // Whether the map has infinite dimensions.
+	cute_tiled_layer_t* layers;          // Linked list of layers. Can be NULL.
+	int nextobjectid;                    // Auto-increments for each placed object.
+	cute_tiled_string_t orientation;     // `orthogonal`, `isometric`, `staggered` or `hexagonal`.
+	int property_count;                  // Number of elements in the `properties` array.
+	cute_tiled_property_t* properties;   // Array of properties.
+	cute_tiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
+	/* staggeraxis */                    // Not currently supported.
+	/* staggerindex */                   // Not currently supported.
+	cute_tiled_string_t tiledversion;    // The Tiled version used to save the file.
+	int tileheight;                      // Map grid height.
+	cute_tiled_tileset_t* tilesets;      // Linked list of tilesets.
+	int tilewidth;                       // Map grid width.
+	cute_tiled_string_t type;            // `map` (since 1.0).
+	float version;                       // The JSON format version (like 1.2).
+	int width;                           // Number of tile columns.
+	int nextlayerid;                     // The ID of the following layer.
 };
 
 #define CUTE_TILED_H
@@ -1124,7 +1143,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #if !defined(CUTE_TILED_WARNING)
 	#define CUTE_TILED_DEFAULT_WARNING
-	#define CUTE_TILED_WARNING cute_tiled_warning
+	#define CUTE_TILED_WARNING(msg) cute_tiled_warning(msg, __LINE__)
 #endif
 
 #if !defined(CUTE_TILED_MEMCPY)
@@ -1147,13 +1166,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 const char* cute_tiled_error_reason;
 int cute_tiled_error_cline;
+const char* cute_tiled_error_file_json = NULL;
+int cute_tiled_error_line_json;
 
 #ifdef CUTE_TILED_DEFAULT_WARNING
 	#include <stdio.h>
 
-	void cute_tiled_warning(const char* warning)
+	void cute_tiled_warning(const char* warning, int line)
 	{
-		printf("WARNING (cute_tiled:%i): %s\n", cute_tiled_error_cline, warning);
+		cute_tiled_error_cline = line;
+		const char *error_file = cute_tiled_error_file_json ? cute_tiled_error_file_json : "MEMORY";
+		printf("WARNING (cute_tiled.h:%i): %s (%s:%i)\n", cute_tiled_error_cline, warning, error_file, cute_tiled_error_line_json);
 	}
 #endif
 
@@ -1240,11 +1263,16 @@ static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path,
 
 cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 {
+	cute_tiled_error_file_json = path;
+
 	int size;
 	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
-	if (!file) CUTE_TILED_WARNING("unable to find map file.");
+	if (!file) CUTE_TILED_WARNING("Unable to find map file.");
 	cute_tiled_map_t* map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
+
+	cute_tiled_error_file_json = NULL;
+
 	return map;
 }
 
@@ -1253,6 +1281,8 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 
 static int cute_tiled_isspace(char c)
 {
+	cute_tiled_error_line_json += c == '\n';
+
 	return (c == ' ') |
 		(c == '\t') |
 		(c == '\n') |
@@ -1267,17 +1297,23 @@ static char cute_tiled_peak(cute_tiled_map_internal_t* m)
 	return *m->in;
 }
 
+#ifdef __clang__
+    #define CUTE_TILED_CRASH() __builtin_trap()
+#else
+    #define CUTE_TILED_CRASH() *(int*)0 = 0
+#endif
+
 static char cute_tiled_next(cute_tiled_map_internal_t* m)
 {
 	char c;
-	if (m->in == m->end) *(int*)0 = 0;
+	if (m->in == m->end) CUTE_TILED_CRASH();
 	while (cute_tiled_isspace(c = *m->in++));
 	return c;
 }
 
 static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 {
-	if (m->in == m->end) *(int*)0 = 0;
+	if (m->in == m->end) CUTE_TILED_CRASH();
 	if (cute_tiled_peak(m) == expect)
 	{
 		m->in++;
@@ -1288,7 +1324,9 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 
 #define cute_tiled_expect(m, expect) \
 	do { \
-		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), "Found unexpected token (is this a valid JSON file?)."); \
+		static char error[128]; \
+		snprintf(error, sizeof(error), "Found unexpected token '%c', expected '%c' (is this a valid JSON file?).", *m->in, expect); \
+		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), error); \
 	} while (0)
 
 char cute_tiled_parse_char(char c)
@@ -1348,7 +1386,8 @@ static int cute_tiled_skip_array_internal(cute_tiled_map_internal_t* m)
 	int depth = 1;
 	cute_tiled_expect(m, '[');
 
-	while (depth) {
+	while (depth)
+	{
 		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
 
 		char c = cute_tiled_next(m);
@@ -1425,6 +1464,7 @@ static int cute_tiled_read_int_internal(cute_tiled_map_internal_t* m, int* out)
 {
 	char* end;
 	int val = (int)strtoll(m->in, &end, 10);
+	if (*end == '.') strtod(m->in, &end); // If we're reading a float as an int, then just skip the decimal part.
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
@@ -1603,7 +1643,7 @@ int cute_tiled_read_vertex_array_internal(cute_tiled_map_internal_t* m, int* out
 		cute_tiled_read_float(m, swap ? &y : &x);
 		cute_tiled_expect(m, ',');
 		cute_tiled_expect(m, '"');
-		cute_tiled_expect(m, swap ? 'y' : 'x');
+		cute_tiled_expect(m, swap ? 'x' : 'y');
 		cute_tiled_expect(m, '"');
 		cute_tiled_expect(m, ':');
 		cute_tiled_read_float(m, swap ? &x : &y);
@@ -1641,7 +1681,10 @@ cute_tiled_err:
 
 int cute_tiled_skip_until_after_internal(cute_tiled_map_internal_t* m, char c)
 {
-	while (*m->in != c) m->in++;
+	while (*m->in != c) {
+		cute_tiled_error_line_json += *m->in == '\n';
+		m->in++;
+	}
 	cute_tiled_expect(m, c);
 	return 1;
 
@@ -1775,7 +1818,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 	}
 
 	cute_tiled_expect(m, ']');
-	cute_tiled_expect(m, ',');
+	cute_tiled_try(m, ',');
 
 	*out_properties = props;
 	*out_count = count;
@@ -1814,7 +1857,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 809651598226485190U: // height
-			cute_tiled_read_int(m, &object->height);
+			cute_tiled_read_float(m, &object->height);
 			break;
 
 		case 3133932603199444032U: // id
@@ -1862,7 +1905,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 7400839267610537869U: // width
-			cute_tiled_read_int(m, &object->width);
+			cute_tiled_read_float(m, &object->width);
 			break;
 
 		case 644252274336276709U: // x
@@ -2009,6 +2052,58 @@ cute_tiled_err:
 	return 0;
 }
 
+int cute_tiled_read_animation_frames_internal(cute_tiled_map_internal_t* m, cute_tiled_frame_t** out_frames, int* out_count)
+{
+	int count = 0;
+	int capacity = 32;
+	cute_tiled_frame_t* frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
+
+	cute_tiled_expect(m, '[');
+
+	while (cute_tiled_peak(m) != ']')
+	{
+		cute_tiled_expect(m, '{');
+
+		cute_tiled_frame_t frame;
+
+		// Read in the duration and tileid.
+		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_read_int(m, &frame.duration);
+		cute_tiled_expect(m, ',');
+		cute_tiled_skip_until_after(m, ':');
+		cute_tiled_read_int(m, &frame.tileid);
+
+		if (count == capacity)
+		{
+			capacity *= 2;
+			cute_tiled_frame_t* new_frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
+			CUTE_TILED_MEMCPY(new_frames, frames, sizeof(cute_tiled_frame_t) * count);
+			CUTE_TILED_FREE(frames, m->mem_ctx);
+			frames = new_frames;
+		}
+		frames[count++] = frame;
+
+		cute_tiled_expect(m, '}');
+		cute_tiled_try(m, ',');
+	}
+
+	cute_tiled_expect(m, ']');
+	cute_tiled_try(m, ',');
+
+	*out_frames = frames;
+	*out_count = count;
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
+#define cute_tiled_read_animation_frames(m, out_frames, out_count) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_read_animation_frames_internal(m, out_frames, out_count)); \
+	} while (0)
+
 cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_tile_descriptor_t* tile_descriptor = (cute_tiled_tile_descriptor_t*)cute_tiled_alloc(m, sizeof(cute_tiled_tile_descriptor_t));
@@ -2047,12 +2142,15 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 			cute_tiled_skip_array(m);
 			break;
 
+		case 3115399308714904519U: // animation
+			cute_tiled_read_animation_frames(m, &tile_descriptor->animation, &tile_descriptor->frame_count);
+			break;
+
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
 		}
 
 		cute_tiled_try(m, ',');
-
 	}
 
 	cute_tiled_expect(m, '}');
@@ -2093,6 +2191,12 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		switch (h)
 		{
+		case 17465100621023921744U: // backgroundcolor
+			cute_tiled_expect(m, '"');
+			cute_tiled_read_hex_int(m, &tileset->backgroundcolor);
+			cute_tiled_expect(m, '"');
+			break;
+
 		case 12570673734542705940U: // columns
 			cute_tiled_read_int(m, &tileset->columns);
 			break;
@@ -2121,6 +2225,14 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_intern_string(m, &tileset->name);
 			break;
 
+		case 1007832939408977147U: // tiledversion
+			cute_tiled_intern_string(m, &tileset->tiledversion);
+			break;
+
+		case 8196820454517111669U: // version
+			cute_tiled_read_float(m, &tileset->version);
+			break;
+
 		case 8368542207491637236U: // properties
 			cute_tiled_read_properties(m, &tileset->properties, &tileset->property_count);
 			break;
@@ -2138,12 +2250,12 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			break;
 
 		case 7277156227374254384U: // tileproperties
-			CUTE_TILED_WARNING("`tileproperties` is not currently supported. Attempting to skip.");
+			CUTE_TILED_WARNING("`tileproperties` is deprecated. Attempting to skip.");
 			CUTE_TILED_FAIL_IF(cute_tiled_skip_curly_braces_internal(m));
 			break;
 
 		case 15569462518706435895U: // tilepropertytypes
-			CUTE_TILED_WARNING("`tilepropertytypes` is not currently supported. Attempting to skip.");
+			CUTE_TILED_WARNING("`tilepropertytypes` is deprecated. Attempting to skip.");
 			CUTE_TILED_FAIL_IF(cute_tiled_skip_curly_braces_internal(m));
 			break;
 
@@ -2163,6 +2275,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 8053780534892277672U: // source
 			cute_tiled_intern_string(m, &tileset->source);
+			break;
+
+		case 1819203229U: // objectalignment
+			cute_tiled_intern_string(m, &tileset->objectalignment);
 			break;
 
 		case 104417158474046698U: // tiles
@@ -2379,6 +2495,8 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 		cute_tiled_string_deintern(m, &tileset->name);
 		cute_tiled_string_deintern(m, &tileset->type);
 		cute_tiled_string_deintern(m, &tileset->source);
+		cute_tiled_string_deintern(m, &tileset->tiledversion);
+		cute_tiled_string_deintern(m, &tileset->objectalignment);
 		cute_tiled_deintern_properties(m, tileset->properties, tileset->property_count);
 		cute_tiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
 		while (tile_descriptor)
@@ -2434,6 +2552,7 @@ static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 		while (desc)
 		{
 			if (desc->properties) CUTE_TILED_FREE(desc->properties, m->mem_ctx);
+			if (desc->animation) CUTE_TILED_FREE(desc->animation, mem_ctx);
 			cute_tiled_free_layers(desc->objectgroup, m->mem_ctx);
 			desc = desc->next;
 		}
@@ -2474,6 +2593,8 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map)
 
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
+	cute_tiled_error_line_json = 1;
+
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_map_internal_t), mem_ctx);
 	CUTE_TILED_MEMSET(m, 0, sizeof(cute_tiled_map_internal_t));
 	m->in = (char*)memory;
