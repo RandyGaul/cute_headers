@@ -1297,17 +1297,23 @@ static char cute_tiled_peak(cute_tiled_map_internal_t* m)
 	return *m->in;
 }
 
+#ifdef __clang__
+    #define CUTE_TILED_CRASH() __builtin_trap()
+#else
+    #define CUTE_TILED_CRASH() *(int*)0 = 0
+#endif
+
 static char cute_tiled_next(cute_tiled_map_internal_t* m)
 {
 	char c;
-	if (m->in == m->end) *(int*)0 = 0;
+	if (m->in == m->end) CUTE_TILED_CRASH();
 	while (cute_tiled_isspace(c = *m->in++));
 	return c;
 }
 
 static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 {
-	if (m->in == m->end) *(int*)0 = 0;
+	if (m->in == m->end) CUTE_TILED_CRASH();
 	if (cute_tiled_peak(m) == expect)
 	{
 		m->in++;
