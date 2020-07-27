@@ -1499,7 +1499,7 @@ void try_out_and_render_dual()
 	c2Norms(poly.verts, poly.norms, poly.count);
 
 	c2Poly inflated = poly;
-	c2Inflate(&inflated, C2_TYPE_POLY, NULL, 5.0f);
+	c2Inflate(&inflated, C2_TYPE_POLY, 5.0f);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawPoly(poly.verts, poly.count);
