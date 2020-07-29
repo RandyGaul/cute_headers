@@ -1237,7 +1237,7 @@ c2Poly c2InflatePoly(c2Poly poly, float skin_factor)
 	for (int i = 0; i < poly.count; ++i) {
 		poly.verts[i] = c2Sub(poly.verts[i], average);
 	}
-	
+
 	c2Poly dual = c2Dual(poly, skin_factor);
 	poly = c2Dual(dual, 0);
 
