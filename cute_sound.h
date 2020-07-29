@@ -2090,7 +2090,6 @@ static int cs_samples_to_mix(cs_context_t* ctx)
 
 static void cs_push_bytes(cs_context_t* ctx, void* data, int size)
 {
-	int index0 = ctx->index0;
 	int index1 = ctx->index1;
 	int samples_to_write = CUTE_SOUND_BYTES_TO_SAMPLES(size);
 	int sample_count = ctx->sample_count;
@@ -2118,7 +2117,6 @@ static void cs_push_bytes(cs_context_t* ctx, void* data, int size)
 static int cs_pull_bytes(cs_context_t* ctx, void* dst, int size)
 {
 	int index0 = ctx->index0;
-	int index1 = ctx->index1;
 	int allowed_size = CUTE_SOUND_SAMPLES_TO_BYTES(cs_samples_written(ctx));
 	int sample_count = ctx->sample_count;
 	int zeros = 0;
@@ -2129,20 +2127,20 @@ static int cs_pull_bytes(cs_context_t* ctx, void* dst, int size)
 		size = allowed_size;
 	}
 
-	int samples_to_read = CUTE_SOUND_BYTES_TO_SAMPLES(allowed_size);
+	int samples_to_read = CUTE_SOUND_BYTES_TO_SAMPLES(size);
 	int samples_to_end = sample_count - index0;
 
 	if (samples_to_read > samples_to_end)
 	{
 		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
-		memcpy(((char*)dst) + CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end), ctx->samples, allowed_size - CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
-		ctx->index0 = (ctx->index0 + samples_to_read) % sample_count;
+		memcpy(((char*)dst) + CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end), ctx->samples, size - CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
+		ctx->index0 = (samples_to_read - samples_to_end) % sample_count;
 	}
 
 	else
 	{
-		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), allowed_size);
-		ctx->index0 = (samples_to_read - samples_to_end) % sample_count;
+		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), size);
+		ctx->index0 = (ctx->index0 + samples_to_read) % sample_count;
 	}
 
 	ctx->samples_in_circular_buffer -= samples_to_read;
