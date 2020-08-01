@@ -104,6 +104,8 @@
 
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
+extern int cute_tiled_error_line;
+
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 
@@ -1165,10 +1167,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	#endif
 #endif
 
-const char* cute_tiled_error_reason;
-int cute_tiled_error_cline;
-const char* cute_tiled_error_file_json = NULL;
-int cute_tiled_error_line_json;
+int cute_tiled_error_cline; 			// The line in cute_tiled.h where the error was triggered.
+const char* cute_tiled_error_reason; 		// The error message.
+int cute_tiled_error_line;  			// The line where the error happened in the json.
+const char* cute_tiled_error_file = NULL; 	// The filepath of the file being parsed. NULL if from memory.
 
 #ifdef CUTE_TILED_DEFAULT_WARNING
 	#include <stdio.h>
@@ -1176,8 +1178,8 @@ int cute_tiled_error_line_json;
 	void cute_tiled_warning(const char* warning, int line)
 	{
 		cute_tiled_error_cline = line;
-		const char *error_file = cute_tiled_error_file_json ? cute_tiled_error_file_json : "MEMORY";
-		printf("WARNING (cute_tiled.h:%i): %s (%s:%i)\n", cute_tiled_error_cline, warning, error_file, cute_tiled_error_line_json);
+		const char *error_file = cute_tiled_error_file ? cute_tiled_error_file : "MEMORY";
+		printf("WARNING (cute_tiled.h:%i): %s (%s:%i)\n", cute_tiled_error_cline, warning, error_file, cute_tiled_error_line);
 	}
 #endif
 
@@ -1264,7 +1266,7 @@ static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path,
 
 cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 {
-	cute_tiled_error_file_json = path;
+	cute_tiled_error_file = path;
 
 	int size;
 	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
@@ -1272,7 +1274,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 	cute_tiled_map_t* map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
 
-	cute_tiled_error_file_json = NULL;
+	cute_tiled_error_file = NULL;
 
 	return map;
 }
@@ -1282,7 +1284,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 
 static int cute_tiled_isspace(char c)
 {
-	cute_tiled_error_line_json += c == '\n';
+	cute_tiled_error_line += c == '\n';
 
 	return (c == ' ') |
 		(c == '\t') |
@@ -1683,7 +1685,7 @@ cute_tiled_err:
 int cute_tiled_skip_until_after_internal(cute_tiled_map_internal_t* m, char c)
 {
 	while (*m->in != c) {
-		cute_tiled_error_line_json += *m->in == '\n';
+		cute_tiled_error_line += *m->in == '\n';
 		m->in++;
 	}
 	cute_tiled_expect(m, c);
@@ -2610,7 +2612,7 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map)
 
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
-	cute_tiled_error_line_json = 1;
+	cute_tiled_error_line = 1;
 
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_map_internal_t), mem_ctx);
 	CUTE_TILED_MEMSET(m, 0, sizeof(cute_tiled_map_internal_t));
