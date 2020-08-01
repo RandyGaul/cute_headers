@@ -8,4 +8,5 @@ tests
 # vim
 *.swp
 *.swo
+*.swn
 *.orig
