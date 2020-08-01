@@ -2205,6 +2205,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_read_int(m, &tileset->firstgid);
 			break;
 
+		case 16920059161811221315U: // grid: unsupported
+			cute_tiled_skip_object(m);
+			break;
+
 		case 13522647194774232494U: // image
 			cute_tiled_intern_string(m, &tileset->image);
 			break;
