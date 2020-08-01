@@ -1969,6 +1969,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			cute_tiled_read_int(m, &layer->height);
 			break;
 
+		case 13522647194774232494U: // image
+			CUTE_TILED_CHECK(0, "Image layer is not yet supported.");
+			break;
+
 		case 4566956252693479661U: // layers
 		cute_tiled_expect(m, '[');
 
