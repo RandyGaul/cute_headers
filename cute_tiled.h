@@ -1220,6 +1220,7 @@ void* cute_tiled_alloc(cute_tiled_map_internal_t* m, int size)
 		page->next = m->pages;
 		page->data = page + 1;
 		m->pages = page;
+		m->bytes_left_on_page = m->page_size;
 	}
 
 	void* data = ((char*)m->pages->data) + (m->page_size - m->bytes_left_on_page);
