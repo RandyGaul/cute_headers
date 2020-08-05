@@ -33,16 +33,6 @@
 		https://github.com/mattiasgustavsson/libs
 
 
-	PLATFORMS
-
-		The current supported platforms are Windows/Posix/SDL. Here are the macros for
-		picking each implementation.
-
-			* CUTE_SYNC_WINDOWS
-			* CUTE_SYNC_POSIX
-			* CUTE_SYNC_SDL
-
-
 	REVISION HISTORY
 
 		1.0  (05/31/2018) initial release
@@ -353,7 +343,7 @@ struct cute_rw_lock_t
 #endif
 
 #if !defined(CUTE_SYNC_YIELD)
-	#ifdef CUTE_SYNC_WINDOWS
+	#ifdef CYTE_SYNC_WINDOWS
 		#define WIN32_LEAN_AND_MEAN
 		#include <Windows.h> // winnt
 		#define CUTE_SYNC_YIELD YieldProcessor
@@ -818,7 +808,7 @@ cute_mutex_t cute_mutex_create()
 {
 	CUTE_SYNC_ASSERT(sizeof(pthread_mutex_t) <= sizeof(cute_mutex_t));
 	cute_mutex_t mutex;
-	pthread_mutex_t((pthread_mutex_t*)&mutex, NULL);
+	pthread_mutex_init((pthread_mutex_t*)&mutex, NULL);
 	return mutex;
 }
 
@@ -1067,7 +1057,7 @@ typedef struct cute_threadpool_t
 	int thread_count;
 	cute_aligned_thread_t* threads;
 
-	int running;
+	cute_atomic_int_t running;
 	cute_mutex_t sem_mutex;
 	cute_semaphore_t semaphore;
 	void* mem_ctx;
@@ -1090,7 +1080,7 @@ int cute_try_pop_task_internal(cute_threadpool_t* pool, cute_task_t* task)
 int cute_worker_thread_internal(void* udata)
 {
 	cute_threadpool_t* pool = (cute_threadpool_t*)udata;
-	while (pool->running) {
+	while (cute_atomic_get(&pool->running)) {
 		cute_task_t task;
 		if (cute_try_pop_task_internal(pool, &task)) {
 			task.do_work(task.param);
@@ -1112,7 +1102,7 @@ cute_threadpool_t* cute_threadpool_create(int thread_count, void* mem_ctx)
 	pool->task_mutex = cute_mutex_create();
 	pool->thread_count = thread_count;
 	pool->threads = (cute_aligned_thread_t*)cute_malloc_aligned(sizeof(cute_aligned_thread_t) * thread_count, CUTE_SYNC_CACHELINE_SIZE, mem_ctx);
-	pool->running = 1;
+	cute_atomic_set(&pool->running, 1);
 	pool->sem_mutex = cute_mutex_create();
 	pool->semaphore = cute_semaphore_create(0);
 	pool->mem_ctx = mem_ctx;
@@ -1171,7 +1161,7 @@ void cute_threadpool_kick(cute_threadpool_t* pool)
 
 void cute_threadpool_destroy(cute_threadpool_t* pool)
 {
-	pool->running = 0;
+	cute_atomic_set(&pool->running, 0);
 
 	for (int i = 0; i < pool->thread_count; ++i) {
 		cute_semaphore_post(&pool->semaphore);
