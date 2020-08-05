@@ -398,7 +398,7 @@ CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA,
 // Deflating a shape can avoid this problem, but deflating a very small shape can invert
 // the planes and result in something that is no longer convex. Make sure to pick an
 // appropriately small skin factor, for example 1.0e-6f.
-void c2Inflate(void* shape, C2_TYPE type, float skin_factor);
+CUTE_C2_API void c2Inflate(void* shape, C2_TYPE type, float skin_factor);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
