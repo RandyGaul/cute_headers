@@ -2007,11 +2007,11 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			cute_tiled_expect(m, ']');
 			break;
 
-		case 644252274336276709U: // offsetx
+		case 5195853646368960386U: // offsetx
 			cute_tiled_read_float(m, &layer->offsetx);
 			break;
 
-		case 643295699219922364U: // offsety
+		case 5196810221485314731U: // offsety
 			cute_tiled_read_float(m, &layer->offsety);
 			break;
 
