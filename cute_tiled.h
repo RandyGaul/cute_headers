@@ -286,8 +286,8 @@ struct cute_tiled_layer_t
 	cute_tiled_layer_t* layers;          // Linked list of layers. Only appears if `type` is `group`.
 	cute_tiled_string_t name;            // Name assigned to this layer.
 	cute_tiled_object_t* objects;        // Linked list of objects. `objectgroup` only.
-	/* offsetx */                        // Not currently supported.
-	/* offsety */                        // Not currently supported.
+	float offsetx;                       // Horizontal layer offset.
+	float offsety;                       // Vertical layer offset.
 	float opacity;                       // Value between 0 and 1.
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
@@ -2006,6 +2006,14 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			}
 
 			cute_tiled_expect(m, ']');
+			break;
+
+		case 5195853646368960386U: // offsetx
+			cute_tiled_read_float(m, &layer->offsetx);
+			break;
+
+		case 5196810221485314731U: // offsety
+			cute_tiled_read_float(m, &layer->offsety);
 			break;
 
 		case 11746902372727406098U: // opacity
