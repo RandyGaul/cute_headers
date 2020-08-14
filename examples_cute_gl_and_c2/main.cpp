@@ -1487,6 +1487,35 @@ void tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case()
 	}
 }
 
+void try_out_and_render_dual()
+{
+	c2Poly poly;
+	poly.count = 5;
+	poly.verts[0] = c2V(-30, 0);
+	poly.verts[1] = c2V(-20, 10);
+	poly.verts[2] = c2V(40, 30);
+	poly.verts[3] = c2V(20, -20);
+	poly.verts[4] = c2V(0, -40);
+	c2Norms(poly.verts, poly.norms, poly.count);
+
+	c2Poly inflated = poly;
+	c2Inflate(&inflated, C2_TYPE_POLY, 5.0f);
+
+	gl_line_color(ctx, 1, 1, 1);
+	DrawPoly(poly.verts, poly.count);
+	gl_line_color(ctx, 1, 0, 0);
+	DrawPoly(inflated.verts, poly.count);
+
+	c2Poly dual = c2Dual(poly, 5.0f);
+	for (int i = 0; i < dual.count; ++i) {
+		// Abitrarily resize the dual so we can see it nicely.
+		// Try to make it the same size roughly as the input poly.
+		dual.verts[i] = c2Mulvs(dual.verts[i], 1150);
+	}
+	gl_line_color(ctx, 0, 1, 1);
+	DrawPoly(dual.verts, poly.count);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1579,8 +1608,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 23;
-		if (arrow_pressed) code = (code + 1) % 24;
+		static int code = 24;
+		if (arrow_pressed) code = (code + 1) % 25;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1607,6 +1636,7 @@ int main()
 		case 21: prime31_cap_to_aabb_bug2(); break;
 		case 22: martincohen_ray_bug(); break;
 		case 23: tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case(); break;
+		case 24: try_out_and_render_dual();
 		}
 
 		// push a draw call to tinygl

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.08
+	cute_c2.h - v1.09
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
@@ -99,6 +99,7 @@
 		1.08 (12/22/2019) Remove contact point + normal from c2TOI, removed feather
 		                  radius from c2GJK, fixed various bugs in capsule to poly
 		                  manifold, did a pass on all docs
+		1.09 (07/27/2019) Added c2Inflate - to inflate/deflate shapes for c2TOI
 
 
 	Contributors
@@ -379,9 +380,25 @@ CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const v
 // 2. Move the shapes to the TOI.
 // 3. Slightly inflate the size of one, or both, of the shapes so they will be intersecting.
 //    The purpose is to make the shapes numerically intersecting, but not visually intersecting.
+//    Another option is to call c2TOI with slightly deflated shapes.
+//    See the function `c2Inflate` for some more details.
 // 4. Compute the collision manifold between the inflated shapes (for example, use c2PolytoPolyManifold).
 // 5. Gently push the shapes apart. This will give the next call to c2TOI some breathing room.
 CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations);
+
+// Inflating a shape.
+//
+// This is useful to numerically grow or shrink a polytope. For example, when calling
+// a time of impact function it can be good to use a slightly smaller shape. Then, once
+// both shapes are moved to the time of impact a collision manifold can be made from the
+// slightly larger (and now overlapping) shapes.
+//
+// IMPORTANT NOTE
+// Inflating a shape with sharp corners can cause those corners to move dramatically.
+// Deflating a shape can avoid this problem, but deflating a very small shape can invert
+// the planes and result in something that is no longer convex. Make sure to pick an
+// appropriately small skin factor, for example 1.0e-6f.
+CUTE_C2_API void c2Inflate(void* shape, C2_TYPE type, float skin_factor);
 
 // Computes 2D convex hull. Will not do anything if less than two verts supplied. If
 // more than C2_MAX_POLYGON_VERTS are supplied extras are ignored.
@@ -394,7 +411,7 @@ CUTE_C2_API void c2MakePoly(c2Poly* p);
 // Generic collision detection routines, useful for games that want to use some poly-
 // morphism to write more generic-styled code. Internally calls various above functions.
 // For AABBs/Circles/Capsules ax and bx are ignored. For polys ax and bx can define
-// model to world transformations, or be NULL for identity transforms.
+// model to world transformations (for polys only), or be NULL for identity transforms.
 CUTE_C2_API int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB);
 CUTE_C2_API void c2Collide(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const c2x* bx, C2_TYPE typeB, c2Manifold* m);
 CUTE_C2_API int c2CastRay(c2Ray A, const void* B, const c2x* bx, C2_TYPE typeB, c2Raycast* out);
@@ -1170,6 +1187,97 @@ void c2MakePoly(c2Poly* p)
 {
 	p->count = c2Hull(p->verts, p->count);
 	c2Norms(p->verts, p->norms, p->count);
+}
+
+c2Poly c2Dual(c2Poly poly, float skin_factor)
+{
+	c2Poly dual;
+	dual.count = poly.count;
+
+	// Each plane maps to a point by involution (the mapping is its own inverse) by dividing
+	// the plane normal by its offset factor.
+	// plane = a * x + b * y - d
+	// dual = { a / d, b / d }
+	for (int i = 0; i < poly.count; ++i) {
+		c2v n = poly.norms[i];
+		float d = c2Dot(n, poly.verts[i]) - skin_factor;
+		if (d == 0) dual.verts[i] = c2V(0, 0);
+		else dual.verts[i] = c2Div(n, d);
+	}
+
+	// Instead of canonically building the convex hull, can simply take advantage of how
+	// the vertices are still in proper CCW order, so only the normals must be recomputed.
+	c2Norms(dual.verts, dual.norms, dual.count);
+
+	return dual;
+}
+
+// Inflating a polytope, idea by Dirk Gregorius ~ 2015. Works in both 2D and 3D.
+// Reference: Halfspace intersection with Qhull by Brad Barber
+//            http://www.geom.uiuc.edu/graphics/pix/Special_Topics/Computational_Geometry/half.html
+//
+// Algorithm steps:
+// 1. Find a point within the input poly.
+// 2. Center this point onto the origin.
+// 3. Adjust the planes by a skin factor.
+// 4. Compute the dual vert of each plane. Each plane becomes a vertex.
+//    c2v dual(c2h plane) { return c2V(plane.n.x / plane.d, plane.n.y / plane.d) }
+// 5. Compute the convex hull of the dual verts. This is called the dual.
+// 6. Compute the dual of the dual, this will be the poly to return.
+// 7. Translate the poly away from the origin by the center point from step 2.
+// 8. Return the inflated poly.
+c2Poly c2InflatePoly(c2Poly poly, float skin_factor)
+{
+	c2v average = poly.verts[0];
+	for (int i = 1; i < poly.count; ++i) {
+		average = c2Add(average, poly.verts[i]);
+	}
+	average = c2Div(average, (float)poly.count);
+
+	for (int i = 0; i < poly.count; ++i) {
+		poly.verts[i] = c2Sub(poly.verts[i], average);
+	}
+
+	c2Poly dual = c2Dual(poly, skin_factor);
+	poly = c2Dual(dual, 0);
+
+	for (int i = 0; i < poly.count; ++i) {
+		poly.verts[i] = c2Add(poly.verts[i], average);
+	}
+
+	return poly;
+}
+
+void c2Inflate(void* shape, C2_TYPE type, float skin_factor)
+{
+	switch (type)
+	{
+	case C2_TYPE_CIRCLE:
+	{
+		c2Circle* circle = (c2Circle*)shape;
+		circle->r += skin_factor;
+	}	break;
+
+	case C2_TYPE_AABB:
+	{
+		c2AABB* bb = (c2AABB*)shape;
+		c2v factor = c2V(skin_factor, skin_factor);
+		bb->min = c2Sub(bb->min, factor);
+		bb->max = c2Add(bb->max, factor);
+	}	break;
+
+	case C2_TYPE_CAPSULE:
+	{
+		c2Capsule* capsule = (c2Capsule*)shape;
+		capsule->r += skin_factor;
+	}	break;
+
+	case C2_TYPE_POLY:
+	{
+		c2Poly* poly = (c2Poly*)shape;
+		*poly = c2InflatePoly(*poly, skin_factor);
+	}	break;
+	}
 }
 
 int c2CircletoCircle(c2Circle A, c2Circle B)

@@ -1422,6 +1422,7 @@ struct cs_context_t
 	unsigned latency_samples;
 	unsigned index0; // read
 	unsigned index1; // write
+	unsigned samples_in_circular_buffer;
 	int Hz;
 	int bps;
 	int wide_count;
@@ -1445,6 +1446,8 @@ struct cs_context_t
 
 	int plugin_count;
 	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
 };
 
 static void cs_release_context(cs_context_t* ctx)
@@ -1542,6 +1545,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
+	ctx->samples_in_circular_buffer = 0;
 	ctx->Hz = play_frequency_in_Hz;
 	ctx->bps = bps;
 	ctx->wide_count = wide_count;
@@ -1682,7 +1686,7 @@ struct cs_context_t
 	unsigned latency_samples;
 	unsigned index0; // read
 	unsigned index1; // write
-	unsigned running_index;
+	unsigned samples_in_circular_buffer;
 	int Hz;
 	int bps;
 	int buffer_size;
@@ -1835,6 +1839,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
+	ctx->samples_in_circular_buffer = 0;
 	ctx->Hz = play_frequency_in_Hz;
 	ctx->bps = bps;
 	ctx->wide_count = wide_count;
@@ -1898,7 +1903,7 @@ struct cs_context_t
 	unsigned latency_samples;
 	unsigned index0; // read
 	unsigned index1; // write
-	unsigned running_index;
+	unsigned samples_in_circular_buffer;
 	int Hz;
 	int bps;
 	int buffer_size;
@@ -1981,7 +1986,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	int sample_buffer_size = sizeof(cs__m128i) * wide_count;
 	cs_context_t* ctx = 0;
 	SDL_AudioSpec wanted;
-	int ret = SDL_Init(SDL_INIT_AUDIO);
+	int ret = SDL_InitSubSystem(SDL_INIT_AUDIO);
 	CUTE_SOUND_CHECK(ret >= 0, "Can't init SDL audio");
 
 	ctx = (cs_context_t*)CUTE_SOUND_ALLOC(sizeof(cs_context_t) + mix_buffers_size + sample_buffer_size + 16 + pool_size, user_allocator_ctx);
@@ -1989,6 +1994,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->latency_samples = 4096;
 	ctx->index0 = 0;
 	ctx->index1 = 0;
+	ctx->samples_in_circular_buffer = 0;
 	ctx->Hz = play_frequency_in_Hz;
 	ctx->bps = bps;
 	ctx->wide_count = wide_count;
@@ -2059,18 +2065,12 @@ cs_playing_sound_t* cs_get_playing(cs_context_t* ctx)
 
 static int cs_samples_written(cs_context_t* ctx)
 {
-	int index0 = ctx->index0;
-	int index1 = ctx->index1;
-	if (index0 <= index1) return index1 - index0;
-	else return ctx->sample_count - index0 + index1;
+	return ctx->samples_in_circular_buffer;
 }
 
 static int cs_samples_unwritten(cs_context_t* ctx)
 {
-	int index0 = ctx->index0;
-	int index1 = ctx->index1;
-	if (index0 <= index1) return ctx->sample_count - index1 + index0;
-	else return index0 - index1;
+	return ctx->sample_count - ctx->samples_in_circular_buffer;
 }
 
 static int cs_samples_to_mix(cs_context_t* ctx)
@@ -2092,37 +2092,35 @@ static int cs_samples_to_mix(cs_context_t* ctx)
 
 static void cs_push_bytes(cs_context_t* ctx, void* data, int size)
 {
-	int index0 = ctx->index0;
 	int index1 = ctx->index1;
-	int samples = CUTE_SOUND_BYTES_TO_SAMPLES(size);
+	int samples_to_write = CUTE_SOUND_BYTES_TO_SAMPLES(size);
 	int sample_count = ctx->sample_count;
 
 	int unwritten = cs_samples_unwritten(ctx);
-	if (unwritten < samples) samples = unwritten;
-	int can_overflow = index0 <= index1;
-	int would_overflow = index1 + samples > sample_count;
+	if (unwritten < samples_to_write) samples_to_write = unwritten;
+	int samples_to_end = sample_count - index1;
 
-	if (can_overflow && would_overflow)
+	if (samples_to_write > samples_to_end)
 	{
-		int first_size = CUTE_SOUND_SAMPLES_TO_BYTES(sample_count - index1);
-		int second_size = size - first_size;
-		memcpy((char*)ctx->samples + CUTE_SOUND_SAMPLES_TO_BYTES(index1), data, first_size);
-		memcpy(ctx->samples, (char*)data + first_size, second_size);
-		ctx->index1 = CUTE_SOUND_BYTES_TO_SAMPLES(second_size);
+		memcpy((char*)ctx->samples + CUTE_SOUND_SAMPLES_TO_BYTES(index1), data, CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
+		memcpy(ctx->samples, (char*)data + CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end), size - CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
+		ctx->index1 = (samples_to_write - samples_to_end) % sample_count;
 	}
 
 	else
 	{
 		memcpy((char*)ctx->samples + CUTE_SOUND_SAMPLES_TO_BYTES(index1), data, size);
-		ctx->index1 += CUTE_SOUND_BYTES_TO_SAMPLES(size);
+		ctx->index1 = (ctx->index1 + samples_to_write) % sample_count;
 	}
+
+	ctx->samples_in_circular_buffer += samples_to_write;
 }
 
 static int cs_pull_bytes(cs_context_t* ctx, void* dst, int size)
 {
 	int index0 = ctx->index0;
-	int index1 = ctx->index1;
 	int allowed_size = CUTE_SOUND_SAMPLES_TO_BYTES(cs_samples_written(ctx));
+	int sample_count = ctx->sample_count;
 	int zeros = 0;
 
 	if (allowed_size < size)
@@ -2131,22 +2129,23 @@ static int cs_pull_bytes(cs_context_t* ctx, void* dst, int size)
 		size = allowed_size;
 	}
 
-	if (index1 >= index0)
+	int samples_to_read = CUTE_SOUND_BYTES_TO_SAMPLES(size);
+	int samples_to_end = sample_count - index0;
+
+	if (samples_to_read > samples_to_end)
 	{
-		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), size);
-		ctx->index0 += CUTE_SOUND_BYTES_TO_SAMPLES(size);
+		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
+		memcpy(((char*)dst) + CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end), ctx->samples, size - CUTE_SOUND_SAMPLES_TO_BYTES(samples_to_end));
+		ctx->index0 = (samples_to_read - samples_to_end) % sample_count;
 	}
 
 	else
 	{
-		int first_size = CUTE_SOUND_SAMPLES_TO_BYTES(ctx->sample_count) - CUTE_SOUND_SAMPLES_TO_BYTES(index0);
-		if (first_size > size) first_size = size;
-		int second_size = size - first_size;
-		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), first_size);
-		memcpy(((char*)dst) + first_size, ctx->samples, second_size);
-		if (second_size) ctx->index0 = CUTE_SOUND_BYTES_TO_SAMPLES(second_size);
-		else ctx->index0 += CUTE_SOUND_BYTES_TO_SAMPLES(first_size);
+		memcpy(dst, ((char*)ctx->samples) + CUTE_SOUND_SAMPLES_TO_BYTES(index0), size);
+		ctx->index0 = (ctx->index0 + samples_to_read) % sample_count;
 	}
+
+	ctx->samples_in_circular_buffer -= samples_to_read;
 
 	return zeros;
 }
