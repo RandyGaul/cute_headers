@@ -1824,7 +1824,8 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 	cute_tiled_expect(m, ']');
 	cute_tiled_try(m, ',');
 
-	*out_properties = props;
+	*out_properties = count ? props : NULL;
+        if (!count) CUTE_TILED_FREE(props, m->mem_ctx);
 	*out_count = count;
 
 	return 1;
