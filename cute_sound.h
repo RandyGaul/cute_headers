@@ -1446,6 +1446,8 @@ struct cs_context_t
 
 	int plugin_count;
 	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
+
+	void* mem_ctx;
 };
 
 static void cs_release_context(cs_context_t* ctx)
