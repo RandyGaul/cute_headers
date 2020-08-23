@@ -2308,6 +2308,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 8053780534892277672U: // source
 			cute_tiled_intern_string(m, &tileset->source);
+			CUTE_TILED_WARNING("You might have forgotten to embed your tileset -- Most fields of `cute_tiled_tileset_t` will be zero'd out (unset).");
 			break;
 
 		case 1819203229U: // objectalignment
