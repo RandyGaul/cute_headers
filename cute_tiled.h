@@ -108,9 +108,10 @@ extern int cute_tiled_error_line;
 
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
+typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 
 /*!
- * Load a map from disk, placed into heap allocated memory.. \p mem_ctx can be
+ * Load a map from disk, placed into heap allocated memory. \p mem_ctx can be
  * NULL. It is used for custom allocations.
  */
 cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx);
@@ -129,6 +130,30 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map);
  * Free all dynamic memory associated with this map.
  */
 void cute_tiled_free_map(cute_tiled_map_t* map);
+
+/*!
+ * Load an external tileset from disk, placed into heap allocated memory. \p mem_ctx can be
+ * NULL. It is used for custom allocations.
+ *
+ * Please note this function is *entirely optional*, and only useful if you want to intentionally
+ * load tilesets externally from your map. If so, please also consider defining
+ * `CUTE_TILED_NO_EXTERNAL_TILESET_WARNING` to disable warnings about missing embedded tilesets.
+ */
+cute_tiled_tileset_t* cute_tiled_load_external_tileset(const char* path, void* mem_ctx);
+
+/*!
+ * Load an external tileset from memory. \p mem_ctx can be NULL. It is used for custom allocations.
+ *
+ * Please note this function is *entirely optional*, and only useful if you want to intentionally
+ * load tilesets externally from your map. If so, please also consider defining
+ * `CUTE_TILED_NO_EXTERNAL_TILESET_WARNING` to disable warnings about missing embedded tilesets.
+ */
+cute_tiled_tileset_t* cute_tiled_load_external_tileset_from_memory(const void* memory, int size_in_bytes, void* mem_ctx);
+
+/*!
+ * Free all dynamic memory associated with this external tileset.
+ */
+void cute_tiled_free_external_tileset(cute_tiled_tileset_t* tileset);
 
 #if !defined(CUTE_TILED_U64)
 	#define CUTE_TILED_U64 unsigned long long
@@ -325,7 +350,14 @@ struct cute_tiled_tile_descriptor_t
 };
 
 // IMPORTANT NOTE
-// Make sure to export your map with tilesets embedded!
+// If your tileset is not embedded you will get a warning -- to disable all warnings simply define
+// this macro CUTE_TILED_WARNING.
+//
+// Here is an example.
+//
+//    #define CUTE_TILED_WARNING
+//    #define CUTE_TILED_IMPLEMENTATION
+//    #include <cute_tiled.h>
 struct cute_tiled_tileset_t
 {
 	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
@@ -353,6 +385,7 @@ struct cute_tiled_tileset_t
 	cute_tiled_string_t source;          // Relative path to tileset, when saved externally from the map file.
 	cute_tiled_tileset_t* next;          // Pointer to next tileset. NULL if final tileset.
 	float version;                       // The JSON format version (like 1.2).
+	void* _internal;                     // For internal use only. Don't touch.
 };
 
 struct cute_tiled_map_t
@@ -2308,7 +2341,9 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 8053780534892277672U: // source
 			cute_tiled_intern_string(m, &tileset->source);
+#ifndef CUTE_TILED_NO_EXTERNAL_TILESET_WARNING
 			CUTE_TILED_WARNING("You might have forgotten to embed your tileset -- Most fields of `cute_tiled_tileset_t` will be zero'd out (unset).");
+#endif CUTE_TILED_NO_EXTERNAL_TILESET_WARNING
 			break;
 
 		case 1819203229U: // objectalignment
@@ -2514,6 +2549,23 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 	}
 }
 
+static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_tiled_tileset_t* tileset)
+{
+	cute_tiled_string_deintern(m, &tileset->image);
+	cute_tiled_string_deintern(m, &tileset->name);
+	cute_tiled_string_deintern(m, &tileset->type);
+	cute_tiled_string_deintern(m, &tileset->source);
+	cute_tiled_string_deintern(m, &tileset->tiledversion);
+	cute_tiled_string_deintern(m, &tileset->objectalignment);
+	cute_tiled_deintern_properties(m, tileset->properties, tileset->property_count);
+	cute_tiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
+	while (tile_descriptor)
+	{
+		cute_tiled_deintern_properties(m, tile_descriptor->properties, tile_descriptor->property_count);
+		tile_descriptor = tile_descriptor->next;
+	}
+}
+
 static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_string_deintern(m, &m->map.orientation);
@@ -2525,19 +2577,7 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 	cute_tiled_tileset_t* tileset = m->map.tilesets;
 	while (tileset)
 	{
-		cute_tiled_string_deintern(m, &tileset->image);
-		cute_tiled_string_deintern(m, &tileset->name);
-		cute_tiled_string_deintern(m, &tileset->type);
-		cute_tiled_string_deintern(m, &tileset->source);
-		cute_tiled_string_deintern(m, &tileset->tiledversion);
-		cute_tiled_string_deintern(m, &tileset->objectalignment);
-		cute_tiled_deintern_properties(m, tileset->properties, tileset->property_count);
-		cute_tiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
-		while (tile_descriptor)
-		{
-			cute_tiled_deintern_properties(m, tile_descriptor->properties, tile_descriptor->property_count);
-			tile_descriptor = tile_descriptor->next;
-		}
+		cute_tiled_patch_tileset_strings(m, tileset);
 		tileset = tileset->next;
 	}
 
@@ -2625,10 +2665,8 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map)
 	CUTE_TILED_REVERSE_LIST(cute_tiled_layer_t, map->layers);
 }
 
-cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
+static cute_tiled_map_internal_t* cute_tiled_map_internal_alloc_internal(void* memory, int size_in_bytes, void* mem_ctx)
 {
-	cute_tiled_error_line = 1;
-
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_map_internal_t), mem_ctx);
 	CUTE_TILED_MEMSET(m, 0, sizeof(cute_tiled_map_internal_t));
 	m->in = (char*)memory;
@@ -2642,7 +2680,14 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 	strpool_embedded_config_t config = strpool_embedded_default_config;
 	config.memctx = mem_ctx;
 	strpool_embedded_init(&m->strpool, &config);
+	return m;
+}
 
+cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
+{
+	cute_tiled_error_line = 1;
+
+	cute_tiled_map_internal_t* m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
 	cute_tiled_layer_t* layer = m->map.layers;
 	cute_tiled_tileset_t* tileset = m->map.tilesets;
 	cute_tiled_expect(m, '{');
@@ -2679,6 +2724,36 @@ cute_tiled_err:
 void cute_tiled_free_map(cute_tiled_map_t* map)
 {
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)(((char*)map) - (size_t)(&((cute_tiled_map_internal_t*)0)->map));
+	cute_tiled_free_map_internal(m);
+}
+
+cute_tiled_tileset_t* cute_tiled_load_external_tileset(const char* path, void* mem_ctx)
+{
+	cute_tiled_error_file = path;
+
+	int size;
+	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
+	if (!file) CUTE_TILED_WARNING("Unable to find external tileset file.");
+	cute_tiled_tileset_t* tileset = cute_tiled_load_external_tileset_from_memory(file, size, mem_ctx);
+	CUTE_TILED_FREE(file, mem_ctx);
+
+	cute_tiled_error_file = NULL;
+
+	return tileset;
+}
+
+cute_tiled_tileset_t* cute_tiled_load_external_tileset_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
+{
+	cute_tiled_map_internal_t* m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
+	cute_tiled_tileset_t* tileset = cute_tiled_tileset(m);
+	cute_tiled_patch_tileset_strings(m, tileset);
+	tileset->_internal = m;
+	return tileset;
+}
+
+void cute_tiled_free_external_tileset(cute_tiled_tileset_t* tileset)
+{
+	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)tileset->_internal;
 	cute_tiled_free_map_internal(m);
 }
 
