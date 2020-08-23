@@ -2747,6 +2747,7 @@ cute_tiled_tileset_t* cute_tiled_load_external_tileset_from_memory(const void* m
 	cute_tiled_map_internal_t* m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
 	cute_tiled_tileset_t* tileset = cute_tiled_tileset(m);
 	cute_tiled_patch_tileset_strings(m, tileset);
+	CUTE_TILED_REVERSE_LIST(cute_tiled_tile_descriptor_t, tileset->tiles);
 	tileset->_internal = m;
 	return tileset;
 }
