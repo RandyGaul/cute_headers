@@ -350,12 +350,12 @@ struct cute_tiled_tile_descriptor_t
 };
 
 // IMPORTANT NOTE
-// If your tileset is not embedded you will get a warning -- to disable all warnings simply define
-// this macro CUTE_TILED_WARNING.
+// If your tileset is not embedded you will get a warning -- to disable this warning simply define
+// this macro CUTE_TILED_NO_EXTERNAL_TILESET_WARNING.
 //
 // Here is an example.
 //
-//    #define CUTE_TILED_WARNING
+//    #define CUTE_TILED_NO_EXTERNAL_TILESET_WARNING
 //    #define CUTE_TILED_IMPLEMENTATION
 //    #include <cute_tiled.h>
 struct cute_tiled_tileset_t
