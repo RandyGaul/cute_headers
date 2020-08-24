@@ -2263,6 +2263,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_read_int(m, &tileset->columns);
 			break;
 
+		case 13648382824248632287U: // editorsettings
+			cute_tiled_skip_object(m);
+			break;
+
 		case 13956389100366699181U: // firstgid
 			cute_tiled_read_int(m, &tileset->firstgid);
 			break;
