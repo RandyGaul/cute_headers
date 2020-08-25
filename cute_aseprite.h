@@ -13,7 +13,7 @@
 	SUMMARY
 
 		cute_asesprite.h is a single-file header that implements some functions to
-		parse .aseprite files. The entire file is parsed all at once and some
+		parse .ase/.aseprite files. The entire file is parsed all at once and some
 		structs are filled out then handed back to you.
 
 
