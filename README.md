@@ -68,3 +68,7 @@ Unfortunately writing a good header library is pretty hard, so just any random h
 > - *What is the license?*
 
 Each lib contains license info at the end of the file. There is a choice between public domain, and zlib.
+
+> - *I was looking for a header I've seen before, but it's missing. Where did it go?*
+
+Some of the unpopular or not so useful headers became deprecated, and [live here now](https://github.com/RandyGaul/cute_headers_deprecated).
