@@ -337,9 +337,6 @@ static const char* s_error_reason;      // Used to capture errors during DEFLATE
 #define CUTE_ASEPRITE_FAIL() do { goto ase_err; } while (0)
 #define CUTE_ASEPRITE_CHECK(X, Y) do { if (!(X)) { s_error_reason = Y; CUTE_ASEPRITE_FAIL(); } } while (0)
 #define CUTE_ASEPRITE_CALL(X) do { if (!(X)) goto ase_err; } while (0)
-#define CUTE_ASEPRITE_LOOKUP_BITS 9
-#define CUTE_ASEPRITE_LOOKUP_COUNT (1 << CUTE_ASEPRITE_LOOKUP_BITS)
-#define CUTE_ASEPRITE_LOOKUP_MASK (CUTE_ASEPRITE_LOOKUP_COUNT - 1)
 #define CUTE_ASEPRITE_DEFLATE_MAX_BITLEN 15
 
 // DEFLATE tables from RFC 1951
@@ -372,7 +369,6 @@ typedef struct deflate_t
 	char* out_end;
 	char* begin;
 
-	uint16_t lookup[CUTE_ASEPRITE_LOOKUP_COUNT];
 	uint32_t lit[288];
 	uint32_t dst[32];
 	uint32_t len[19];
@@ -463,7 +459,6 @@ static int s_build(deflate_t* s, uint32_t* tree, uint8_t* lens, int sym_count)
 		first[n] = first[n - 1] + counts[n - 1];
 	}
 
-	if (s) CUTE_ASEPRITE_MEMSET(s->lookup, 0, sizeof(s->lookup));
 	for (int i = 0; i < sym_count; ++i)
 	{
 		int len = lens[i];
@@ -474,16 +469,6 @@ static int s_build(deflate_t* s, uint32_t* tree, uint8_t* lens, int sym_count)
 			uint32_t code = codes[len]++;
 			uint32_t slot = first[len]++;
 			tree[slot] = (code << (32 - len)) | (i << 4) | len;
-
-			if (s && len <= CUTE_ASEPRITE_LOOKUP_BITS)
-			{
-				int j = s_rev16(code) >> (16 - len);
-				while (j < (1 << CUTE_ASEPRITE_LOOKUP_BITS))
-				{
-					s->lookup[j] = (uint16_t)((len << CUTE_ASEPRITE_LOOKUP_BITS) | i);
-					j += (1 << len);
-				}
-			}
 		}
 	}
 
