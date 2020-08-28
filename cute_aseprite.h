@@ -332,7 +332,7 @@ static const char* s_error_reason;      // Used to capture errors during DEFLATE
 	{
 		s_error_cline = line;
 		const char *error_file = s_error_file ? s_error_file : "MEMORY";
-		printf("WARNING (cute_tiled.h:%i): %s (%s)\n", s_error_cline, warning, error_file);
+		printf("WARNING (cute_aseprite.h:%i): %s (%s)\n", s_error_cline, warning, error_file);
 	}
 #endif
 
@@ -989,7 +989,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			{
 				ase->has_color_profile = 1;
 				ase->color_profile.type = (ase_color_profile_type_t)s_read_uint16(s);
-				ase->color_profile.use_fixed_gamma = (int)s_read_uint16(s);
+				ase->color_profile.use_fixed_gamma = (int)s_read_uint16(s) & 1;
 				ase->color_profile.gamma = s_read_fixed(s);
 				s_skip(s, 8); // For future use (set to zero).
 				if (ase->color_profile.type == ASE_COLOR_PROFILE_TYPE_EMBEDDED_ICC) {
