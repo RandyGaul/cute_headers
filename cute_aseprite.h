@@ -105,6 +105,12 @@ struct ase_color_t
 	uint8_t r, g, b, a;
 };
 
+struct ase_fixed_t
+{
+	uint16_t a;
+	uint16_t b;
+};
+
 struct ase_udata_t
 {
 	int has_color;
@@ -140,26 +146,35 @@ struct ase_layer_t
 	ase_udata_t udata;
 };
 
-struct ase_fixed_t
+struct ase_cel_extra_chunk_t
 {
-	uint16_t a;
-	uint16_t b;
+	int precise_bounds_are_set;
+	ase_fixed_t precise_x;
+	ase_fixed_t precise_y;
+	ase_fixed_t w, h;
 };
 
-typedef enum ase_color_profile_type_t
+struct ase_cel_t
 {
-	ASE_COLOR_PROFILE_TYPE_NONE,
-	ASE_COLOR_PROFILE_TYPE_SRGB,
-	ASE_COLOR_PROFILE_TYPE_EMBEDDED_ICC,
-} ase_color_profile_type_t;
+	ase_layer_t* layer;
+	void* pixels;
+	int w, h;
+	int x, y;
+	float opacity;
+	int is_linked;
+	uint16_t linked_frame_index;
+	int has_extra;
+	ase_cel_extra_chunk_t extra;
+	ase_udata_t udata;
+};
 
-struct ase_color_profile_t
+struct ase_frame_t
 {
-	ase_color_profile_type_t type;
-	int use_fixed_gamma;
-	ase_fixed_t gamma;
-	uint32_t icc_profile_data_length;
-	void* icc_profile_data;
+	ase_t* ase;
+	int duration_milliseconds;
+	ase_color_t* pixels;
+	int cel_count;
+	ase_cel_t cels[CUTE_ASEPRITE_MAX_LAYERS];
 };
 
 typedef enum ase_animation_direction_t
@@ -176,25 +191,6 @@ struct ase_tag_t
 	ase_animation_direction_t loop_animation_direction;
 	uint8_t r, g, b;
 	const char* name;
-};
-
-typedef enum ase_mode_t
-{
-	ASE_MODE_RGBA,
-	ASE_MODE_GRAYSCALE,
-	ASE_MODE_INDEXED
-} ase_mode_t;
-
-struct ase_palette_entry_t
-{
-	ase_color_t color;
-	const char* color_name;
-};
-
-struct ase_palette_t
-{
-	int entry_count;
-	ase_palette_entry_t entries[CUTE_ASEPRITE_MAX_PALETTE_ENTRIES];
 };
 
 struct ase_slice_t
@@ -217,6 +213,41 @@ struct ase_slice_t
 
 	ase_udata_t udata;
 };
+
+struct ase_palette_entry_t
+{
+	ase_color_t color;
+	const char* color_name;
+};
+
+struct ase_palette_t
+{
+	int entry_count;
+	ase_palette_entry_t entries[CUTE_ASEPRITE_MAX_PALETTE_ENTRIES];
+};
+
+typedef enum ase_color_profile_type_t
+{
+	ASE_COLOR_PROFILE_TYPE_NONE,
+	ASE_COLOR_PROFILE_TYPE_SRGB,
+	ASE_COLOR_PROFILE_TYPE_EMBEDDED_ICC,
+} ase_color_profile_type_t;
+
+struct ase_color_profile_t
+{
+	ase_color_profile_type_t type;
+	int use_fixed_gamma;
+	ase_fixed_t gamma;
+	uint32_t icc_profile_data_length;
+	void* icc_profile_data;
+};
+
+typedef enum ase_mode_t
+{
+	ASE_MODE_RGBA,
+	ASE_MODE_GRAYSCALE,
+	ASE_MODE_INDEXED
+} ase_mode_t;
 
 struct ase_t
 {
@@ -247,37 +278,6 @@ struct ase_t
 	ase_slice_t slices[CUTE_ASEPRITE_MAX_SLICES];
 
 	void* mem_ctx;
-};
-
-struct ase_cel_extra_chunk_t
-{
-	int precise_bounds_are_set;
-	ase_fixed_t precise_x;
-	ase_fixed_t precise_y;
-	ase_fixed_t w, h;
-};
-
-struct ase_cel_t
-{
-	ase_layer_t* layer;
-	void* pixels;
-	int w, h;
-	int x, y;
-	float opacity;
-	int is_linked;
-	uint16_t linked_frame_index;
-	int has_extra;
-	ase_cel_extra_chunk_t extra;
-	ase_udata_t udata;
-};
-
-struct ase_frame_t
-{
-	ase_t* ase;
-	int duration_milliseconds;
-	ase_color_t* pixels;
-	int cel_count;
-	ase_cel_t cels[CUTE_ASEPRITE_MAX_LAYERS];
 };
 
 #endif // CUTE_ASEPRITE_H
