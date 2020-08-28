@@ -98,6 +98,8 @@ void cute_aseprite_free(ase_t* aseprite);
 #define CUTE_ASEPRITE_MAX_PALETTE_ENTRIES (256)
 #define CUTE_ASEPRITE_MAX_TAGS (256)
 
+#include <stdint.h>
+
 struct ase_color_t
 {
 	uint8_t r, g, b, a;
@@ -335,8 +337,6 @@ static const char* s_error_reason;      // Used to capture errors during DEFLATE
 		printf("WARNING (cute_aseprite.h:%i): %s (%s)\n", s_error_cline, warning, error_file);
 	}
 #endif
-
-#include <stdint.h>
 
 #define CUTE_ASEPRITE_FAIL() do { goto ase_err; } while (0)
 #define CUTE_ASEPRITE_CHECK(X, Y) do { if (!(X)) { s_error_reason = Y; CUTE_ASEPRITE_FAIL(); } } while (0)
