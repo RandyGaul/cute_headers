@@ -76,6 +76,18 @@
 #define CUTE_ASEPRITE_H
 
 typedef struct ase_t ase_t;
+
+ase_t* cute_aseprite_load_from_file(const char* path, void* mem_ctx);
+ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ctx);
+void cute_aseprite_free(ase_t* aseprite);
+
+#define CUTE_ASEPRITE_MAX_LAYERS (64)
+#define CUTE_ASEPRITE_MAX_SLICES (128)
+#define CUTE_ASEPRITE_MAX_PALETTE_ENTRIES (256)
+#define CUTE_ASEPRITE_MAX_TAGS (256)
+
+#include <stdint.h>
+
 typedef struct ase_frame_t ase_frame_t;
 typedef struct ase_layer_t ase_layer_t;
 typedef struct ase_cel_t ase_cel_t;
@@ -88,17 +100,6 @@ typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
 typedef struct ase_color_profile_t ase_color_profile_t;
 typedef struct ase_fixed_t ase_fixed_t;
 typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
-
-ase_t* cute_aseprite_load_from_file(const char* path, void* mem_ctx);
-ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ctx);
-void cute_aseprite_free(ase_t* aseprite);
-
-#define CUTE_ASEPRITE_MAX_LAYERS (64)
-#define CUTE_ASEPRITE_MAX_SLICES (128)
-#define CUTE_ASEPRITE_MAX_PALETTE_ENTRIES (256)
-#define CUTE_ASEPRITE_MAX_TAGS (256)
-
-#include <stdint.h>
 
 struct ase_color_t
 {
