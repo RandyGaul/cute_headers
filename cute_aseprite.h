@@ -943,6 +943,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					break;
 
 				case 1: // Linked cel.
+					cel->is_linked = 1;
 					cel->linked_frame_index = s_read_uint16(s);
 					break;
 
@@ -1104,6 +1105,9 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			ase_cel_t* cel = frame->cels + j;
 			if (!(cel->layer->flags & ASE_LAYER_FLAGS_VISIBLE)) {
 				continue;
+			}
+			while (cel->is_linked) {
+				cel = ase->frames[cel->linked_frame_index].cels + j;
 			}
 			void* src = cel->pixels;
 			uint8_t opacity = (uint8_t)(cel->opacity * cel->layer->opacity * 255.0f);
