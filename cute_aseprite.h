@@ -855,7 +855,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	s->mem_ctx = mem_ctx;
 
 	s_skip(s, sizeof(uint32_t)); // File size.
-	CUTE_ASSERT(s_read_uint16(s) == 0xA5E0);
+	CUTE_ASEPRITE_ASSERT(s_read_uint16(s) == 0xA5E0);
 
 	ase->frame_count = (int)s_read_uint16(s);
 	ase->w = s_read_uint16(s);
@@ -894,7 +894,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 		ase_frame_t* frame = ase->frames + i;
 		frame->ase = ase;
 		s_skip(s, sizeof(uint32_t)); // Frame size.
-		CUTE_ASSERT(s_read_uint16(s) == 0xF1FA);
+		CUTE_ASEPRITE_ASSERT(s_read_uint16(s) == 0xF1FA);
 		int chunk_count = (int)s_read_uint16(s);
 		frame->duration_milliseconds = s_read_uint16(s);
 		if (frame->duration_milliseconds == 0) frame->duration_milliseconds = speed;
@@ -911,7 +911,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			switch (chunk_type) {
 			case 0x2004: // Layer chunk.
 			{
-				CUTE_ASSERT(ase->layer_count < CUTE_ASEPRITE_MAX_LAYERS);
+				CUTE_ASEPRITE_ASSERT(ase->layer_count < CUTE_ASEPRITE_MAX_LAYERS);
 				ase_layer_t* layer = ase->layers + ase->layer_count++;
 				layer->flags = (ase_layer_flags_t)s_read_uint16(s);
 				layer->type = (ase_layer_type_t)s_read_uint16(s);
@@ -928,7 +928,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2005: // Cel chunk.
 			{
-				CUTE_ASSERT(frame->cel_count < CUTE_ASEPRITE_MAX_LAYERS);
+				CUTE_ASEPRITE_ASSERT(frame->cel_count < CUTE_ASEPRITE_MAX_LAYERS);
 				ase_cel_t* cel = frame->cels + frame->cel_count++;
 				int layer_index = (int)s_read_uint16(s);
 				cel->layer = ase->layers + layer_index;
