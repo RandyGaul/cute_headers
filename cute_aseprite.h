@@ -26,6 +26,10 @@
 		Does not support very old versions of Aseprite (with old palette chunks
 		0x0004 or 0x0011). Also does not support deprecrated mask chunk.
 
+		sRGB and ICC profiles are parsed but completely ignored when blending
+		frames together. If you want these to be used when composing frames you
+		have to do this yourself.
+
 
 	Revision history:
 		1.00 (08/25/2020) initial release
