@@ -31,6 +31,15 @@
 		have to do this yourself.
 
 
+	SPECIAL THANKS
+
+		Special thanks to Noel Berry for the blend code in his reference C++
+		implementation (https://github.com/NoelFB/blah).
+
+		Special thanks to Richard Mitton for the initial implementation of the
+		zlib inflater.
+
+
 	Revision history:
 		1.00 (08/25/2020) initial release
 /*
