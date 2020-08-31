@@ -1013,6 +1013,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			case 0x2018: // Tags chunk.
 			{
 				ase->tag_count = (int)s_read_uint16(s);
+				s_skip(s, 8); // For future (set to zero).
 				CUTE_ASEPRITE_ASSERT(ase->tag_count < CUTE_ASEPRITE_MAX_TAGS);
 				for (int k = 0; k < ase->tag_count; ++k) {
 					ase_tag_t tag;
@@ -1023,7 +1024,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					tag.r = s_read_uint8(s);
 					tag.g = s_read_uint8(s);
 					tag.b = s_read_uint8(s);
-					s_skip(s, 8); // Extra byte (zero).
+					s_skip(s, 1); // Extra byte (zero).
 					tag.name = s_read_string(s);
 					ase->tags[k] = tag;
 				}
