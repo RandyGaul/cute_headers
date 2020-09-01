@@ -42,6 +42,7 @@
 
 	Revision history:
 		1.00 (08/25/2020) initial release
+		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
 /*
 
 /*
@@ -79,6 +80,15 @@
 		blend mode. A warning is emit if any other blend mode is encountered. Feel free
 		to update the pixels of each frame with your own implementation of blending
 		functions. The frame's pixels are merely provided like this for convenience.
+
+
+	BUGS AND CRASHES
+
+		This header is quite new and it takes time to test all the parse paths. Don't be
+		shy about opening a GitHub issue if there's a crash! It's quite easy to update
+		the parser as long as you upload your .ase file that shows the bug.
+
+		https://github.com/RandyGaul/cute_headers/issues
 */
 
 #ifndef CUTE_ASEPRITE_H
@@ -1163,11 +1173,25 @@ void cute_aseprite_free(ase_t* ase)
 			CUTE_ASEPRITE_FREE(cel->pixels, ase->mem_ctx);
 			CUTE_ASEPRITE_FREE((void*)cel->udata.text, ase->mem_ctx);
 		}
+	}
+	for (int i = 0; i < ase->layer_count; ++i) {
 		ase_layer_t* layer = ase->layers + i;
 		CUTE_ASEPRITE_FREE((void*)layer->name, ase->mem_ctx);
-		for (int j = 0; j < ase->palette.entry_count; ++j) {
-			CUTE_ASEPRITE_FREE((void*)ase->palette.entries[j].color_name, ase->mem_ctx);
-		}
+		CUTE_ASEPRITE_FREE((void*)layer->udata.text, ase->mem_ctx);
+	}
+	for (int i = 0; i < ase->tag_count; ++i) {
+		ase_tag_t* tag = ase->tags + i;
+		CUTE_ASEPRITE_FREE((void*)tag->name, ase->mem_ctx);
+	}
+	for (int i = 0; i < ase->slice_count; ++i) {
+		ase_slice_t* slice = ase->slices + i;
+		CUTE_ASEPRITE_FREE((void*)slice->udata.text, ase->mem_ctx);
+	}
+	if (ase->slice_count) {
+		CUTE_ASEPRITE_FREE((void*)ase->slices[0].name, ase->mem_ctx);
+	}
+	for (int i = 0; i < ase->palette.entry_count; ++i) {
+		CUTE_ASEPRITE_FREE((void*)ase->palette.entries[i].color_name, ase->mem_ctx);
 	}
 	if (ase->slice_count) CUTE_ASEPRITE_FREE((void*)ase->slices[0].name, ase->mem_ctx);
 	CUTE_ASEPRITE_FREE(ase->color_profile.icc_profile_data, ase->mem_ctx);
