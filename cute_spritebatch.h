@@ -120,10 +120,10 @@
 		SPRITEBATCH_MALLOC
 		SPRITEBATCH_MEMCPY
 		SPRITEBATCH_MEMSET
+		SPRITEBATCH_MEMMOVE
 		SPRITEBATCH_ASSERT
 		SPRITEBATCH_ATLAS_FLIP_Y_AXIS_FOR_UV
 		SPRITEBATCH_ATLAS_EMPTY_COLOR
-		SPRITEBATCH_ALLOCA
 		SPRITEBATCH_LOG
 
 	Revision history:
@@ -465,6 +465,11 @@ struct spritebatch_t
 	#define SPRITEBATCH_MEMSET(ptr, val, n) memset(ptr, val, n)
 #endif
 
+#ifndef SPRITEBATCH_MEMMOVE
+	#include <string.h>
+	#define SPRITEBATCH_MEMMOVE(dst, src, n) memmove(dst, src, n)
+#endif
+
 #ifndef SPRITEBATCH_ASSERT
 	#include <assert.h>
 	#define SPRITEBATCH_ASSERT(condition) assert(condition)
@@ -482,15 +487,6 @@ struct spritebatch_t
 
 #ifndef SPRITEBATCH_ATLAS_EMPTY_COLOR
 	#define SPRITEBATCH_ATLAS_EMPTY_COLOR 0x000000FF
-#endif
-
-#ifndef SPRITEBATCH_ALLOCA
-	#ifdef _WIN32
-		#include <malloc.h>
-	#else
-		#include <alloca.h>
-	#endif
-	#define SPRITEBATCH_ALLOCA(ctx, size) alloca(size)
 #endif
 
 #ifndef SPRITEBATCH_LOG
@@ -1104,7 +1100,7 @@ static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATC
 		if (!sb->pixel_buffer) return;
 	}
 
-	memset(sb->pixel_buffer, size, 0);
+	SPRITEBATCH_MEMSET(sb->pixel_buffer, 0, size);
 	int size_from_user = sb->pixel_stride * w * h;
 	sb->get_pixels_callback(image_id, sb->pixel_buffer, size_from_user, sb->udata);
 
@@ -1122,18 +1118,18 @@ static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATC
 		{
 			char* src_row = buffer + (h0 - i - 1) * src_row_stride;
 			char* dst_row = buffer + (h - i - 2) * dst_row_stride + src_row_offset;
-			memmove(dst_row, src_row, src_row_stride);
+			SPRITEBATCH_MEMMOVE(dst_row, src_row, src_row_stride);
 		}
 
 		// Clear the border pixels.
 		int pixel_stride = sb->pixel_stride;
-		memset(buffer, 0, dst_row_stride);
+		SPRITEBATCH_MEMSET(buffer, 0, dst_row_stride);
 		for (int i = 1; i < h - 1; ++i)
 		{
-			memset(buffer + i * dst_row_stride, 0, pixel_stride);
-			memset(buffer + i * dst_row_stride + src_row_stride + src_row_offset, 0, pixel_stride);
+			SPRITEBATCH_MEMSET(buffer + i * dst_row_stride, 0, pixel_stride);
+			SPRITEBATCH_MEMSET(buffer + i * dst_row_stride + src_row_stride + src_row_offset, 0, pixel_stride);
 		}
-		memset(buffer + (h - 1) * dst_row_stride, 0, dst_row_stride);
+		SPRITEBATCH_MEMSET(buffer + (h - 1) * dst_row_stride, 0, dst_row_stride);
 	}
 }
 
@@ -1568,7 +1564,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 	atlas_image_size = atlas_width * atlas_height * pixel_stride;
 	atlas_pixels = SPRITEBATCH_MALLOC(atlas_image_size, mem_ctx);
 	SPRITEBATCH_CHECK(atlas_image_size, "out of mem");
-	memset(atlas_pixels, SPRITEBATCH_ATLAS_EMPTY_COLOR, atlas_image_size);
+	SPRITEBATCH_MEMSET(atlas_pixels, SPRITEBATCH_ATLAS_EMPTY_COLOR, atlas_image_size);
 
 	for (int i = 0; i < img_count; ++i)
 	{
@@ -1780,7 +1776,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 	spritebatch_internal_atlas_t* atlas = sb->atlases;
 	if (atlas)
 	{
-		//spritebatch_internal_log_chain(atlas);
+		spritebatch_internal_log_chain(atlas);
 		spritebatch_internal_atlas_t* sentinel = atlas;
 		do
 		{
@@ -1852,10 +1848,10 @@ int spritebatch_defrag(spritebatch_t* sb)
 		while (1)
 		{
 			if (index == lonely_count) break;
-			if (lonely_textures[index].timestamp < ticks_to_decay_texture) break;
+			if (lonely_textures[index].timestamp >= ticks_to_decay_texture) break;
 			++index;
 		}
-		for (int i = 0; i < index; ++i)
+		for (int i = index; i < lonely_count; ++i)
 		{
 			SPRITEBATCH_U64 texture_id = lonely_textures[i].texture_id;
 			if (texture_id != ~0) sb->delete_texture_callback(texture_id, sb->udata);
@@ -1863,7 +1859,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 			SPRITEBATCH_LOG("lonely texture decayed\n");
 		}
 		spritebatch_internal_remove_table_entries(sb, &sb->sprites_to_lonely_textures);
-		lonely_count -= index;
+		lonely_count -= lonely_count - index;
 		SPRITEBATCH_ASSERT(lonely_count == hashtable_count(&sb->sprites_to_lonely_textures));
 	}
 
