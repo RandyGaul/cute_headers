@@ -10,7 +10,7 @@
 #include <cute_tiled.h>
 
 #define CUTE_GL_IMPLEMENTATION
-#include <cute_gl.h>
+#include "cute_gl.h"
 
 #define CUTE_TIME_IMPLEMENTATION
 #include <cute_time.h>
@@ -498,8 +498,21 @@ void free_images()
 	}
 }
 
-#define push_sprite(sp) \
-	spritebatch_push(&sb, sp.image_id, 15, 15, sp.x, sp.y, sp.sx, sp.sy, sp.c, sp.s, sp.depth)
+void push_sprite(sprite_t sp)
+{
+	spritebatch_sprite_t s;
+	s.image_id = sp.image_id;
+	s.w = 15;
+	s.h = 15;
+	s.x = sp.x;
+	s.y = sp.y;
+	s.sx = sp.sx;
+	s.sy = sp.sy;
+	s.c = sp.c;
+	s.s = sp.s;
+	s.sort_bits = sp.depth;
+	spritebatch_push(&sb, s);
+}
 
 void scene0()
 {
@@ -638,7 +651,7 @@ int main(int argc, char** argv)
 	CUTE_TILED_UNUSED(argc);
 	CUTE_TILED_UNUSED(argv);
 
-	test_map("city.json");
+	//test_map("city.json");
 
 	setup_SDL_and_glad();
 	setup_cute_gl();
