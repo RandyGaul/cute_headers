@@ -349,8 +349,21 @@ spritebatch_config_t get_demo_config()
 	return config;
 }
 
-#define push_sprite(sp) \
-	spritebatch_push(&sb, sp.image_id, images[sp.image_id].w, images[sp.image_id].h, sp.x, sp.y, sp.sx, sp.sy, sp.c, sp.s, (SPRITEBATCH_U64)sp.depth)
+void push_sprite(sprite_t sp)
+{
+	spritebatch_sprite_t s;
+	s.image_id = sp.image_id;
+	s.w = images[sp.image_id].w;
+	s.h = images[sp.image_id].h;
+	s.x = sp.x;
+	s.y = sp.y;
+	s.sx = sp.sx;
+	s.sy = sp.sy;
+	s.c = sp.c;
+	s.s = sp.s;
+	s.sort_bits = (SPRITEBATCH_U64)sp.depth;
+	spritebatch_push(&sb, s);
+}
 
 void scene0()
 {
