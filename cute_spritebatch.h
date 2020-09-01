@@ -123,6 +123,7 @@
 		SPRITEBATCH_ASSERT
 		SPRITEBATCH_ATLAS_FLIP_Y_AXIS_FOR_UV
 		SPRITEBATCH_ATLAS_EMPTY_COLOR
+		SPRITEBATCH_ALLOCA
 		SPRITEBATCH_LOG
 
 	Revision history:
@@ -133,7 +134,7 @@
 		                  inverted get pixels callback to let users have an easier time
 		                  with memory management, added support for pixel padding along
 		                  the edges of all textures (useful for certain shader effects)
-	        1.02 (04/09/2020) Compilation fix for FreeBSD - Remove unused alloca header and define
+		1.03 (08/18/2020) refactored `spritebatch_push` so that sprites can have userdata
 */
 
 #ifndef SPRITEBATCH_H
@@ -146,12 +147,51 @@ typedef struct spritebatch_t spritebatch_t;
 typedef struct spritebatch_config_t spritebatch_config_t;
 typedef struct spritebatch_sprite_t spritebatch_sprite_t;
 
-// Pushes a sprite onto an internal buffer. Does no other logic. `image_id` must be a unique
-// identifier for the image a sprite references. `image_w` and image_h` are the width and height
-// of the image referenced by `image_id`. `x` and `y` are the position of the sprite. `sx` and
-// `sy` are the scale factors on the x and y axis for the sprite. `c` and `s` are the cosine and
-// sine of the angle of the sprite, and represent a 2D rotation matrix.
-int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int image_w, int image_h, float x, float y, float sx, float sy, float c, float s, int sort_bits);
+// Sprites will be pushed into the spritebatch with this struct. All the fields
+// should be set before calling `spritebatch_push`, though `texture_id` and
+// `sort_bits` can simply be set to zero.
+//
+// After sprites are pushed onto the spritebatch via `spritebatch_push`, they will
+// be sorted, `texture_id` is assigned to a generated atlas, and handed back to you
+// via the `submit_batch_fn` callback.
+struct spritebatch_sprite_t
+{
+	// `image_id` must be a unique identifier for the image a sprite references.
+	// You must set this value!
+	SPRITEBATCH_U64 image_id;
+
+	// The `texture_id` can set to zero `spritebatch_push`. This value will be overwritten
+	// with a valid texture id of a generated atlas before batches are reported back to you.
+	SPRITEBATCH_U64 texture_id;
+
+	int w, h;         // width and height of this sprite in pixels
+	float x, y;       // x and y position
+	float sx, sy;     // scale on x and y axis
+	float c, s;       // cosine and sine (represents cos(angle) and sin(angle))
+	float minx, miny; // u coordinate -- This value is for internal use only -- do not set.
+	float maxx, maxy; // v coordinate -- This value is for internal use only -- do not set.
+
+	// This field is *completely optional* -- just set it to zero if you don't wanter to bother.
+	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
+	// The first 32-bits store the user's sort bits. The bottom 32-bits are for internal
+	// usage, and are not ever set by the user. Internally sprites are sorted first
+	// based on `sort_bits`, and to break ties they are sorted on `texture_id`. Feel free
+	// to change the sort predicate `spritebatch_internal_instance_pred` in the
+	// implementation section.
+	SPRITEBATCH_U64 sort_bits;
+
+	// This is a *completely optional* field. The idea is that the `SPRITEBATCH_SPRITE_USERDATA`
+	// macro can be defined to insert arbitrary data into sprites. For example, if you want to
+	// allow individual sprites to have different alpha values, or a tint color, you can add
+	// in some floats here within a single struct. Internally this field is *never* accessed, and
+	// is simply handed back to you in each sprite via the `submit_batch_fn` callback.
+#ifdef SPRITEBATCH_SPRITE_USERDATA
+	SPRITEBATCH_SPRITE_USERDATA udata;
+#endif
+};
+
+// Pushes a sprite onto an internal buffer. Does no other logic.
+int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
 
 // Increments internal timestamps on all textures, for use in `spritebatch_defrag`.
 void spritebatch_tick(spritebatch_t* sb);
@@ -187,10 +227,9 @@ typedef void (submit_batch_fn)(spritebatch_sprite_t* sprites, int count, int tex
 // from within the `spritebatch_defrag` function, and sometimes from `spritebatch_flush`.
 
 // Called when the pixels are needed from the user. `image_id` maps to a unique image, and is *not*
-// related to `texture_id` at all. The `texture_id` is the value returned by this function. `buffer`
-// must be filled in with `bytes_to_fill` number of bytes. The user is assumed to know the
-// width/height of the image, and can optionally verify that `bytes_to_fill` matches the user's
-// w * h * stride for this particular image.
+// related to `texture_id` at all. `buffer` must be filled in with `bytes_to_fill` number of bytes.
+// The user is assumed to know the width/height of the image, and can optionally verify that
+// `bytes_to_fill` matches the user's w * h * stride for this particular image.
 typedef void (get_pixels_fn)(SPRITEBATCH_U64 image_id, void* buffer, int bytes_to_fill, void* udata);
 
 // Called with a new texture handle is needed. This will happen whenever a new atlas is created,
@@ -199,8 +238,7 @@ typedef void (get_pixels_fn)(SPRITEBATCH_U64 image_id, void* buffer, int bytes_t
 typedef SPRITEBATCH_U64 (generate_texture_handle_fn)(void* pixels, int w, int h, void* udata);
 
 // Called whenever a texture handle is ready to be free'd up. This happens whenever a particular image
-// or a particular atlas has not been used for a while, and is ready to be released. `texture_id` is the
-// value returned by a previous call to `generate_texture_handle_fn`.
+// or a particular atlas has not been used for a while, and is ready to be released.
 typedef void (destroy_texture_handle_fn)(SPRITEBATCH_U64 texture_id, void* udata);
 
 // Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
@@ -218,7 +256,12 @@ struct spritebatch_config_t
 	int atlas_height_in_pixels;
 	int atlas_use_border_pixels;
 	int ticks_to_decay_texture;         // number of ticks it takes for a texture handle to be destroyed via `destroy_texture_handle_fn`
-	int lonely_buffer_count_till_flush; // number of unique textures until an atlas is constructed
+	int lonely_buffer_count_till_flush; // Number of unique textures allowed to persist that are not a part of an atlas yet, each one allowed is another draw call.
+	                                    // These are called "lonely textures", since they don't belong to any atlas yet. Set this to 0 if you want all textures to be
+	                                    // immediately put into atlases. Setting a higher number, like 64, will buffer up 64 unique textures (which means up to an
+	                                    // additional 64 draw calls) before flushing them into atlases. Too low of a lonely buffer count combined with a low tick
+	                                    // to decay rate will cause performance problems where atlases are constantly created and immedately destroyed -- you have
+	                                    // been warned! Use `SPRITEBATCH_LOG` to gain some insight on what's going on inside the spritebatch when tuning these settings.
 	float ratio_to_decay_atlas;         // from 0 to 1, once ratio is less than `ratio_to_decay_atlas`, flush active textures in atlas to lonely buffer
 	float ratio_to_merge_atlases;       // from 0 to 0.5, attempts to merge atlases with some ratio of empty space
 	submit_batch_fn* batch_callback;
@@ -226,33 +269,6 @@ struct spritebatch_config_t
 	generate_texture_handle_fn* generate_texture_callback;
 	destroy_texture_handle_fn* delete_texture_callback;
 	void* allocator_context;
-};
-
-struct spritebatch_sprite_t
-{
-	// User-defined value to represent a unique sprite.
-	SPRITEBATCH_U64 image_id;
-
-	// Assigned by calling `generate_texture_handle_fn`. Does not map one-to-one with `image_id`,
-	// since a single sprite can be drawn, allocate a `texture_id`, and then not be drawn again
-	// for a long time. This would then trigger the `destroy_texture_handle_fn` and release the
-	// previously used `texture_id`. Then later, if the sprite is drawn again it will allocate a
-	// new `texture_id` by calling `generate_texture_handle_fn`.
-	SPRITEBATCH_U64 texture_id;
-
-	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
-	// The first 32-bits store the user's sort bits. The bottom 32-bits are for internal
-	// usage, and are not ever set by the user. Internally sprites are sorted first
-	// based on `sort_bits`, and to break ties they are sorted on `texture_id`. Feel free
-	// to change the sort predicate `spritebatch_internal_instance_pred` in the
-	// implementation section.
-	SPRITEBATCH_U64 sort_bits;
-
-	float x, y;       // x and y position
-	float sx, sy;     // scale on x and y axis
-	float c, s;       // cosine and sine (represents cos(angle) and sin(angle))
-	float minx, miny; // u coordinate
-	float maxx, maxy; // v coordinate
 };
 
 #define SPRITEBATCH_H
@@ -353,6 +369,9 @@ typedef struct
 	float x, y;
 	float sx, sy;
 	float c, s;
+#ifdef SPRITEBATCH_SPRITE_USERDATA
+	SPRITEBATCH_SPRITE_USERDATA udata;
+#endif
 } spritebatch_internal_sprite_t;
 
 typedef struct
@@ -463,6 +482,15 @@ struct spritebatch_t
 
 #ifndef SPRITEBATCH_ATLAS_EMPTY_COLOR
 	#define SPRITEBATCH_ATLAS_EMPTY_COLOR 0x000000FF
+#endif
+
+#ifndef SPRITEBATCH_ALLOCA
+	#ifdef _WIN32
+		#include <malloc.h>
+	#else
+		#include <alloca.h>
+	#endif
+	#define SPRITEBATCH_ALLOCA(ctx, size) alloca(size)
 #endif
 
 #ifndef SPRITEBATCH_LOG
@@ -885,8 +913,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // end of hashtable.h
 
 
-#include <limits.h>
-
 int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udata)
 {
 	// read config params
@@ -1016,21 +1042,24 @@ static SPRITEBATCH_U64 spritebatch_make_sort_key(int index, int sort_bits)
 	return (((SPRITEBATCH_U64)sort_bits) << 32) | ((SPRITEBATCH_U64)index);
 }
 
-int spritebatch_push(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, float x, float y, float sx, float sy, float c, float s, int sort_bits)
+int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 {
 	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, spritebatch_internal_sprite_t);
-	spritebatch_internal_sprite_t sprite;
-	sprite.image_id = image_id;
-	sprite.sort_bits = spritebatch_make_sort_key(sb->input_count, sort_bits);
-	sprite.w = w;
-	sprite.h = h;
-	sprite.x = x;
-	sprite.y = y;
-	sprite.sx = sx + (sb->atlas_use_border_pixels ? (sx / (float)w) * 2.0f : 0);
-	sprite.sy = sy + (sb->atlas_use_border_pixels ? (sy / (float)h) * 2.0f : 0);
-	sprite.c = c;
-	sprite.s = s;
-	sb->input_buffer[sb->input_count++] = sprite;
+	spritebatch_internal_sprite_t sprite_out;
+	sprite_out.image_id = sprite.image_id;
+	sprite_out.sort_bits = spritebatch_make_sort_key(sb->input_count, (int)(sprite.sort_bits >> 32));
+	sprite_out.w = sprite.w;
+	sprite_out.h = sprite.h;
+	sprite_out.x = sprite.x;
+	sprite_out.y = sprite.y;
+	sprite_out.sx = sprite.sx + (sb->atlas_use_border_pixels ? (sprite.sx / (float)sprite.w) * 2.0f : 0);
+	sprite_out.sy = sprite.sy + (sb->atlas_use_border_pixels ? (sprite.sy / (float)sprite.h) * 2.0f : 0);
+	sprite_out.c = sprite.c;
+	sprite_out.s = sprite.s;
+#ifdef SPRITEBATCH_SPRITE_USERDATA
+	sprite_out.udata = sprite.udata;
+#endif
+	sb->input_buffer[sb->input_count++] = sprite_out;
 	return 1;
 }
 
@@ -1075,7 +1104,7 @@ static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATC
 		if (!sb->pixel_buffer) return;
 	}
 
-	memset(sb->pixel_buffer, 0, size);
+	memset(sb->pixel_buffer, size, 0);
 	int size_from_user = sb->pixel_stride * w * h;
 	sb->get_pixels_callback(image_id, sb->pixel_buffer, size_from_user, sb->udata);
 
@@ -1168,10 +1197,15 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 	sprite.sort_bits = s->sort_bits;
 	sprite.x = s->x;
 	sprite.y = s->y;
+	sprite.w = s->w;
+	sprite.h = s->h;
 	sprite.sx = s->sx;
 	sprite.sy = s->sy;
 	sprite.c = s->c;
 	sprite.s = s->s;
+#ifdef SPRITEBATCH_SPRITE_USERDATA
+	sprite.udata = s->udata;
+#endif
 
 	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, s->image_id);
 	if (atlas_ptr)
@@ -1182,8 +1216,8 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 		spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, s->image_id);
 		SPRITEBATCH_ASSERT(tex);
 		tex->timestamp = 0;
-		tex->w = s->w;
-		tex->h = s->h;
+		sprite.w = tex->w;
+		sprite.h = tex->h;
 		sprite.minx = tex->minx;
 		sprite.miny = tex->miny;
 		sprite.maxx = tex->maxx;
@@ -1308,6 +1342,9 @@ int spritebatch_flush(spritebatch_t* sb)
 	}
 
 	sb->sprite_count = 0;
+	if (count > 1) {
+		SPRITEBATCH_LOG("Flushed %d batches.\n", count);
+	}
 
 	return count;
 }
@@ -1674,7 +1711,14 @@ void spritebatch_internal_flush_atlas(spritebatch_t* sb, spritebatch_internal_at
 		spritebatch_internal_texture_t* atlas_texture = textures + i;
 		if (atlas_texture->timestamp < ticks_to_decay_texture)
 		{
-			spritebatch_internal_lonely_texture_t* lonely_texture = spritebatch_internal_lonelybuffer_push(sb, atlas_texture->image_id, atlas_texture->w, atlas_texture->h, 0);
+			int w = atlas_texture->w;
+			int h = atlas_texture->h;
+			if (sb->atlas_use_border_pixels)
+			{
+				w -= 2;
+				h -= 2;
+			}
+			spritebatch_internal_lonely_texture_t* lonely_texture = spritebatch_internal_lonelybuffer_push(sb, atlas_texture->image_id, w, h, 0);
 			lonely_texture->timestamp = atlas_texture->timestamp;
 		}
 		hashtable_remove(&sb->sprites_to_atlases, atlas_texture->image_id);
@@ -1736,7 +1780,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 	spritebatch_internal_atlas_t* atlas = sb->atlases;
 	if (atlas)
 	{
-		spritebatch_internal_log_chain(atlas);
+		//spritebatch_internal_log_chain(atlas);
 		spritebatch_internal_atlas_t* sentinel = atlas;
 		do
 		{
@@ -1808,10 +1852,10 @@ int spritebatch_defrag(spritebatch_t* sb)
 		while (1)
 		{
 			if (index == lonely_count) break;
-			if (lonely_textures[index].timestamp >= ticks_to_decay_texture) break;
+			if (lonely_textures[index].timestamp < ticks_to_decay_texture) break;
 			++index;
 		}
-		for (int i = index; i < lonely_count; ++i)
+		for (int i = 0; i < index; ++i)
 		{
 			SPRITEBATCH_U64 texture_id = lonely_textures[i].texture_id;
 			if (texture_id != ~0) sb->delete_texture_callback(texture_id, sb->udata);
@@ -1819,7 +1863,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 			SPRITEBATCH_LOG("lonely texture decayed\n");
 		}
 		spritebatch_internal_remove_table_entries(sb, &sb->sprites_to_lonely_textures);
-		lonely_count -= lonely_count - index;
+		lonely_count -= index;
 		SPRITEBATCH_ASSERT(lonely_count == hashtable_count(&sb->sprites_to_lonely_textures));
 	}
 
