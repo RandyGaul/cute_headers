@@ -1084,28 +1084,28 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			{
 				int slice_count = s_read_uint32(s);
 				int flags = s_read_uint32(s);
-				const char* name = s_read_string(s);
 				s_skip(s, sizeof(uint32_t)); // Reserved.
+				const char* name = s_read_string(s);
 				for (int k = 0; k < (int)slice_count; ++k) {
 					ase_slice_t slice = { 0 };
 					slice.name = name;
 					slice.frame_number = (int)s_read_uint32(s);
-					slice.origin_x = (int)s_read_int16(s);
-					slice.origin_y = (int)s_read_int16(s);
+					slice.origin_x = (int)s_read_int32(s);
+					slice.origin_y = (int)s_read_int32(s);
 					slice.w = (int)s_read_uint32(s);
 					slice.h = (int)s_read_uint32(s);
 					if (flags & 1) {
 						// It's a 9-patches slice.
 						slice.has_center_as_9_slice = 1;
-						slice.center_x = (int)s_read_int16(s);
-						slice.center_y = (int)s_read_int16(s);
+						slice.center_x = (int)s_read_int32(s);
+						slice.center_y = (int)s_read_int32(s);
 						slice.center_w = (int)s_read_uint32(s);
 						slice.center_h = (int)s_read_uint32(s);
 					} else if (flags & 2) {
 						// Has pivot information.
 						slice.has_pivot = 1;
-						slice.pivot_x = (int)s_read_int16(s);
-						slice.pivot_y = (int)s_read_int16(s);
+						slice.pivot_x = (int)s_read_int32(s);
+						slice.pivot_y = (int)s_read_int32(s);
 					}
 					CUTE_ASEPRITE_ASSERT(ase->slice_count < CUTE_ASEPRITE_MAX_SLICES);
 					ase->slices[ase->slice_count++] = slice;
