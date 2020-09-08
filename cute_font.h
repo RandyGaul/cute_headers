@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_font.h - v1.01
+	tinyfont.h - v1.01
 
 	To create implementation (the function definitions)
 		#define CUTE_FONT_IMPLEMENTATION
@@ -177,7 +177,7 @@ const char* cute_font_decode_utf8(const char* text, int* cp);
 
 #ifndef HASHTABLE_MALLOC
 	#define HASHTABLE_MALLOC(ctx, size) CUTE_FONT_ALLOC(size, ctx)
-#endif HASHTABLE_MALLOC
+#endif
 
 #ifndef HASHTABLE_FREE
 	#define HASHTABLE_FREE(ctx, ptr) CUTE_FONT_FREE(ptr, ctx)
@@ -268,7 +268,7 @@ struct hashtable_t
 
 #endif /* hashtable_t_h */
 
-#define HASHTABLE_IMPLEMENTATION
+//#define HASHTABLE_IMPLEMENTATION
 
 #ifdef HASHTABLE_IMPLEMENTATION
 #ifndef HASHTABLE_IMPLEMENTATION_ONCE
@@ -713,6 +713,16 @@ static void cute_font_scan(cute_font_img_t* img, int *x, int *y, int *row_height
 
 cute_font_t* cute_font_load(CUTE_FONT_U64 atlas_id, const void* pixels, int w, int h, int stride, void* mem_ctx, int codepage)
 {
+	int font_height = 1;
+	int x = 0, y = 0;
+
+	// Used to squeeze UVs inward by 128th of a pixel.
+	float w0 = 1.0f / (float)w;
+	float h0 = 1.0f / (float)h;
+	float div = 1.0f / 128.0f;
+	float wTol = w0 * div;
+	float hTol = h0 * div;
+
 	// algorithm by Mitton a la TIGR
 	// https://bitbucket.org/rmitton/tigr/src/default/
 	cute_font_t* font = (cute_font_t*)CUTE_FONT_ALLOC(sizeof(cute_font_t), mem_ctx);
@@ -737,25 +747,17 @@ cute_font_t* cute_font_load(CUTE_FONT_U64 atlas_id, const void* pixels, int w, i
 	font->atlas_id = atlas_id;
 	font->kern = 0;
 
-	// Used to squeeze UVs inward by 128th of a pixel.
-	float w0 = 1.0f / (float)(font->atlas_w);
-	float h0 = 1.0f / (float)(font->atlas_h);
-	float div = 1.0f / 128.0f;
-	float wTol = w0 * div;
-	float hTol = h0 * div;
-
-	int font_height = 1;
-	int x = 0, y = 0;
 	for (int i = 32; i < font->glyph_count + 32; ++i)
 	{
+		cute_font_glyph_t* glyph = NULL;
+		int w = 0, h = 0;
 		cute_font_scan(&img, &x, &y, &font_height);
 		CUTE_FONT_CHECK(y < img.w, "Unable to properly scan glyph width. Are the text borders drawn properly?");
 
-		int w = 0, h = 0;
 		while (!cute_font_is_border(&img, x + w, y)) ++w;
 		while (!cute_font_is_border(&img, x, y + h)) ++h;
 
-		cute_font_glyph_t* glyph = font->glyphs + i - 32;
+		glyph = font->glyphs + i - 32;
 		if (i < 128) font->codes[i - 32] = i;
 		else if (codepage == 1252) font->codes[i - 32] = cute_font_cp1252[i - 128];
 		else CUTE_FONT_CHECK(0, "Unknown glyph index found.");
@@ -881,8 +883,8 @@ static int cute_font_read_string_internal(cute_font_parse_t* p)
 
 	while (!done)
 	{
+		char c = 0;
 		CUTE_FONT_CHECK(count < CUTE_FONT_INTERNAL_BUFFER_MAX, "String too large to parse.");
-		char c;
 		cute_font_next(p, &c);
 
 		switch (c)
@@ -925,9 +927,9 @@ static int cute_font_read_identifier_internal(cute_font_parse_t* p)
 
 	while (1)
 	{
+		char c = 0;
 		CUTE_FONT_CHECK(p->in < p->end, "Attempted to read past input buffer.");
 		CUTE_FONT_CHECK(count < CUTE_FONT_INTERNAL_BUFFER_MAX, "String too large to parse.");
-		char c;
 		c = *p->in;
 		if (!cute_font_isspace(c)) break;
 		p->in++;
@@ -935,9 +937,9 @@ static int cute_font_read_identifier_internal(cute_font_parse_t* p)
 
 	while (!done)
 	{
+		char c = 0;
 		CUTE_FONT_CHECK(p->in < p->end, "Attempted to read past input buffer.");
 		CUTE_FONT_CHECK(count < CUTE_FONT_INTERNAL_BUFFER_MAX, "String too large to parse.");
-		char c;
 		c = *p->in++;
 
 		if (cute_font_isspace(c))
@@ -1050,6 +1052,7 @@ typedef struct cute_font_kern_t
 
 cute_font_t* cute_font_load_bmfont(CUTE_FONT_U64 atlas_id, const void* fnt, int size, void* mem_ctx)
 {
+	float w0 = 0, h0 = 0, div = 0, wTol = 0, hTol = 0;
 	cute_font_parse_t parse;
 	cute_font_parse_t* p = &parse;
 	p->in = (const char*)fnt;
@@ -1123,22 +1126,23 @@ cute_font_t* cute_font_load_bmfont(CUTE_FONT_U64 atlas_id, const void* fnt, int 
 	font->codes = (int*)CUTE_FONT_ALLOC(sizeof(int) * font->glyph_count, mem_ctx);
 
 	// Used to squeeze UVs inward by 128th of a pixel.
-	float w0 = 1.0f / (float)(font->atlas_w);
-	float h0 = 1.0f / (float)(font->atlas_h);
-	float div = 1.0f / 128.0f;
-	float wTol = w0 * div;
-	float hTol = h0 * div;
+	w0 = 1.0f / (float)(font->atlas_w);
+	h0 = 1.0f / (float)(font->atlas_h);
+	div = 1.0f / 128.0f;
+	wTol = w0 * div;
+	hTol = h0 * div;
 
 	// Read in each glyph.
 	for (int i = 0; i < font->glyph_count; ++i)
 	{
+		int x = 0, y = 0;
+		int width = 0, height = 0;
+
 		cute_font_glyph_t* glyph = font->glyphs + i;
 		cute_font_expect_identifier(p, "char");
 		cute_font_expect_identifier(p, "id");
 		cute_font_read_int(p, font->codes + i);
 
-		int x, y;
-		int width, height;
 		cute_font_expect_identifier(p, "x");
 		cute_font_read_int(p, &x);
 		cute_font_expect_identifier(p, "y");
@@ -1169,11 +1173,12 @@ cute_font_t* cute_font_load_bmfont(CUTE_FONT_U64 atlas_id, const void* fnt, int 
 
 	if (p->end - p->in > 8)
 	{
-		int kern_count;
+		int kern_count = 0;
+		cute_font_kern_t* kern = NULL;
 		cute_font_expect_identifier(p, "kernings");
 		cute_font_expect_identifier(p, "count");
 		cute_font_read_int(p, &kern_count);
-		cute_font_kern_t* kern = (cute_font_kern_t*)CUTE_FONT_ALLOC(sizeof(cute_font_kern_t), mem_ctx);
+		kern = (cute_font_kern_t*)CUTE_FONT_ALLOC(sizeof(cute_font_kern_t), mem_ctx);
 		font->kern = kern;
 		hashtable_init(&kern->table, sizeof(int), kern_count, mem_ctx);
 
@@ -1402,7 +1407,7 @@ int cute_font_fill_vertex_buffer(cute_font_t* font, const char* text, float x0, 
 	float font_height = (float)font->font_height;
 	int i = 0;
 	const char* end_of_line = 0;
-	int wrap_enabled = wrap_w >= 0;
+	int wrap_enabled = wrap_w > 0;
 	cute_font_rect_t rect;
 	if (clip_rect) rect = *clip_rect;
 

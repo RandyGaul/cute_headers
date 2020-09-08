@@ -151,7 +151,7 @@ cute_thread_id_t cute_thread_id();
  * is considered a leak to leave an thread hanging around (even if it finished execution
  * and returned).
  */
-int cute_thread_wait(cute_thread_t* thread);
+int cute_thread_wait(cute_thread_t thread);
 
 /**
  * Returns the number of CPU cores on the machine. Can be affected my machine dependent technology,
@@ -343,15 +343,6 @@ struct cute_rw_lock_t
 	#define CUTE_SYNC_MEMCPY memcpy
 #endif
 
-#if !defined(CUTE_SYNC_ALIGN)
-	#ifdef _MSC_VER
-		#define CUTE_SYNC_ALIGN(X) __declspec(align(X))
-	#else
-		#define CUTE_SYNC_ALIGN(X) __attribute__((aligned(X)))
-	#endif
-	// Add your own platform here.
-#endif
-
 #if !defined(CUTE_SYNC_YIELD)
 	#ifdef CUTE_SYNC_WINDOWS
 		#define WIN32_LEAN_AND_MEAN
@@ -511,22 +502,22 @@ cute_mutex_t cute_mutex_create()
 
 int cute_lock(cute_mutex_t* mutex)
 {
-	return !SDL_LockMutex((SDL_mutex*)mutex);
+	return !SDL_LockMutex((SDL_mutex*)mutex->align);
 }
 
 int cute_unlock(cute_mutex_t* mutex)
 {
-	return !SDL_UnlockMutex((SDL_mutex*)mutex);
+	return !SDL_UnlockMutex((SDL_mutex*)mutex->align);
 }
 
 int cute_trylock(cute_mutex_t* mutex)
 {
-	return !SDL_TryLockMutex((SDL_mutex*)mutex);
+	return !SDL_TryLockMutex((SDL_mutex*)mutex->align);
 }
 
 void cute_mutex_destroy(cute_mutex_t* mutex)
 {
-	SDL_DestroyMutex((SDL_mutex*)mutex);
+	SDL_DestroyMutex((SDL_mutex*)mutex->align);
 }
 
 cute_cv_t cute_cv_create()
@@ -538,22 +529,22 @@ cute_cv_t cute_cv_create()
 
 int cute_cv_wake_all(cute_cv_t* cv)
 {
-	return !SDL_CondBroadcast((SDL_cond*)cv);
+	return !SDL_CondBroadcast((SDL_cond*)cv->align);
 }
 
 int cute_cv_wake_one(cute_cv_t* cv)
 {
-	return !SDL_CondSignal((SDL_cond*)cv);
+	return !SDL_CondSignal((SDL_cond*)cv->align);
 }
 
 int cute_cv_wait(cute_cv_t* cv, cute_mutex_t* mutex)
 {
-	return !SDL_CondWait((SDL_cond*)cv, (SDL_mutex*)mutex);
+	return !SDL_CondWait((SDL_cond*)cv, (SDL_mutex*)mutex->align);
 }
 
 void cute_cv_destroy(cute_cv_t* cv)
 {
-	SDL_DestroyCond((SDL_cond*)cv);
+	SDL_DestroyCond((SDL_cond*)cv->align);
 }
 
 cute_semaphore_t cute_semaphore_create(int initial_count)
@@ -571,22 +562,22 @@ int cute_semaphore_post(cute_semaphore_t* semaphore)
 
 int cute_semaphore_try(cute_semaphore_t* semaphore)
 {
-	return !SDL_SemTryWait((SDL_sem*)semaphore);
+	return !SDL_SemTryWait((SDL_sem*)semaphore->id);
 }
 
 int cute_semaphore_wait(cute_semaphore_t* semaphore)
 {
-	return !SDL_SemWait((SDL_sem*)semaphore);
+	return !SDL_SemWait((SDL_sem*)semaphore->id);
 }
 
 int cute_semaphore_value(cute_semaphore_t* semaphore)
 {
-	return SDL_SemValue((SDL_sem*)semaphore);
+	return SDL_SemValue((SDL_sem*)semaphore->id);
 }
 
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
-	SDL_DestroySemaphore((SDL_sem*)semaphore);
+	SDL_DestroySemaphore((SDL_sem*)semaphore->id);
 }
 
 cute_thread_t* cute_thread_create(cute_thread_fn func, const char* name, void* udata)
@@ -1052,11 +1043,6 @@ typedef struct cute_task_t
 	void* param;
 } cute_task_t;
 
-typedef struct CUTE_SYNC_ALIGN(CUTE_SYNC_CACHELINE_SIZE) cute_aligned_thread_t
-{
-	cute_thread_t* thread;
-} cute_aligned_thread_t;
-
 typedef struct cute_threadpool_t
 {
 	int task_capacity;
@@ -1065,7 +1051,7 @@ typedef struct cute_threadpool_t
 	cute_mutex_t task_mutex;
 
 	int thread_count;
-	cute_aligned_thread_t* threads;
+	cute_thread_t** threads;
 
 	cute_atomic_int_t running;
 	cute_mutex_t sem_mutex;
@@ -1111,14 +1097,14 @@ cute_threadpool_t* cute_threadpool_create(int thread_count, void* mem_ctx)
 	pool->tasks = (cute_task_t*)cute_malloc_aligned(sizeof(cute_task_t) * pool->task_capacity, CUTE_SYNC_CACHELINE_SIZE, mem_ctx);
 	pool->task_mutex = cute_mutex_create();
 	pool->thread_count = thread_count;
-	pool->threads = (cute_aligned_thread_t*)cute_malloc_aligned(sizeof(cute_aligned_thread_t) * thread_count, CUTE_SYNC_CACHELINE_SIZE, mem_ctx);
+	pool->threads = (cute_thread_t**)cute_malloc_aligned(sizeof(cute_thread_t*) * thread_count, CUTE_SYNC_CACHELINE_SIZE, mem_ctx);
 	cute_atomic_set(&pool->running, 1);
 	pool->sem_mutex = cute_mutex_create();
 	pool->semaphore = cute_semaphore_create(0);
 	pool->mem_ctx = mem_ctx;
 
 	for (int i = 0; i < thread_count; ++i) {
-		pool->threads[i].thread = cute_thread_create(cute_worker_thread_internal, 0, pool);
+		pool->threads[i] = cute_thread_create(cute_worker_thread_internal, 0, pool);
 	}
 
 	return pool;
@@ -1178,7 +1164,7 @@ void cute_threadpool_destroy(cute_threadpool_t* pool)
 	}
 
 	for (int i = 0; i < pool->thread_count; ++i) {
-		cute_thread_wait(pool->threads[i].thread);
+		cute_thread_wait(pool->threads[i]);
 	}
 
 	cute_free_aligned(pool->tasks, pool->mem_ctx);
