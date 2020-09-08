@@ -197,7 +197,7 @@ struct cute_math_const_float
 {
 	union { float f[4]; __m128 m; };
 	CUTE_MATH_INLINE operator v3() const { return v3(m); }
-	CUTE_MATH_INLINE operator __m128() const { m; }
+	CUTE_MATH_INLINE operator __m128() const { return m; }
 };
 
 CUTE_MATH_SELECTANY cute_math_const_integer cute_math_mask_sign = { 0x80000000, 0x80000000, 0x80000000, 0x80000000 };
