@@ -151,7 +151,7 @@ cute_thread_id_t cute_thread_id();
  * is considered a leak to leave an thread hanging around (even if it finished execution
  * and returned).
  */
-int cute_thread_wait(cute_thread_t thread);
+int cute_thread_wait(cute_thread_t* thread);
 
 /**
  * Returns the number of CPU cores on the machine. Can be affected my machine dependent technology,
