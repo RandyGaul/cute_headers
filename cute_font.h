@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	tinyfont.h - v1.01
+	cute_font.h - v1.01
 
 	To create implementation (the function definitions)
 		#define CUTE_FONT_IMPLEMENTATION
@@ -268,7 +268,9 @@ struct hashtable_t
 
 #endif /* hashtable_t_h */
 
-//#define HASHTABLE_IMPLEMENTATION
+#ifndef HASHTABLE_IMPLEMENTATION
+#define HASHTABLE_IMPLEMENTATION
+#endif // HASHTABLE_IMPLEMENTATION
 
 #ifdef HASHTABLE_IMPLEMENTATION
 #ifndef HASHTABLE_IMPLEMENTATION_ONCE
