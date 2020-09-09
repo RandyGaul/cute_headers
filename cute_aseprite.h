@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_aseprite.h - v1.00
+	cute_aseprite.h - v1.01
 
 	To create implementation (the function definitions)
 		#define CUTE_ASEPRITE_IMPLEMENTATION
@@ -882,7 +882,6 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	ase->w = s_read_uint16(s);
 	ase->h = s_read_uint16(s);
 	uint16_t bpp = s_read_uint16(s) / 8;
-	printf("%d\n", bpp);
 	if (bpp == 4) ase->mode = ASE_MODE_RGBA;
 	else if (bpp == 2) ase->mode = ASE_MODE_GRAYSCALE;
 	else {
