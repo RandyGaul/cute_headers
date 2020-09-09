@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_aseprite.h - v1.01
+	cute_aseprite.h - v1.00
 
 	To create implementation (the function definitions)
 		#define CUTE_ASEPRITE_IMPLEMENTATION
@@ -875,12 +875,14 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	s->mem_ctx = mem_ctx;
 
 	s_skip(s, sizeof(uint32_t)); // File size.
-	CUTE_ASEPRITE_ASSERT(s_read_uint16(s) == 0xA5E0);
+	int magic = (int)s_read_uint16(s);
+	CUTE_ASEPRITE_ASSERT(magic == 0xA5E0);
 
 	ase->frame_count = (int)s_read_uint16(s);
 	ase->w = s_read_uint16(s);
 	ase->h = s_read_uint16(s);
 	uint16_t bpp = s_read_uint16(s) / 8;
+	printf("%d\n", bpp);
 	if (bpp == 4) ase->mode = ASE_MODE_RGBA;
 	else if (bpp == 2) ase->mode = ASE_MODE_GRAYSCALE;
 	else {
@@ -914,7 +916,8 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 		ase_frame_t* frame = ase->frames + i;
 		frame->ase = ase;
 		s_skip(s, sizeof(uint32_t)); // Frame size.
-		CUTE_ASEPRITE_ASSERT(s_read_uint16(s) == 0xF1FA);
+		magic = (int)s_read_uint16(s);
+		CUTE_ASEPRITE_ASSERT(magic == 0xF1FA);
 		int chunk_count = (int)s_read_uint16(s);
 		frame->duration_milliseconds = s_read_uint16(s);
 		if (frame->duration_milliseconds == 0) frame->duration_milliseconds = speed;
