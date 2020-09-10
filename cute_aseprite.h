@@ -43,7 +43,7 @@
 	Revision history:
 		1.00 (08/25/2020) initial release
 		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
-/*
+*/
 
 /*
 	DOCUMENTATION
