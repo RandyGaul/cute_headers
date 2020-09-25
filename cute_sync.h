@@ -107,7 +107,6 @@ void cute_cv_destroy(cute_cv_t* cv);
 
 /**
  * Creates a semaphore with an initial internal value of `initial_count`.
- * Returns NULL on failure.
  */
 cute_semaphore_t cute_semaphore_create(int initial_count);
 
@@ -138,7 +137,7 @@ cute_thread_t* cute_thread_create(cute_thread_fn func, const char* name, void* u
  * An optimization, meaning the thread will never have `cute_thread_wait` called on it.
  * Useful for certain long-lived threads.
  * It is invalid to call `cute_thread_wait` on a detached thread.
- * It is invalid to call `cute_thread_wait` on a thread more than once.
+ * It is invalid to call `cute_thread_detach` on a thread more than once.
  * Please see this link for a longer description: https://wiki.libsdl.org/SDL_DetachThread
  */
 void cute_thread_detach(cute_thread_t* thread);
