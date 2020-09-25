@@ -254,11 +254,7 @@ typedef struct cute_threadpool_t cute_threadpool_t;
  * Constructs a threadpool containing `thread_count`, useful for implementing job/task systems.
  * `mem_ctx` can be NULL, and is used for custom allocation purposes.
  *
- * Returns NULL on error. Will return NULL if `CUTE_SYNC_CACHELINE_SIZE` is less than the actual
- * cache line size on a given machine. `CUTE_SYNC_CACHELINE_SIZE` defaults to 128 bytes, and can
- * be overidden by defining CUTE_SYNC_CACHELINE_SIZE before including cute_sync.h
- *
- * Makes a modest attempt at memory aligning to avoid false sharing, as an optimization.
+ * Returns NULL on error.
  */
 cute_threadpool_t* cute_threadpool_create(int thread_count, void* mem_ctx);
 
