@@ -324,7 +324,7 @@ int path_compact(const char* path, char* out, int n)
 	#include <stdio.h>
 
 	#define CUTE_PATH_STRCMP strcmp
-	#define CUTE_PATH_EXPECT(X) do { if (!(X)) printf("Failed tinyfiles.h unit test at line %d of file %s.\n", __LINE__, __FILE__); } while (0)
+	#define CUTE_PATH_EXPECT(X) do { if (!(X)) printf("Failed cute_path.h unit test at line %d of file %s.\n", __LINE__, __FILE__); } while (0)
 
 	void path_do_unit_tests()
 	{
