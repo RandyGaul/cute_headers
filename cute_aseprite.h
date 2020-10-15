@@ -1195,7 +1195,6 @@ void cute_aseprite_free(ase_t* ase)
 	for (int i = 0; i < ase->palette.entry_count; ++i) {
 		CUTE_ASEPRITE_FREE((void*)ase->palette.entries[i].color_name, ase->mem_ctx);
 	}
-	if (ase->slice_count) CUTE_ASEPRITE_FREE((void*)ase->slices[0].name, ase->mem_ctx);
 	CUTE_ASEPRITE_FREE(ase->color_profile.icc_profile_data, ase->mem_ctx);
 	CUTE_ASEPRITE_FREE(ase->frames, ase->mem_ctx);
 	CUTE_ASEPRITE_FREE(ase, ase->mem_ctx);
