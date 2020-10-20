@@ -1915,6 +1915,7 @@ struct cs_context_t
 	cs__m128i* samples;
 	cs_playing_sound_t* playing_pool;
 	cs_playing_sound_t* playing_free;
+	SDL_AudioDeviceID dev;
 
 	// data for cs_mix thread, enable these with cs_spawn_mix_thread
 	SDL_Thread* thread;
@@ -1942,7 +1943,7 @@ static void cs_release_context(cs_context_t* ctx)
 		}
 		playing = playing->next;
 	}
-	SDL_CloseAudio();
+	SDL_CloseAudioDevice(ctx->dev);
 
 	CUTE_SOUND_FREE(ctx, ctx->mem_ctx);
 }
@@ -1985,7 +1986,7 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	int mix_buffers_size = sizeof(cs__m128) * wide_count * 2;
 	int sample_buffer_size = sizeof(cs__m128i) * wide_count;
 	cs_context_t* ctx = 0;
-	SDL_AudioSpec wanted;
+	SDL_AudioSpec wanted, have;
 	int ret = SDL_InitSubSystem(SDL_INIT_AUDIO);
 	CUTE_SOUND_CHECK(ret >= 0, "Can't init SDL audio");
 
@@ -2012,15 +2013,16 @@ cs_context_t* cs_make_context(void* unused, unsigned play_frequency_in_Hz, int b
 	ctx->mem_ctx = user_allocator_ctx;
 
 	SDL_memset(&wanted, 0, sizeof(wanted));
+	SDL_memset(&have, 0, sizeof(have));
 	wanted.freq = play_frequency_in_Hz;
 	wanted.format = AUDIO_S16SYS;
 	wanted.channels = 2; /* 1 = mono, 2 = stereo */
-	wanted.samples = 1024;
+	wanted.samples = buffered_samples;
 	wanted.callback = cs_sdl_audio_callback;
 	wanted.userdata = ctx;
-	ret = SDL_OpenAudio(&wanted, NULL);
-	CUTE_SOUND_CHECK(ret >= 0, "Can't open SDL audio");
-	SDL_PauseAudio(0);
+	ctx->dev = SDL_OpenAudioDevice(NULL, 0, &wanted, &have, 0);
+	CUTE_SOUND_CHECK(ctx->dev >= 0, "Can't open SDL audio");
+	SDL_PauseAudioDevice(ctx->dev, 0);
 	ctx->mutex = SDL_CreateMutex();
 
 	if (playing_pool_count)
@@ -2447,8 +2449,7 @@ void cs_mix(cs_context_t* ctx)
 #endif
 
 	// clear mixer buffers
-	wide_count = samples_to_write / 4;
-	CUTE_SOUND_ASSERT(!(samples_to_write & 3));
+	wide_count = (int)CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 
 	floatA = ctx->floatA;
 	floatB = ctx->floatB;
