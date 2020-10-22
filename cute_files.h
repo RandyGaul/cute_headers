@@ -241,7 +241,12 @@ void cf_traverse(const char* path, cf_callback_t* cb, void* udata)
 	while (dir.has_next)
 	{
 		cf_file_t file;
-		cf_read_file(&dir, &file);
+		int res = cf_read_file(&dir, &file);
+
+		if (res == 0) {
+			cf_dir_next(&dir);
+			continue;
+		}
 
 		if (file.is_dir && file.name[0] != '.')
 		{
