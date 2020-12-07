@@ -178,7 +178,7 @@ typedef union cute_tiled_string_t cute_tiled_string_t;
 /*!
  * To access a string, simply do: object->name.ptr; this union is needed
  * as a workaround for 32-bit builds where the size of a pointer is only
- * 32 bits. 
+ * 32 bits.
  *
  * More info:
  * This unions is needed to support a single-pass parser, with string
@@ -445,7 +445,7 @@ struct cute_tiled_map_t
 #define STRPOOL_EMBEDDED_IMPLEMENTATION
 
 /*
-	begin embedding modified strpool.h 
+	begin embedding modified strpool.h
 */
 
 /*
@@ -558,17 +558,17 @@ struct strpool_embedded_t
 #ifndef STRPOOL_EMBEDDED_MEMSET
     #include <string.h>
     #define STRPOOL_EMBEDDED_MEMSET( ptr, val, cnt ) ( memset( ptr, val, cnt ) )
-#endif 
+#endif
 
 #ifndef STRPOOL_EMBEDDED_MEMCPY
     #include <string.h>
     #define STRPOOL_EMBEDDED_MEMCPY( dst, src, cnt ) ( memcpy( dst, src, cnt ) )
-#endif 
+#endif
 
 #ifndef STRPOOL_EMBEDDED_MEMCMP
     #include <string.h>
     #define STRPOOL_EMBEDDED_MEMCMP( pr1, pr2, cnt ) ( memcmp( pr1, pr2, cnt ) )
-#endif 
+#endif
 
 #ifndef STRPOOL_EMBEDDED_STRNICMP
     #ifdef _WIN32
@@ -576,9 +576,9 @@ struct strpool_embedded_t
         #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( _strnicmp( s1, s2, len ) )
     #else
         #include <string.h>
-        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )        
+        #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )
     #endif
-#endif 
+#endif
 
 #ifndef STRPOOL_EMBEDDED_MALLOC
     #include <stdlib.h>
@@ -629,15 +629,15 @@ typedef struct strpool_embedded_internal_free_block_t
     } strpool_embedded_internal_free_block_t;
 
 
-strpool_embedded_config_t const strpool_embedded_default_config = 
-    { 
+strpool_embedded_config_t const strpool_embedded_default_config =
+    {
     /* memctx         = */ 0,
     /* ignore_case    = */ 0,
     /* counter_bits   = */ 32,
     /* index_bits     = */ 32,
-    /* entry_capacity = */ 4096, 
-    /* block_capacity = */ 32, 
-    /* block_size     = */ 256 * 1024, 
+    /* entry_capacity = */ 4096,
+    /* block_capacity = */ 32,
+    /* block_size     = */ 256 * 1024,
     /* min_length     = */ 23,
     };
 
@@ -659,10 +659,10 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_pow2ceil( STRPOOL_EMBEDDED
 
 static int strpool_embedded_internal_add_block( strpool_embedded_t* pool, int size )
     {
-    if( pool->block_count >= pool->block_capacity ) 
+    if( pool->block_count >= pool->block_capacity )
         {
         pool->block_capacity *= 2;
-        strpool_embedded_internal_block_t* new_blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+        strpool_embedded_internal_block_t* new_blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
             pool->block_capacity * sizeof( *pool->blocks ) );
         STRPOOL_EMBEDDED_ASSERT( new_blocks );
         STRPOOL_EMBEDDED_MEMCPY( new_blocks, pool->blocks, pool->block_count * sizeof( *pool->blocks ) );
@@ -690,37 +690,37 @@ void strpool_embedded_init( strpool_embedded_t* pool, strpool_embedded_config_t 
     pool->counter_mask = ( 1ULL << (STRPOOL_EMBEDDED_U64) config->counter_bits ) - 1;
     pool->index_mask = ( 1ULL << (STRPOOL_EMBEDDED_U64) config->index_bits ) - 1;
 
-    pool->initial_entry_capacity = 
+    pool->initial_entry_capacity =
         (int) strpool_embedded_internal_pow2ceil( config->entry_capacity > 1 ? (STRPOOL_EMBEDDED_U32)config->entry_capacity : 2U );
-    pool->initial_block_capacity = 
+    pool->initial_block_capacity =
         (int) strpool_embedded_internal_pow2ceil( config->block_capacity > 1 ? (STRPOOL_EMBEDDED_U32)config->block_capacity : 2U );
-    pool->block_size = 
+    pool->block_size =
         (int) strpool_embedded_internal_pow2ceil( config->block_size > 256 ? (STRPOOL_EMBEDDED_U32)config->block_size : 256U );
-    pool->min_data_size = 
+    pool->min_data_size =
         (int) ( sizeof( int ) * 2 + 1 + ( config->min_length > 8 ? (STRPOOL_EMBEDDED_U32)config->min_length : 8U ) );
 
     pool->hash_capacity = pool->initial_entry_capacity * 2;
     pool->entry_capacity = pool->initial_entry_capacity;
     pool->handle_capacity = pool->initial_entry_capacity;
-    pool->block_capacity = pool->initial_block_capacity;    
+    pool->block_capacity = pool->initial_block_capacity;
 
     pool->handle_freelist_head = -1;
     pool->handle_freelist_tail = -1;
     pool->block_count = 0;
     pool->handle_count = 0;
     pool->entry_count = 0;
-    
-    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+
+    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->hash_capacity * sizeof( *pool->hash_table ) );
     STRPOOL_EMBEDDED_ASSERT( pool->hash_table );
     STRPOOL_EMBEDDED_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
-    pool->entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    pool->entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->entry_capacity * sizeof( *pool->entries ) );
     STRPOOL_EMBEDDED_ASSERT( pool->entries );
-    pool->handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    pool->handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->handle_capacity * sizeof( *pool->handles ) );
     STRPOOL_EMBEDDED_ASSERT( pool->handles );
-    pool->blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    pool->blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->block_capacity * sizeof( *pool->blocks ) );
     STRPOOL_EMBEDDED_ASSERT( pool->blocks );
 
@@ -771,14 +771,14 @@ void strpool_embedded_term( strpool_embedded_t* pool )
 #endif
 
     for( int i = 0; i < pool->block_count; ++i ) STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks[ i ].data );
-    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks );         
-    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->handles );            
-    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );            
-    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->hash_table );         
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->handles );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );
+    STRPOOL_EMBEDDED_FREE( pool->memctx, pool->hash_table );
     }
 
 
-static STRPOOL_EMBEDDED_U64 strpool_embedded_internal_make_handle( int index, int counter, STRPOOL_EMBEDDED_U64 index_mask, int counter_shift, 
+static STRPOOL_EMBEDDED_U64 strpool_embedded_internal_make_handle( int index, int counter, STRPOOL_EMBEDDED_U64 index_mask, int counter_shift,
     STRPOOL_EMBEDDED_U64 counter_mask )
     {
     STRPOOL_EMBEDDED_U64 i = (STRPOOL_EMBEDDED_U64) ( index + 1 );
@@ -791,7 +791,7 @@ static int strpool_embedded_internal_counter_from_handle( STRPOOL_EMBEDDED_U64 h
     {
     return (int) ( ( handle >> counter_shift ) & counter_mask ) ;
     }
-    
+
 
 static int strpool_embedded_internal_index_from_handle( STRPOOL_EMBEDDED_U64 handle, STRPOOL_EMBEDDED_U64 index_mask )
     {
@@ -804,7 +804,7 @@ static strpool_embedded_internal_entry_t* strpool_embedded_internal_get_entry( s
     int index = strpool_embedded_internal_index_from_handle( handle, pool->index_mask );
     int counter = strpool_embedded_internal_counter_from_handle( handle, pool->counter_shift, pool->counter_mask );
 
-    if( index >= 0 && index < pool->handle_count && 
+    if( index >= 0 && index < pool->handle_count &&
         counter == (int) ( pool->handles[ index ].counter & pool->counter_mask ) )
             return &pool->entries[ pool->handles[ index ].entry_index ];
 
@@ -818,7 +818,7 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_em
         {
         strpool_embedded_internal_block_t* block = &pool->blocks[ i ];
         // Check if string comes from pool
-        if( string >= block->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ) && string < block->data + block->capacity ) 
+        if( string >= block->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ) && string < block->data + block->capacity )
             {
             STRPOOL_EMBEDDED_U32* ptr = (STRPOOL_EMBEDDED_U32*) string;
             int stored_length = (int)( *( ptr - 1 ) ); // Length is stored immediately before string
@@ -834,9 +834,9 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_em
 
 static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_calculate_hash( char const* string, int length, int ignore_case )
     {
-    STRPOOL_EMBEDDED_U32 hash = 5381U; 
+    STRPOOL_EMBEDDED_U32 hash = 5381U;
 
-    if( ignore_case) 
+    if( ignore_case)
         {
         for( int i = 0; i < length; ++i )
             {
@@ -866,7 +866,7 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
 
     pool->hash_capacity *= 2;
 
-    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    pool->hash_table = (strpool_embedded_internal_hash_slot_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->hash_capacity * sizeof( *pool->hash_table ) );
     STRPOOL_EMBEDDED_ASSERT( pool->hash_table );
     STRPOOL_EMBEDDED_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
@@ -882,10 +882,10 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
                 slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
             STRPOOL_EMBEDDED_ASSERT( hash_key );
             pool->hash_table[ slot ].hash_key = hash_key;
-            pool->hash_table[ slot ].entry_index = old_table[ i ].entry_index;  
-            pool->entries[ pool->hash_table[ slot ].entry_index ].hash_slot = slot; 
+            pool->hash_table[ slot ].entry_index = old_table[ i ].entry_index;
+            pool->entries[ pool->hash_table[ slot ].entry_index ].hash_slot = slot;
             ++pool->hash_table[ base_slot ].base_count;
-            }               
+            }
         }
 
     STRPOOL_EMBEDDED_FREE( pool->memctx, old_table );
@@ -895,19 +895,19 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
 static void strpool_embedded_internal_expand_entries( strpool_embedded_t* pool )
     {
     pool->entry_capacity *= 2;
-    strpool_embedded_internal_entry_t* new_entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    strpool_embedded_internal_entry_t* new_entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->entry_capacity * sizeof( *pool->entries ) );
     STRPOOL_EMBEDDED_ASSERT( new_entries );
     STRPOOL_EMBEDDED_MEMCPY( new_entries, pool->entries, pool->entry_count * sizeof( *pool->entries ) );
     STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );
-    pool->entries = new_entries;    
+    pool->entries = new_entries;
     }
 
 
 static void strpool_embedded_internal_expand_handles( strpool_embedded_t* pool )
     {
     pool->handle_capacity *= 2;
-    strpool_embedded_internal_handle_t* new_handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx, 
+    strpool_embedded_internal_handle_t* new_handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->handle_capacity * sizeof( *pool->handles ) );
     STRPOOL_EMBEDDED_ASSERT( new_handles );
     STRPOOL_EMBEDDED_MEMCPY( new_handles, pool->handles, pool->handle_count * sizeof( *pool->handles ) );
@@ -921,7 +921,7 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
     if( size < (int)sizeof( strpool_embedded_internal_free_block_t ) ) size = sizeof( strpool_embedded_internal_free_block_t );
     if( size < pool->min_data_size ) size = pool->min_data_size;
     size = (int)strpool_embedded_internal_pow2ceil( (STRPOOL_EMBEDDED_U32)size );
-    
+
     // Try to find a large enough free slot in existing blocks
     for( int i = 0; i < pool->block_count; ++i )
         {
@@ -929,20 +929,20 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
         int prev_list = -1;
         while( free_list >= 0 )
             {
-            strpool_embedded_internal_free_block_t* free_entry = 
+            strpool_embedded_internal_free_block_t* free_entry =
                 (strpool_embedded_internal_free_block_t*) ( pool->blocks[ i ].data + free_list );
-            if( free_entry->size / 2 < size ) 
+            if( free_entry->size / 2 < size )
                 {
                 // At this point, all remaining slots are too small, so bail out if the current slot is not large enough
-                if( free_entry->size < size ) break; 
+                if( free_entry->size < size ) break;
 
                 if( prev_list < 0 )
                     {
-                    pool->blocks[ i ].free_list = free_entry->next;         
+                    pool->blocks[ i ].free_list = free_entry->next;
                     }
                 else
                     {
-                    strpool_embedded_internal_free_block_t* prev_entry = 
+                    strpool_embedded_internal_free_block_t* prev_entry =
                         (strpool_embedded_internal_free_block_t*) ( pool->blocks[ i ].data + prev_list );
                     prev_entry->next = free_entry->next;
                     }
@@ -971,7 +971,7 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
     *alloc_size = size;
     return data;
     }
-    
+
 
 STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char const* string, int length )
     {
@@ -979,7 +979,7 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
 
     STRPOOL_EMBEDDED_U32 hash = strpool_embedded_internal_find_in_blocks( pool, string, length );
     // If no stored hash, calculate it from data
-    if( !hash ) hash = strpool_embedded_internal_calculate_hash( string, length, pool->ignore_case ); 
+    if( !hash ) hash = strpool_embedded_internal_calculate_hash( string, length, pool->ignore_case );
 
     // Return handle to existing string, if it is already in pool
     int base_slot = (int)( hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
@@ -991,7 +991,7 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
         STRPOOL_EMBEDDED_U32 slot_hash = pool->hash_table[ slot ].hash_key;
         if( slot_hash == 0 && pool->hash_table[ first_free ].hash_key != 0 ) first_free = slot;
         int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
-        if( slot_base == base_slot ) 
+        if( slot_base == base_slot )
             {
             STRPOOL_EMBEDDED_ASSERT( base_count > 0 );
             --base_count;
@@ -999,21 +999,21 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
                 {
                 int index = pool->hash_table[ slot ].entry_index;
                 strpool_embedded_internal_entry_t* entry = &pool->entries[ index ];
-                if( entry->length == length && 
-                    ( 
+                if( entry->length == length &&
+                    (
                        ( !pool->ignore_case &&   STRPOOL_EMBEDDED_MEMCMP( entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ), string, (size_t)length ) == 0 )
-                    || (  pool->ignore_case && STRPOOL_EMBEDDED_STRNICMP( entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ), string, (size_t)length ) == 0 ) 
-                    ) 
+                    || (  pool->ignore_case && STRPOOL_EMBEDDED_STRNICMP( entry->data + 2 * sizeof( STRPOOL_EMBEDDED_U32 ), string, (size_t)length ) == 0 )
+                    )
                   )
                     {
                     int handle_index = entry->handle_index;
-                    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, 
+                    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter,
                         pool->index_mask, pool->counter_shift, pool->counter_mask );
                     }
                 }
             }
         slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
-        }   
+        }
 
     // This is a new string, so let's add it
 
@@ -1031,9 +1031,9 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
             int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
             if( slot_base == base_slot )  --base_count;
             slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
-            }       
+            }
         }
-        
+
     slot = first_free;
     while( pool->hash_table[ slot ].hash_key )
         slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
@@ -1053,28 +1053,28 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
         {
         handle_index = pool->handle_count;
         pool->handles[ pool->handle_count ].counter = 1;
-        ++pool->handle_count;           
+        ++pool->handle_count;
         }
     else if( pool->handle_freelist_head >= 0 )
         {
         handle_index = pool->handle_freelist_head;
-        if( pool->handle_freelist_tail == pool->handle_freelist_head ) 
+        if( pool->handle_freelist_tail == pool->handle_freelist_head )
             pool->handle_freelist_tail = pool->handles[ pool->handle_freelist_head ].entry_index;
-        pool->handle_freelist_head = pool->handles[ pool->handle_freelist_head ].entry_index;                       
+        pool->handle_freelist_head = pool->handles[ pool->handle_freelist_head ].entry_index;
         }
     else
         {
         strpool_embedded_internal_expand_handles( pool );
         handle_index = pool->handle_count;
         pool->handles[ pool->handle_count ].counter = 1;
-        ++pool->handle_count;           
+        ++pool->handle_count;
         }
 
     pool->handles[ handle_index ].entry_index = pool->entry_count;
-        
+
     strpool_embedded_internal_entry_t* entry = &pool->entries[ pool->entry_count ];
     ++pool->entry_count;
-        
+
     int data_size = length + 1 + (int) ( 2 * sizeof( STRPOOL_EMBEDDED_U32 ) );
     char* data = strpool_embedded_internal_get_data_storage( pool, data_size, &data_size );
     entry->hash_slot = slot;
@@ -1088,10 +1088,10 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
     data += sizeof( STRPOOL_EMBEDDED_U32 );
     *(STRPOOL_EMBEDDED_U32*)(data) = (STRPOOL_EMBEDDED_U32) length;
     data += sizeof( STRPOOL_EMBEDDED_U32 );
-    STRPOOL_EMBEDDED_MEMCPY( data, string, (size_t) length ); 
+    STRPOOL_EMBEDDED_MEMCPY( data, string, (size_t) length );
     data[ length ] = 0; // Ensure trailing zero
 
-    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, pool->index_mask, 
+    return strpool_embedded_internal_make_handle( handle_index, pool->handles[ handle_index ].counter, pool->index_mask,
         pool->counter_shift, pool->counter_mask );
     }
 
@@ -1113,7 +1113,7 @@ revision history:
     1.3     fixed typo in mask bit shift
     1.2     made it possible to override standard library functions
     1.1     added is_valid function to query a handles validity
-    1.0     first released version  
+    1.0     first released version
 */
 
 
@@ -1128,22 +1128,22 @@ ALTERNATIVE A - MIT License
 
 Copyright (c) 2015 Mattias Gustavsson
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of 
-this software and associated documentation files (the "Software"), to deal in 
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
-of the Software, and to permit persons to whom the Software is furnished to do 
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
 so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all 
+The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------------
@@ -1152,22 +1152,22 @@ ALTERNATIVE B - Public Domain (www.unlicense.org)
 
 This is free and unencumbered software released into the public domain.
 
-Anyone is free to copy, modify, publish, use, compile, sell, or distribute this 
-software, either in source code form or as a compiled binary, for any purpose, 
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+software, either in source code form or as a compiled binary, for any purpose,
 commercial or non-commercial, and by any means.
 
-In jurisdictions that recognize copyright laws, the author or authors of this 
-software dedicate any and all copyright interest in the software to the public 
-domain. We make this dedication for the benefit of the public at large and to 
-the detriment of our heirs and successors. We intend this dedication to be an 
-overt act of relinquishment in perpetuity of all present and future rights to 
+In jurisdictions that recognize copyright laws, the author or authors of this
+software dedicate any and all copyright interest in the software to the public
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
 this software under copyright law.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------------
@@ -1775,7 +1775,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 			int is_hex_color = 1;
 
 			if (*s++ != '#') is_hex_color = 0;
-			else 
+			else
 			{
 				while ((c = *s++) != '"')
 				{
@@ -2788,20 +2788,20 @@ void cute_tiled_free_external_tileset(cute_tiled_tileset_t* tileset)
 	------------------------------------------------------------------------------
 	ALTERNATIVE B - Public Domain (www.unlicense.org)
 	This is free and unencumbered software released into the public domain.
-	Anyone is free to copy, modify, publish, use, compile, sell, or distribute this 
-	software, either in source code form or as a compiled binary, for any purpose, 
+	Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+	software, either in source code form or as a compiled binary, for any purpose,
 	commercial or non-commercial, and by any means.
-	In jurisdictions that recognize copyright laws, the author or authors of this 
-	software dedicate any and all copyright interest in the software to the public 
-	domain. We make this dedication for the benefit of the public at large and to 
-	the detriment of our heirs and successors. We intend this dedication to be an 
-	overt act of relinquishment in perpetuity of all present and future rights to 
+	In jurisdictions that recognize copyright laws, the author or authors of this
+	software dedicate any and all copyright interest in the software to the public
+	domain. We make this dedication for the benefit of the public at large and to
+	the detriment of our heirs and successors. We intend this dedication to be an
+	overt act of relinquishment in perpetuity of all present and future rights to
 	this software under copyright law.
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-	AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-	ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+	ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	------------------------------------------------------------------------------
 */
