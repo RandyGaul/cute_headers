@@ -2347,7 +2347,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_intern_string(m, &tileset->source);
 #ifndef CUTE_TILED_NO_EXTERNAL_TILESET_WARNING
 			CUTE_TILED_WARNING("You might have forgotten to embed your tileset -- Most fields of `cute_tiled_tileset_t` will be zero'd out (unset).");
-#endif CUTE_TILED_NO_EXTERNAL_TILESET_WARNING
+#endif /* CUTE_TILED_NO_EXTERNAL_TILESET_WARNING */
 			break;
 
 		case 1819203229U: // objectalignment
