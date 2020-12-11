@@ -822,7 +822,7 @@ void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, f
 
 	v3 cam_pos(cam_inv[12], cam_inv[13], cam_inv[14]);
 	float pf[4] = { getx(point_in_view_space), gety(point_in_view_space), getz(point_in_view_space), 1.0f };
-	mul_matrix4x4_by_matrix4x4(cam_inv, pf, pf);
+	mul_vector4_by_matrix4x4(cam_inv, pf, pf);
 	v3 point_on_clipping_plane(pf[0] , pf[1], pf[2]);
 	v3 dir_in_world_space = point_on_clipping_plane - cam_pos;
 
