@@ -72,7 +72,7 @@ CUTE_MATH_INLINE float max(float a, float b) { return b < a ? a : b; }
 CUTE_MATH_INLINE float clamp(float a, float lo, float hi) { return max(lo, min(a, hi)); }
 CUTE_MATH_INLINE float sign(float a) { return a < 0 ? -1.0f : 1.0f; }
 CUTE_MATH_INLINE float intersect(float da, float db) { return da / (da - db); }
-CUTE_MATH_INLINE float invert_safe(float a) { return a != 0 ? a / 1.0f : 0; }
+CUTE_MATH_INLINE float invert_safe(float a) { return a != 0 ? 1.0f / a : 0; }
 
 CUTE_MATH_INLINE int min(int a, int b) { return a < b ? a : b; }
 CUTE_MATH_INLINE int max(int a, int b) { return b < a ? a : b; }
