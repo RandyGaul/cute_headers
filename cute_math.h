@@ -72,7 +72,7 @@ CUTE_MATH_INLINE float max(float a, float b) { return b < a ? a : b; }
 CUTE_MATH_INLINE float clamp(float a, float lo, float hi) { return max(lo, min(a, hi)); }
 CUTE_MATH_INLINE float sign(float a) { return a < 0 ? -1.0f : 1.0f; }
 CUTE_MATH_INLINE float intersect(float da, float db) { return da / (da - db); }
-CUTE_MATH_INLINE float invert_safe(float a) { return a != 0 ? a / 1.0f : 0; }
+CUTE_MATH_INLINE float invert_safe(float a) { return a != 0 ? 1.0f / a : 0; }
 
 CUTE_MATH_INLINE int min(int a, int b) { return a < b ? a : b; }
 CUTE_MATH_INLINE int max(int a, int b) { return b < a ? a : b; }
@@ -822,7 +822,7 @@ void CUTE_MATH_CALL compute_mouse_ray(float mouse_x, float mouse_y, float fov, f
 
 	v3 cam_pos(cam_inv[12], cam_inv[13], cam_inv[14]);
 	float pf[4] = { getx(point_in_view_space), gety(point_in_view_space), getz(point_in_view_space), 1.0f };
-	mul_matrix4x4_by_matrix4x4(cam_inv, pf, pf);
+	mul_vector4_by_matrix4x4(cam_inv, pf, pf);
 	v3 point_on_clipping_plane(pf[0] , pf[1], pf[2]);
 	v3 dir_in_world_space = point_on_clipping_plane - cam_pos;
 
