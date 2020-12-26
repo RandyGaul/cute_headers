@@ -318,6 +318,7 @@ struct cute_tiled_layer_t
 	cute_tiled_property_t* properties;   // Array of properties.
 	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
+	cute_tiled_string_t image;           // An image filepath. Used if layer is type `imagelayer`.
 	int visible;                         // 0 or 1. Whether layer is shown or hidden in editor.
 	int width;                           // Column count. Same as map width for fixed-size maps.
 	int x;                               // Horizontal layer offset in tiles. Always 0.
@@ -2005,7 +2006,7 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			break;
 
 		case 13522647194774232494U: // image
-			CUTE_TILED_CHECK(0, "Image layer is not yet supported.");
+			cute_tiled_intern_string(m, &layer->image);
 			break;
 
 		case 4566956252693479661U: // layers
@@ -2536,6 +2537,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 		cute_tiled_string_deintern(m, &layer->draworder);
 		cute_tiled_string_deintern(m, &layer->name);
 		cute_tiled_string_deintern(m, &layer->type);
+		cute_tiled_string_deintern(m, &layer->image);
 		cute_tiled_deintern_properties(m, layer->properties, layer->property_count);
 
 		cute_tiled_object_t* object = layer->objects;
