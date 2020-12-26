@@ -2537,6 +2537,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 		cute_tiled_string_deintern(m, &layer->draworder);
 		cute_tiled_string_deintern(m, &layer->name);
 		cute_tiled_string_deintern(m, &layer->type);
+		cute_tiled_string_deintern(m, &layer->image);
 		cute_tiled_deintern_properties(m, layer->properties, layer->property_count);
 
 		cute_tiled_object_t* object = layer->objects;
