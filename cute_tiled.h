@@ -2515,7 +2515,7 @@ cute_tiled_err:
 		CUTE_TILED_FAIL_IF(!cute_tiled_dispatch_map_internal(m)); \
 	} while (0)
 
-static CUTE_TILED_INLINE void cute_tiled_string_deintern(cute_tiled_map_internal_t* m, cute_tiled_string_t* s)
+static CUTE_TILED_INLINE void cute_tiled_deintern_string(cute_tiled_map_internal_t* m, cute_tiled_string_t* s)
 {
 	s->ptr = strpool_embedded_cstr(&m->strpool, s->hash_id);
 }
@@ -2525,8 +2525,8 @@ static void cute_tiled_deintern_properties(cute_tiled_map_internal_t* m, cute_ti
 	for (int i = 0; i < property_count; ++i)
 	{
 		cute_tiled_property_t* p = properties + i;
-		cute_tiled_string_deintern(m, &p->name);
-		if (p->type == CUTE_TILED_PROPERTY_STRING) cute_tiled_string_deintern(m, &p->data.string);
+		cute_tiled_deintern_string(m, &p->name);
+		if (p->type == CUTE_TILED_PROPERTY_STRING) cute_tiled_deintern_string(m, &p->data.string);
 	}
 }
 
@@ -2534,17 +2534,17 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 {
 	while (layer)
 	{
-		cute_tiled_string_deintern(m, &layer->draworder);
-		cute_tiled_string_deintern(m, &layer->name);
-		cute_tiled_string_deintern(m, &layer->type);
-		cute_tiled_string_deintern(m, &layer->image);
+		cute_tiled_deintern_string(m, &layer->draworder);
+		cute_tiled_deintern_string(m, &layer->name);
+		cute_tiled_deintern_string(m, &layer->type);
+		cute_tiled_deintern_string(m, &layer->image);
 		cute_tiled_deintern_properties(m, layer->properties, layer->property_count);
 
 		cute_tiled_object_t* object = layer->objects;
 		while (object)
 		{
-			cute_tiled_string_deintern(m, &object->name);
-			cute_tiled_string_deintern(m, &object->type);
+			cute_tiled_deintern_string(m, &object->name);
+			cute_tiled_deintern_string(m, &object->type);
 			cute_tiled_deintern_properties(m, object->properties, object->property_count);
 			object = object->next;
 		}
@@ -2557,17 +2557,17 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 
 static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_tiled_tileset_t* tileset)
 {
-	cute_tiled_string_deintern(m, &tileset->image);
-	cute_tiled_string_deintern(m, &tileset->name);
-	cute_tiled_string_deintern(m, &tileset->type);
-	cute_tiled_string_deintern(m, &tileset->source);
-	cute_tiled_string_deintern(m, &tileset->tiledversion);
-	cute_tiled_string_deintern(m, &tileset->objectalignment);
+	cute_tiled_deintern_string(m, &tileset->image);
+	cute_tiled_deintern_string(m, &tileset->name);
+	cute_tiled_deintern_string(m, &tileset->type);
+	cute_tiled_deintern_string(m, &tileset->source);
+	cute_tiled_deintern_string(m, &tileset->tiledversion);
+	cute_tiled_deintern_string(m, &tileset->objectalignment);
 	cute_tiled_deintern_properties(m, tileset->properties, tileset->property_count);
 	cute_tiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
 	while (tile_descriptor)
 	{
-		cute_tiled_string_deintern(m, &tile_descriptor->image);
+		cute_tiled_deintern_string(m, &tile_descriptor->image);
 		cute_tiled_deintern_properties(m, tile_descriptor->properties, tile_descriptor->property_count);
 		tile_descriptor = tile_descriptor->next;
 	}
@@ -2575,10 +2575,10 @@ static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_
 
 static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 {
-	cute_tiled_string_deintern(m, &m->map.orientation);
-	cute_tiled_string_deintern(m, &m->map.renderorder);
-	cute_tiled_string_deintern(m, &m->map.tiledversion);
-	cute_tiled_string_deintern(m, &m->map.type);
+	cute_tiled_deintern_string(m, &m->map.orientation);
+	cute_tiled_deintern_string(m, &m->map.renderorder);
+	cute_tiled_deintern_string(m, &m->map.tiledversion);
+	cute_tiled_deintern_string(m, &m->map.type);
 	cute_tiled_deintern_properties(m, m->map.properties, m->map.property_count);
 
 	cute_tiled_tileset_t* tileset = m->map.tilesets;
