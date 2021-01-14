@@ -1535,7 +1535,7 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 
 	char* end;
 	int val;
-	val = strtoul(m->in, &end, 16);
+	val = strtoull(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = val;
