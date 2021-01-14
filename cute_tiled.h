@@ -1534,11 +1534,11 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 	}
 
 	char* end;
-	int val;
-	val = strtol(m->in, &end, 16);
+	unsigned long long int val;
+	val = strtoull(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
-	*out = val;
+	*out = (int)val;
 	return 1;
 
 cute_tiled_err:
