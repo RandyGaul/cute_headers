@@ -1522,8 +1522,13 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 	switch (cute_tiled_peak(m))
 	{
 	case '#':
+	{
+		char c = cute_tiled_next(m);
+		c = cute_tiled_next(m);
+		CUTE_TILED_CHECK(c == 'f', "Expected 'f' while parsing a hex number.");
 		cute_tiled_next(m);
-		break;
+		CUTE_TILED_CHECK(c == 'f', "Expected 'f' while parsing a hex number.");
+	}	break;
 
 	case '0':
 	{
