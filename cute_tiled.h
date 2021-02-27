@@ -336,6 +336,7 @@ struct cute_tiled_frame_t
 struct cute_tiled_tile_descriptor_t
 {
 	int tile_index;                      // ID of the tile local to the associated tileset.
+	cute_tiled_string_t type;            // String assigned to type field in editor.
 	int frame_count;                     // The number of animation frames in the `animation` array.
 	cute_tiled_frame_t* animation;       // An array of `cute_tiled_frame_t`'s. Can be NULL.
 	cute_tiled_string_t image;           // Image used for a tile in a tileset of type collection of images (relative path from map file to source image).
@@ -2171,6 +2172,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 		{
 		case 3133932603199444032U: // id
 			cute_tiled_read_int(m, &tile_descriptor->tile_index);
+			break;
+
+		case 13509284784451838071U: // type
+			cute_tiled_intern_string(m, &tile_descriptor->type);
 			break;
 
 		case 13522647194774232494U: // image
