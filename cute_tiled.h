@@ -171,6 +171,7 @@ typedef struct cute_tiled_layer_t cute_tiled_layer_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
 typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
+typedef struct cute_tiled_point_t cute_tiled_point_t;
 typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
 typedef union cute_tiled_string_t cute_tiled_string_t;
@@ -350,6 +351,13 @@ struct cute_tiled_tile_descriptor_t
 	cute_tiled_tile_descriptor_t* next;  // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
+// Similar to Qt QPoint Class in Tiled source code
+struct cute_tiled_point_t
+{
+	int x;	                             // X position
+	int y;                               // Y position
+};
+
 // IMPORTANT NOTE
 // If your tileset is not embedded you will get a warning -- to disable this warning simply define
 // this macro CUTE_TILED_NO_EXTERNAL_TILESET_WARNING.
@@ -378,7 +386,7 @@ struct cute_tiled_tileset_t
 	int tilecount;                       // The number of tiles in this tileset.
 	cute_tiled_string_t tiledversion;    // The Tiled version used to save the tileset.
 	int tileheight;                      // Maximum height of tiles in this set.
-	/* tileoffset */                     // Not currently supported.
+	cute_tiled_point_t* tileoffset;      // Pixel offset to align tiles to the grid.
 	cute_tiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
 	int tilewidth;                       // Maximum width of tiles in this set.
 	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
@@ -2223,6 +2231,44 @@ cute_tiled_err:
 	return 0;
 }
 
+int cute_tiled_read_point(cute_tiled_map_internal_t* m, cute_tiled_point_t** out_point)
+{
+	cute_tiled_point_t* point = (cute_tiled_point_t*)cute_tiled_alloc(m, sizeof(cute_tiled_point_t));
+	CUTE_TILED_MEMSET(point, 0, sizeof(cute_tiled_point_t));
+
+	cute_tiled_expect(m, '{');
+	while (cute_tiled_peak(m) != '}')
+	{
+		cute_tiled_read_string(m);
+		cute_tiled_expect(m, ':');
+		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+
+		switch (h)
+		{
+		case 644252274336276709U: // x
+			cute_tiled_read_int(m, &point->x);
+			break;
+
+		case 643295699219922364U: // y
+			cute_tiled_read_int(m, &point->y);
+			break;
+
+		default:
+			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+		}
+
+		cute_tiled_try(m, ',');
+	}
+
+	cute_tiled_expect(m, '}');
+	*out_point = point;
+
+	return 1;
+
+cute_tiled_err:
+	return 0;
+}
+
 static CUTE_TILED_INLINE int cute_tiled_skip_curly_braces_internal(cute_tiled_map_internal_t* m)
 {
 	int count = 1;
@@ -2318,6 +2364,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 		case 13337683360624280154U: // tileheight
 			cute_tiled_read_int(m, &tileset->tileheight);
+			break;
+
+		case 2769630600247906626U: // tileoffset
+			cute_tiled_read_point(m, &tileset->tileoffset);
 			break;
 
 		case 7277156227374254384U: // tileproperties
