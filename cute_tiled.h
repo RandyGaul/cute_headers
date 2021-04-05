@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tiled.h - v1.05
+	cute_tiled.h - v1.06
 
 	To create implementation (the function definitions)
 		#define CUTE_TILED_IMPLEMENTATION
@@ -31,6 +31,7 @@
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
 		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
 		1.05 (07/19/2020) support for Tiled 1.4.1 support, support for tileset tile animations
+		1.06 (04/05/2021) support for Tiled 1.5.0 parallax
 */
 
 /*
@@ -323,6 +324,8 @@ struct cute_tiled_layer_t
 	int width;                           // Column count. Same as map width for fixed-size maps.
 	int x;                               // Horizontal layer offset in tiles. Always 0.
 	int y;                               // Vertical layer offset in tiles. Always 0.
+	float parallaxx;                     // X axis parallax factor.
+	float parallaxy;                     // Y axis parallax factor.
 	int id;                              // ID of the layer.
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
@@ -2085,6 +2088,14 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		case 643295699219922364U: // y
 			cute_tiled_read_int(m, &layer->y);
+			break;
+
+		case 18212633776084966362U: // parallaxx
+			cute_tiled_read_float(m, &layer->parallaxx);
+			break;
+
+		case 18213590351201320707U: // parallaxy
+			cute_tiled_read_float(m, &layer->parallaxy);
 			break;
 
 		case 3133932603199444032U: // id
