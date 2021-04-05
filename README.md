@@ -48,12 +48,14 @@ FAQ
 
 Including these headers is like including a normal header. However, to define the implementation each header looks something like this:
 
+```c
     // Do this ONCE in a .c/.cpp file
     #define LIBNAME_IMPLEMENTATION
     #include "libname.h"
     
     // Everywhere else, just include like a typical header
     #include "libname.h"
+```
 
 This will turn the file into a header + c file combo, one time. The point of this is: A) handling the header or sending it to people is easy, no zip files or anything just copy and paste a single file; B) build scripts are a pain in the ass, and these single-file libs can be integrated into any project without modifying a single build script.
 
