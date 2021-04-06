@@ -171,7 +171,6 @@ typedef struct cute_tiled_layer_t cute_tiled_layer_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
 typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
-typedef struct cute_tiled_point_t cute_tiled_point_t;
 typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
 typedef union cute_tiled_string_t cute_tiled_string_t;
@@ -351,13 +350,6 @@ struct cute_tiled_tile_descriptor_t
 	cute_tiled_tile_descriptor_t* next;  // Pointer to the next tile descriptor. NULL if final tile descriptor.
 };
 
-// Similar to Qt QPoint Class in Tiled source code
-struct cute_tiled_point_t
-{
-	int x;	                             // X position
-	int y;                               // Y position
-};
-
 // IMPORTANT NOTE
 // If your tileset is not embedded you will get a warning -- to disable this warning simply define
 // this macro CUTE_TILED_NO_EXTERNAL_TILESET_WARNING.
@@ -386,7 +378,8 @@ struct cute_tiled_tileset_t
 	int tilecount;                       // The number of tiles in this tileset.
 	cute_tiled_string_t tiledversion;    // The Tiled version used to save the tileset.
 	int tileheight;                      // Maximum height of tiles in this set.
-	cute_tiled_point_t* tileoffset;      // Pixel offset to align tiles to the grid.
+	int tileoffset_x;                    // Pixel offset to align tiles to the grid.
+	int tileoffset_y;                    // Pixel offset to align tiles to the grid.
 	cute_tiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
 	int tilewidth;                       // Maximum width of tiles in this set.
 	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
@@ -2231,10 +2224,10 @@ cute_tiled_err:
 	return 0;
 }
 
-int cute_tiled_read_point(cute_tiled_map_internal_t* m, cute_tiled_point_t** out_point)
+int cute_tiled_read_point(cute_tiled_map_internal_t* m, int* point_x, int* point_y)
 {
-	cute_tiled_point_t* point = (cute_tiled_point_t*)cute_tiled_alloc(m, sizeof(cute_tiled_point_t));
-	CUTE_TILED_MEMSET(point, 0, sizeof(cute_tiled_point_t));
+	*point_x = 0;
+	*point_y = 0;
 
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
@@ -2246,11 +2239,11 @@ int cute_tiled_read_point(cute_tiled_map_internal_t* m, cute_tiled_point_t** out
 		switch (h)
 		{
 		case 644252274336276709U: // x
-			cute_tiled_read_int(m, &point->x);
+			cute_tiled_read_int(m, point_x);
 			break;
 
 		case 643295699219922364U: // y
-			cute_tiled_read_int(m, &point->y);
+			cute_tiled_read_int(m, point_y);
 			break;
 
 		default:
@@ -2261,7 +2254,6 @@ int cute_tiled_read_point(cute_tiled_map_internal_t* m, cute_tiled_point_t** out
 	}
 
 	cute_tiled_expect(m, '}');
-	*out_point = point;
 
 	return 1;
 
@@ -2367,7 +2359,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			break;
 
 		case 2769630600247906626U: // tileoffset
-			cute_tiled_read_point(m, &tileset->tileoffset);
+			cute_tiled_read_point(m, &tileset->tileoffset_x, &tileset->tileoffset_y);
 			break;
 
 		case 7277156227374254384U: // tileproperties
