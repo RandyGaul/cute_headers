@@ -200,6 +200,7 @@ void spritebatch_tick(spritebatch_t* sb);
 // the `submit_batch_fn` function for each batch of sprites and return them as an array. Any `image_id`
 // within the `spritebatch_push` buffer that do not yet have a texture handle will request pixels
 // from the image via `get_pixels_fn` and request a texture handle via `generate_texture_handle_fn`.
+// Returns the number of batches created and submitted.
 int spritebatch_flush(spritebatch_t* sb);
 
 // All textures created so far by `spritebatch_flush` will be considered as candidates for creating
@@ -486,7 +487,7 @@ struct spritebatch_t
 #endif
 
 #ifndef SPRITEBATCH_ATLAS_EMPTY_COLOR
-	#define SPRITEBATCH_ATLAS_EMPTY_COLOR 0x000000FF
+	#define SPRITEBATCH_ATLAS_EMPTY_COLOR 0x00000000
 #endif
 
 #ifndef SPRITEBATCH_LOG
@@ -1059,34 +1060,61 @@ int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 	return 1;
 }
 
-static int spritebatch_internal_instance_pred(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
+static int spritebatch_internal_sprite_less_than(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
 	if (a->sort_bits < b->sort_bits) return 1;
 	else if(a->sort_bits == b->sort_bits) return a->texture_id < b->texture_id;
 	else return 0;
 }
 
-static void spritebatch_internal_qsort_sprites(spritebatch_sprite_t* items, int count)
+static int spritebatch_internal_sprite_greater_than(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
-	if (count <= 1) return;
+	if (a->sort_bits > b->sort_bits) return 1;
+	else if(a->sort_bits == b->sort_bits) return a->texture_id > b->texture_id;
+	else return 0;
+}
 
-	spritebatch_sprite_t pivot = items[count - 1];
-	int low = 0;
-	for (int i = 0; i < count - 1; ++i)
-	{
-		if (spritebatch_internal_instance_pred(items + i, &pivot))
-		{
-			spritebatch_sprite_t tmp = items[i];
-			items[i] = items[low];
-			items[low] = tmp;
-			low++;
+static void spritebatch_internal_sprite_swap(spritebatch_sprite_t* a, int i, int j)
+{
+	spritebatch_sprite_t t = a[i];
+	a[i] = a[j];
+	a[j] = t;
+}
+
+static void spritebatch_internal_sprite_partition_three_way(spritebatch_sprite_t* a, int pivot, int lo, int hi, int* out_lo, int* out_hi)
+{
+	int l = lo;
+	int r = lo;
+	int u = hi;
+
+	while (r <= u) {
+		if (spritebatch_internal_sprite_less_than(a + r, a + pivot)) {
+			spritebatch_internal_sprite_swap(a, l++, r++);
+		} else if (spritebatch_internal_sprite_greater_than(a + r, a + pivot)) {
+			spritebatch_internal_sprite_swap(a, r, u--);
+		} else {
+			r++;
 		}
 	}
 
-	items[count - 1] = items[low];
-	items[low] = pivot;
-	spritebatch_internal_qsort_sprites(items, low);
-	spritebatch_internal_qsort_sprites(items + low + 1, count - 1 - low);
+	*out_lo = l;
+	*out_hi = r;
+}
+
+static void spritebatch_internal_sprite_quick_sort(spritebatch_sprite_t* a, int lo, int hi)
+{
+	if (lo < hi) {
+		int pivot = (lo + hi) / 2;
+		int left, right;
+		spritebatch_internal_sprite_partition_three_way(a, pivot, lo, hi, &left, &right);
+		spritebatch_internal_sprite_quick_sort(a, lo, left - 1);
+		spritebatch_internal_sprite_quick_sort(a, right, hi);
+	}
+}
+
+static void spritebatch_internal_sprite_sort(spritebatch_sprite_t* items, int count)
+{
+	spritebatch_internal_sprite_quick_sort(items, 0, count - 1);
 }
 
 static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
@@ -1281,7 +1309,7 @@ int spritebatch_flush(spritebatch_t* sb)
 	}
 
 	// sort internal sprite buffer and submit batches
-	spritebatch_internal_qsort_sprites(sb->sprites, sb->sprite_count);
+	spritebatch_internal_sprite_sort(sb->sprites, sb->sprite_count);
 
 	int min = 0;
 	int max = 0;
@@ -1416,34 +1444,61 @@ static spritebatch_internal_atlas_node_t* spritebatch_best_fit(int sp, int w, in
 	return best_node;
 }
 
-static int spritebatch_internal_perimeter_pred(spritebatch_internal_integer_image_t* a, spritebatch_internal_integer_image_t* b)
+static int spritebatch_internal_image_less_than(spritebatch_internal_integer_image_t* a, spritebatch_internal_integer_image_t* b)
 {
 	int perimeterA = 2 * (a->size.x + a->size.y);
 	int perimeterB = 2 * (b->size.x + b->size.y);
 	return perimeterB < perimeterA;
 }
 
-static void spritebatch_internal_image_sort(spritebatch_internal_integer_image_t* items, int count)
+static int spritebatch_internal_image_greater_than(spritebatch_internal_integer_image_t* a, spritebatch_internal_integer_image_t* b)
 {
-	if (count <= 1) return;
+	int perimeterA = 2 * (a->size.x + a->size.y);
+	int perimeterB = 2 * (b->size.x + b->size.y);
+	return perimeterB > perimeterA;
+}
 
-	spritebatch_internal_integer_image_t pivot = items[count - 1];
-	int low = 0;
-	for (int i = 0; i < count - 1; ++i)
-	{
-		if (spritebatch_internal_perimeter_pred(items + i, &pivot))
-		{
-			spritebatch_internal_integer_image_t tmp = items[i];
-			items[i] = items[low];
-			items[low] = tmp;
-			low++;
+static void spritebatch_internal_image_swap(spritebatch_internal_integer_image_t* a, int i, int j)
+{
+	spritebatch_internal_integer_image_t t = a[i];
+	a[i] = a[j];
+	a[j] = t;
+}
+
+static void spritebatch_internal_image_partition_three_way(spritebatch_internal_integer_image_t* a, int pivot, int lo, int hi, int* out_lo, int* out_hi)
+{
+	int l = lo;
+	int r = lo;
+	int u = hi;
+
+	while (r <= u) {
+		if (spritebatch_internal_image_less_than(a + r, a + pivot)) {
+			spritebatch_internal_image_swap(a, l++, r++);
+		} else if (spritebatch_internal_image_greater_than(a + r, a + pivot)) {
+			spritebatch_internal_image_swap(a, r, u--);
+		} else {
+			r++;
 		}
 	}
 
-	items[count - 1] = items[low];
-	items[low] = pivot;
-	spritebatch_internal_image_sort(items, low);
-	spritebatch_internal_image_sort(items + low + 1, count - 1 - low);
+	*out_lo = l;
+	*out_hi = r;
+}
+
+static void spritebatch_internal_image_quick_sort(spritebatch_internal_integer_image_t* a, int lo, int hi)
+{
+	if (lo < hi) {
+		int pivot = (lo + hi) / 2;
+		int left, right;
+		spritebatch_internal_image_partition_three_way(a, pivot, lo, hi, &left, &right);
+		spritebatch_internal_image_quick_sort(a, lo, left - 1);
+		spritebatch_internal_image_quick_sort(a, right, hi);
+	}
+}
+
+static void spritebatch_internal_image_sort(spritebatch_internal_integer_image_t* items, int count)
+{
+	spritebatch_internal_image_quick_sort(items, 0, count - 1);
 }
 
 typedef struct

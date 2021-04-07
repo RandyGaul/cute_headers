@@ -323,7 +323,7 @@ struct cute_rw_lock_t
 	#if _WIN32_WINNT < 0x0600
 		#undef _WIN32_WINNT
 		#define _WIN32_WINNT 0x0600 // requires Windows Vista minimum
-		// 0x0400=Windows NT 4.0, 0x0500=Windows 2000, 0x0501=Windows XP, 0x0502=Windows Server 2003, 0x0600=Windows Vista, 
+		// 0x0400=Windows NT 4.0, 0x0500=Windows 2000, 0x0501=Windows XP, 0x0502=Windows Server 2003, 0x0600=Windows Vista,
 		// 0x0601=Windows 7, 0x0602=Windows 8, 0x0603=Windows 8.1, 0x0A00=Windows 10
 	#endif
 	#include <Windows.h>
