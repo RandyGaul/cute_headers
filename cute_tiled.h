@@ -2229,7 +2229,7 @@ cute_tiled_err:
 	return 0;
 }
 
-int cute_tiled_read_point(cute_tiled_map_internal_t* m, int* point_x, int* point_y)
+int cute_tiled_read_point_internal(cute_tiled_map_internal_t* m, int* point_x, int* point_y)
 {
 	*point_x = 0;
 	*point_y = 0;
@@ -2265,6 +2265,11 @@ int cute_tiled_read_point(cute_tiled_map_internal_t* m, int* point_x, int* point
 cute_tiled_err:
 	return 0;
 }
+
+#define cute_tiled_read_point(m, x, y) \
+	do { \
+		CUTE_TILED_FAIL_IF(!cute_tiled_read_point_internal(m, x, y)); \
+	} while (0)
 
 static CUTE_TILED_INLINE int cute_tiled_skip_curly_braces_internal(cute_tiled_map_internal_t* m)
 {
