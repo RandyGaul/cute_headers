@@ -30,7 +30,7 @@
 		1.02 (05/07/2018) reverse lists for ease of use, incorporate fixes by ZenToad
 		1.03 (01/11/2019) support for Tiled 1.2.1 with the help of dpeter99 and tanis2000
 		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
-		1.05 (07/19/2020) support for Tiled 1.4.1 support, support for tileset tile animations
+		1.05 (07/19/2020) support for Tiled 1.4.1 and tileset tile animations
 		1.06 (04/05/2021) support for Tiled 1.5.0 parallax
 */
 
