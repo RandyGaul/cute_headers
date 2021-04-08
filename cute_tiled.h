@@ -1978,6 +1978,9 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_layer_t* layer = (cute_tiled_layer_t*)cute_tiled_alloc(m, sizeof(cute_tiled_layer_t));
 	CUTE_TILED_MEMSET(layer, 0, sizeof(cute_tiled_layer_t));
+	layer->parallaxx = 1.0f;
+	layer->parallaxy = 1.0f;
+
 	cute_tiled_expect(m, '{');
 
 	while (cute_tiled_peak(m) != '}')
