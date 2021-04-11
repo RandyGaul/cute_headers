@@ -211,7 +211,19 @@ struct cp_atlas_image_t
 	#define CUTE_PNG_ASSERT assert
 #endif
 
-#include <stdio.h>  // fopen, fclose, etc.
+#if !defined(CUTE_PNG_FILEIO)
+	#include <stdio.h>  // fopen, fclose, etc.
+	#define CUTE_PNG_FILEIO
+	#define CUTE_PNG_SEEK_SET SEEK_SET
+	#define CUTE_PNG_SEEK_END SEEK_END
+	#define CUTE_PNG_FILE FILE
+	#define CUTE_PNG_FOPEN fopen
+	#define CUTE_PNG_FSEEK fseek
+	#define CUTE_PNG_FREAD fread
+	#define CUTE_PNG_FTELL ftell
+	#define CUTE_PNG_FCLOSE fclose
+	#define CUTE_PNG_FERROR ferror
+#endif
 
 static cp_pixel_t cp_make_pixel_a(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
@@ -335,18 +347,18 @@ static uint32_t cp_read_bits(cp_state_t* s, int num_bits_to_read)
 static char* cp_read_file_to_memory(const char* path, int* size)
 {
 	char* data = 0;
-	FILE* fp = fopen(path, "rb");
+	CUTE_PNG_FILE* fp = CUTE_PNG_FOPEN(path, "rb");
 	int sizeNum = 0;
 
 	if (fp)
 	{
-		fseek(fp, 0, SEEK_END);
-		sizeNum = ftell(fp);
-		fseek(fp, 0, SEEK_SET);
+		CUTE_PNG_FSEEK(fp, 0, CUTE_PNG_SEEK_END);
+		sizeNum = CUTE_PNG_FTELL(fp);
+		CUTE_PNG_FSEEK(fp, 0, CUTE_PNG_SEEK_SET);
 		data = (char*)CUTE_PNG_ALLOC(sizeNum + 1);
-		fread(data, sizeNum, 1, fp);
+		CUTE_PNG_FREAD(data, sizeNum, 1, fp);
 		data[sizeNum] = 0;
-		fclose(fp);
+		CUTE_PNG_FCLOSE(fp);
 	}
 
 	if (size) *size = sizeNum;
@@ -607,7 +619,7 @@ typedef struct cp_save_png_data_t
 	uint32_t bits;
 	uint32_t prev;
 	uint32_t runlen;
-	FILE *fp;
+	CUTE_PNG_FILE *fp;
 } cp_save_png_data_t;
 
 uint32_t CP_CRC_TABLE[] = {
@@ -759,7 +771,7 @@ static long cp_save_data(cp_save_png_data_t* s, cp_image_t* img, long dataPos)
 	cp_encode_literal(s, 256); // terminator
 	while (s->bits != 0x80) cp_put_bits(s, 0, 1);
 	cp_put32(s, s->adler);
-	long dataSize = (ftell(s->fp) - dataPos) - 8;
+	long dataSize = (CUTE_PNG_FTELL(s->fp) - dataPos) - 8;
 	cp_put32(s, ~s->crc);
 
 	return dataSize;
@@ -770,7 +782,7 @@ int cp_save_png(const char* file_name, const cp_image_t* img)
 	cp_save_png_data_t s;
 	long dataPos, dataSize, err;
 
-	FILE* fp = fopen(file_name, "wb");
+	CUTE_PNG_FILE* fp = CUTE_PNG_FOPEN(file_name, "wb");
 	if (!fp) return 1;
 
 	s.fp = fp;
@@ -780,7 +792,7 @@ int cp_save_png(const char* file_name, const cp_image_t* img)
 	s.runlen = 0;
 
 	cp_save_header(&s, (cp_image_t*)img);
-	dataPos = ftell(s.fp);
+	dataPos = CUTE_PNG_FTELL(s.fp);
 	dataSize = cp_save_data(&s, (cp_image_t*)img, dataPos);
 
 	// End chunk.
@@ -788,11 +800,11 @@ int cp_save_png(const char* file_name, const cp_image_t* img)
 	cp_put32(&s, ~s.crc);
 
 	// Write back payload size.
-	fseek(fp, dataPos, SEEK_SET);
+	CUTE_PNG_FSEEK(fp, dataPos, CUTE_PNG_SEEK_SET);
 	cp_put32(&s, dataSize);
 
-	err = ferror(fp);
-	fclose(fp);
+	err = CUTE_PNG_FERROR(fp);
+	CUTE_PNG_FCLOSE(fp);
 	return !err;
 }
 
@@ -1631,7 +1643,7 @@ cp_err:
 
 int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas_txt, const cp_image_t* atlas, const cp_atlas_image_t* imgs, int img_count, const char** names)
 {
-	FILE* fp = fopen(out_path_atlas_txt, "wt");
+	CUTE_PNG_FILE* fp = CUTE_PNG_FOPEN(out_path_atlas_txt, "wt");
 	CUTE_PNG_CHECK(fp, "unable to open out_path_atlas_txt in cp_default_save_atlas");
 
 	fprintf(fp, "%s\n%d\n\n", out_path_image, img_count);
@@ -1659,7 +1671,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 	CUTE_PNG_CHECK(cp_save_png(out_path_image, atlas), "failed to save atlas image to disk");
 
 cp_err:
-	fclose(fp);
+	CUTE_PNG_FCLOSE(fp);
 	return 0;
 }
 
