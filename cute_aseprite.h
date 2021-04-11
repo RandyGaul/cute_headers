@@ -344,6 +344,19 @@ struct ase_t
 	#define CUTE_ASEPRITE_ASSERT assert
 #endif
 
+#if !defined(CUTE_ASEPRITE_FILEIO)
+	#include <stdio.h> // fopen
+	#define CUTE_ASEPRITE_FILEIO
+	#define CUTE_ASEPRITE_SEEK_SET SEEK_SET
+	#define CUTE_ASEPRITE_SEEK_END SEEK_END
+	#define CUTE_ASEPRITE_FILE FILE
+	#define CUTE_ASEPRITE_FOPEN fopen
+	#define CUTE_ASEPRITE_FSEEK fseek
+	#define CUTE_ASEPRITE_FREAD fread
+	#define CUTE_ASEPRITE_FTELL ftell
+	#define CUTE_ASEPRITE_FCLOSE fclose
+#endif
+
 static int s_error_cline;               // The line in cute_aseprite.h where the error was triggered.
 static const char* s_error_file = NULL; // The filepath of the file being parsed. NULL if from memory.
 static const char* s_error_reason;      // Used to capture errors during DEFLATE parsing.
@@ -782,18 +795,18 @@ static char* s_fopen(const char* path, int* size, void* mem_ctx)
 {
 	CUTE_ASEPRITE_UNUSED(mem_ctx);
 	char* data = 0;
-	FILE* fp = fopen(path, "rb");
+	CUTE_ASEPRITE_FILE* fp = CUTE_ASEPRITE_FOPEN(path, "rb");
 	int sz = 0;
 
 	if (fp)
 	{
-		fseek(fp, 0, SEEK_END);
-		sz = ftell(fp);
-		fseek(fp, 0, SEEK_SET);
+		CUTE_ASEPRITE_FSEEK(fp, 0, CUTE_ASEPRITE_SEEK_END);
+		sz = CUTE_ASEPRITE_FTELL(fp);
+		CUTE_ASEPRITE_FSEEK(fp, 0, CUTE_ASEPRITE_SEEK_SET);
 		data = (char*)CUTE_ASEPRITE_ALLOC(sz + 1, mem_ctx);
-		fread(data, sz, 1, fp);
+		CUTE_ASEPRITE_FREAD(data, sz, 1, fp);
 		data[sz] = 0;
-		fclose(fp);
+		CUTE_ASEPRITE_FCLOSE(fp);
 	}
 
 	if (size) *size = sz;
