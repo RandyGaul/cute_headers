@@ -592,6 +592,19 @@ struct strpool_embedded_t
     #define STRPOOL_EMBEDDED_FREE( ctx, ptr ) ( free( ptr ) )
 #endif
 
+#ifndef CUTE_TILED_FILEIO
+	#include <stdio.h>  // fopen, fclose, etc.
+	#define CUTE_TILED_FILEIO
+	#define CUTE_TILED_SEEK_SET SEEK_SET
+	#define CUTE_TILED_SEEK_END SEEK_END
+	#define CUTE_TILED_FILE FILE
+	#define CUTE_TILED_FOPEN fopen
+	#define CUTE_TILED_FSEEK fseek
+	#define CUTE_TILED_FREAD fread
+	#define CUTE_TILED_FTELL ftell
+	#define CUTE_TILED_FCLOSE fclose
+#endif
+
 
 typedef struct strpool_embedded_internal_hash_slot_t
     {
@@ -1286,18 +1299,18 @@ static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path,
 {
 	CUTE_TILED_UNUSED(mem_ctx);
 	char* data = 0;
-	FILE* fp = fopen(path, "rb");
+	CUTE_TILED_FILE* fp = CUTE_TILED_FOPEN(path, "rb");
 	int sz = 0;
 
 	if (fp)
 	{
-		fseek(fp, 0, SEEK_END);
-		sz = ftell(fp);
-		fseek(fp, 0, SEEK_SET);
+		CUTE_TILED_FSEEK(fp, 0, CUTE_TILED_SEEK_END);
+		sz = CUTE_TILED_FTELL(fp);
+		CUTE_TILED_FSEEK(fp, 0, CUTE_TILED_SEEK_SET);
 		data = (char*)CUTE_TILED_ALLOC(sz + 1, mem_ctx);
-		fread(data, sz, 1, fp);
+		CUTE_TILED_FREAD(data, sz, 1, fp);
 		data[sz] = 0;
-		fclose(fp);
+		CUTE_TILED_FCLOSE(fp);
 	}
 
 	if (size) *size = sz;
