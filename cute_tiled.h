@@ -592,19 +592,6 @@ struct strpool_embedded_t
     #define STRPOOL_EMBEDDED_FREE( ctx, ptr ) ( free( ptr ) )
 #endif
 
-#ifndef CUTE_TILED_FILEIO
-	#include <stdio.h>  // fopen, fclose, etc.
-	#define CUTE_TILED_FILEIO
-	#define CUTE_TILED_SEEK_SET SEEK_SET
-	#define CUTE_TILED_SEEK_END SEEK_END
-	#define CUTE_TILED_FILE FILE
-	#define CUTE_TILED_FOPEN fopen
-	#define CUTE_TILED_FSEEK fseek
-	#define CUTE_TILED_FREAD fread
-	#define CUTE_TILED_FTELL ftell
-	#define CUTE_TILED_FCLOSE fclose
-#endif
-
 
 typedef struct strpool_embedded_internal_hash_slot_t
     {
@@ -1219,6 +1206,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	#endif
 #endif
 
+#if !defined(CUTE_TILED_STDIO)
+	#include <stdio.h>  // snprintf, fopen, fclose, etc.
+	#define CUTE_TILED_SNPRINTF snprintf
+	#define CUTE_TILED_SEEK_SET SEEK_SET
+	#define CUTE_TILED_SEEK_END SEEK_END
+	#define CUTE_TILED_FILE FILE
+	#define CUTE_TILED_FOPEN fopen
+	#define CUTE_TILED_FSEEK fseek
+	#define CUTE_TILED_FREAD fread
+	#define CUTE_TILED_FTELL ftell
+	#define CUTE_TILED_FCLOSE fclose
+#endif
+
 int cute_tiled_error_cline; 			// The line in cute_tiled.h where the error was triggered.
 const char* cute_tiled_error_reason; 		// The error message.
 int cute_tiled_error_line;  			// The line where the error happened in the json.
@@ -1381,7 +1381,7 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 #define cute_tiled_expect(m, expect) \
 	do { \
 		static char error[128]; \
-		snprintf(error, sizeof(error), "Found unexpected token '%c', expected '%c' (is this a valid JSON file?).", *m->in, expect); \
+		CUTE_TILED_SNPRINTF(error, sizeof(error), "Found unexpected token '%c', expected '%c' (is this a valid JSON file?).", *m->in, expect); \
 		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), error); \
 	} while (0)
 
