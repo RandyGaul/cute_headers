@@ -344,9 +344,9 @@ struct ase_t
 	#define CUTE_ASEPRITE_ASSERT assert
 #endif
 
-#if !defined(CUTE_ASEPRITE_FILEIO)
+#if !defined(CUTE_ASEPRITE_STDIO)
 	#include <stdio.h> // fopen
-	#define CUTE_ASEPRITE_FILEIO
+	#define CUTE_ASEPRITE_STDIO
 	#define CUTE_ASEPRITE_SEEK_SET SEEK_SET
 	#define CUTE_ASEPRITE_SEEK_END SEEK_END
 	#define CUTE_ASEPRITE_FILE FILE
