@@ -561,9 +561,7 @@ static int s_decode(deflate_t* s, uint32_t* tree, int hi)
 	uint32_t len = (32 - (key & 0xF));
 	CUTE_ASEPRITE_ASSERT((search >> len) == (key >> len));
 
-    s_consume_bits(s, key & 0xF);
-	//uint32_t code = s_consume_bits(s, key & 0xF);
-	//(void)code;
+	s_consume_bits(s, key & 0xF);
 	return (key >> 4) & 0xFFF;
 }
 
