@@ -211,9 +211,9 @@ struct cp_atlas_image_t
 	#define CUTE_PNG_ASSERT assert
 #endif
 
-#if !defined(CUTE_PNG_FILEIO)
+#if !defined(CUTE_PNG_STDIO)
 	#include <stdio.h>  // fopen, fclose, etc.
-	#define CUTE_PNG_FILEIO
+	#define CUTE_PNG_STDIO
 	#define CUTE_PNG_SEEK_SET SEEK_SET
 	#define CUTE_PNG_SEEK_END SEEK_END
 	#define CUTE_PNG_FILE FILE
