@@ -655,7 +655,7 @@ static int s_inflate(const void* in, int in_bytes, void* out, int out_bytes, voi
 	s->bits_left = in_bytes * 8;
 
 	// s->words is the in-pointer rounded up to a multiple of 4
-    int first_bytes = (int)((((size_t)in + 3) & ~3) - (size_t)in);
+	int first_bytes = (int)((((size_t)in + 3) & ~3) - (size_t)in);
 	s->words = (uint32_t*)((char*)in + first_bytes);
 	s->word_count = (in_bytes - first_bytes) / 4;
 	int last_bytes = ((in_bytes - first_bytes) & 3);
