@@ -645,7 +645,7 @@ ase_err:
 // 3.2.3
 static int s_inflate(const void* in, int in_bytes, void* out, int out_bytes, void* mem_ctx)
 {
-    CUTE_ASEPRITE_UNUSED(mem_ctx);
+	CUTE_ASEPRITE_UNUSED(mem_ctx);
 	deflate_t* s = (deflate_t*)CUTE_ASEPRITE_ALLOC(sizeof(deflate_t), mem_ctx);
 	s->bits = 0;
 	s->count = 0;
