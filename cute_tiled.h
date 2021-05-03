@@ -2477,7 +2477,7 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 	cute_tiled_expect(m, ':');
 	h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
- 	switch (h)
+	switch (h)
 	{
 	case 17465100621023921744U: // backgroundcolor
 		cute_tiled_expect(m, '"');
@@ -2568,7 +2568,11 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		break;
 
 	case 8196820454517111669U: // version
+		if (*m->in == '"')
+			m->in++;
 		cute_tiled_read_float(m, &m->map.version);
+		if (*m->in == '"')
+			m->in++;
 		break;
 
 	case 7400839267610537869U: // width
@@ -2577,7 +2581,7 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 
 	case 2498445529143042872U: // nextlayerid
 		cute_tiled_read_int(m, &m->map.nextlayerid);
-	break;
+		break;
 
 	default:
 		CUTE_TILED_CHECK(0, "Unknown identifier found.");
