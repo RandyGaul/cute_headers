@@ -477,7 +477,7 @@ C2_INLINE int c2Parallel(c2v a, c2v b, float kTol)
 
 // rotation ops
 C2_INLINE c2r c2Rot(float radians) { c2r r; c2SinCos(radians, &r.s, &r.c); return r; }
-C2_INLINE c2r c2RotIdentity() { c2r r; r.c = 1.0f; r.s = 0; return r; }
+C2_INLINE c2r c2RotIdentity(void) { c2r r; r.c = 1.0f; r.s = 0; return r; }
 C2_INLINE c2v c2RotX(c2r r) { return c2V(r.c, r.s); }
 C2_INLINE c2v c2RotY(c2r r) { return c2V(-r.s, r.c); }
 C2_INLINE c2v c2Mulrv(c2r a, c2v b)  { return c2V(a.c * b.x - a.s * b.y,  a.s * b.x + a.c * b.y); }
@@ -491,7 +491,7 @@ C2_INLINE c2m c2Mulmm(c2m a, c2m b)  { c2m c; c.x = c2Mulmv(a, b.x);  c.y = c2Mu
 C2_INLINE c2m c2MulmmT(c2m a, c2m b) { c2m c; c.x = c2MulmvT(a, b.x); c.y = c2MulmvT(a, b.y); return c; }
 
 // transform ops
-C2_INLINE c2x c2xIdentity() { c2x x; x.p = c2V(0, 0); x.r = c2RotIdentity(); return x; }
+C2_INLINE c2x c2xIdentity(void) { c2x x; x.p = c2V(0, 0); x.r = c2RotIdentity(); return x; }
 C2_INLINE c2v c2Mulxv(c2x a, c2v b) { return c2Add(c2Mulrv(a.r, b), a.p); }
 C2_INLINE c2v c2MulxvT(c2x a, c2v b) { return c2MulrvT(a.r, c2Sub(b, a.p)); }
 C2_INLINE c2x c2Mulxx(c2x a, c2x b) { c2x c; c.r = c2Mulrr(a.r, b.r); c.p = c2Add(c2Mulrv(a.r, b.p), a.p); return c; }
