@@ -1041,6 +1041,8 @@ static SPRITEBATCH_U64 spritebatch_make_sort_key(int index, int sort_bits)
 
 int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 {
+	SPRITEBATCH_ASSERT(sprite.w <= sb->atlas_width_in_pixels);
+	SPRITEBATCH_ASSERT(sprite.h <= sb->atlas_height_in_pixels);
 	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, spritebatch_internal_sprite_t);
 	spritebatch_internal_sprite_t sprite_out;
 	sprite_out.image_id = sprite.image_id;
@@ -1967,14 +1969,22 @@ int spritebatch_defrag(spritebatch_t* sb)
 					hashtable_insert(&sb->sprites_to_atlases, key, &atlas);
 					SPRITEBATCH_LOG("removing lonely texture for atlas%s\n", texture_id != ~0 ? "" : " (tex was ~0)" );
 				}
-				else hit_count++;
+				else
+				{
+					hit_count++;
+					SPRITEBATCH_ASSERT(lonely_textures[i].w <= sb->atlas_width_in_pixels);
+					SPRITEBATCH_ASSERT(lonely_textures[i].h <= sb->atlas_height_in_pixels);
+				}
 			}
 			spritebatch_internal_remove_table_entries(sb, &sb->sprites_to_lonely_textures);
+
+			lonely_count = hashtable_count(&sb->sprites_to_lonely_textures);
 
 			if (!hit_count)
 			{
 				// TODO
 				// handle case where none fit in atlas
+				stuck = 1;
 				SPRITEBATCH_ASSERT(0);
 			}
 		}
