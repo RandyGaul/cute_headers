@@ -1560,6 +1560,11 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 		int height = image->size.y;
 		spritebatch_internal_atlas_node_t *best_fit = spritebatch_best_fit(sp, width, height, nodes);
 
+		if (!best_fit) {
+			image->fit = 0;
+			continue;
+		}
+
 		image->min = best_fit->min;
 		image->max = spritebatch_add(image->min, image->size);
 
