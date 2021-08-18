@@ -173,12 +173,10 @@ struct spritebatch_sprite_t
 
 	// This field is *completely optional* -- just set it to zero if you don't wanter to bother.
 	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
-	// The first 32-bits store the user's sort bits. The bottom 32-bits are for internal
-	// usage, and are not ever set by the user. Internally sprites are sorted first
-	// based on `sort_bits`, and to break ties they are sorted on `texture_id`. Feel free
-	// to change the sort predicate `spritebatch_internal_instance_pred` in the
-	// implementation section.
-	SPRITEBATCH_U64 sort_bits;
+	int sort_bits;
+
+	// This field is reserved for internal use to make quicksort stable.
+	int index;
 
 	// This is a *completely optional* field. The idea is that the `SPRITEBATCH_SPRITE_USERDATA`
 	// macro can be defined to insert arbitrary data into sprites. For example, if you want to
@@ -364,7 +362,8 @@ struct hashtable_t
 typedef struct
 {
 	SPRITEBATCH_U64 image_id;
-	SPRITEBATCH_U64 sort_bits;
+	int sort_bits;
+	int index;
 	int w;
 	int h;
 	float x, y;
@@ -1034,11 +1033,6 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 		} \
 	} while (0)
 
-static SPRITEBATCH_U64 spritebatch_make_sort_key(int index, int sort_bits)
-{
-	return (((SPRITEBATCH_U64)sort_bits) << 32) | ((SPRITEBATCH_U64)index);
-}
-
 int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 {
 	SPRITEBATCH_ASSERT(sprite.w <= sb->atlas_width_in_pixels);
@@ -1046,7 +1040,8 @@ int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, spritebatch_internal_sprite_t);
 	spritebatch_internal_sprite_t sprite_out;
 	sprite_out.image_id = sprite.image_id;
-	sprite_out.sort_bits = spritebatch_make_sort_key(sb->input_count, (int)(sprite.sort_bits >> 32));
+	sprite_out.sort_bits = sprite.sort_bits;
+	sprite_out.index = sb->input_count;
 	sprite_out.w = sprite.w;
 	sprite_out.h = sprite.h;
 	sprite_out.x = sprite.x;
@@ -1065,15 +1060,25 @@ int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 static int spritebatch_internal_sprite_less_than(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
 	if (a->sort_bits < b->sort_bits) return 1;
-	else if(a->sort_bits == b->sort_bits) return a->texture_id < b->texture_id;
-	else return 0;
+	else if(a->sort_bits == b->sort_bits) {
+		if (a->texture_id < b->texture_id) return 1;
+		else if (a->texture_id == b->texture_id) {
+			return a->index < b->index;
+		}
+	}
+	return 0;
 }
 
 static int spritebatch_internal_sprite_greater_than(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
 	if (a->sort_bits > b->sort_bits) return 1;
-	else if(a->sort_bits == b->sort_bits) return a->texture_id > b->texture_id;
-	else return 0;
+	else if(a->sort_bits == b->sort_bits) {
+		if (a->texture_id > b->texture_id) return 1;
+		else if (a->texture_id == b->texture_id) {
+			return a->index > b->index;
+		}
+	}
+	return 0;
 }
 
 static void spritebatch_internal_sprite_swap(spritebatch_sprite_t* a, int i, int j)
@@ -1221,6 +1226,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 	spritebatch_sprite_t sprite;
 	sprite.image_id = s->image_id;
 	sprite.sort_bits = s->sort_bits;
+	sprite.index = s->index;
 	sprite.x = s->x;
 	sprite.y = s->y;
 	sprite.w = s->w;
