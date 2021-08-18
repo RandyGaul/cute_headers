@@ -1367,6 +1367,14 @@ static char cute_tiled_next(cute_tiled_map_internal_t* m)
 	return c;
 }
 
+static char cute_tiled_string_next(cute_tiled_map_internal_t* m)
+{
+	char c;
+	if (m->in == m->end) CUTE_TILED_CRASH();
+	c = *m->in++;
+	return c;
+}
+
 static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 {
 	if (m->in == m->end) CUTE_TILED_CRASH();
@@ -1483,7 +1491,7 @@ static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 	while (!done)
 	{
 		CUTE_TILED_CHECK(count < CUTE_TILED_INTERNAL_BUFFER_MAX, "String exceeded max length of CUTE_TILED_INTERNAL_BUFFER_MAX.");
-		char c = cute_tiled_next(m);
+		char c = cute_tiled_string_next(m);
 
 		switch (c)
 		{
@@ -1494,7 +1502,7 @@ static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 
 		case '\\':
 		{
-			char the_char = cute_tiled_parse_char(cute_tiled_next(m));
+			char the_char = cute_tiled_parse_char(cute_tiled_string_next(m));
 			m->scratch[count++] = the_char;
 		}	break;
 
