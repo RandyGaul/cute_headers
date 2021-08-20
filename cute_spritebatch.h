@@ -1078,9 +1078,9 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 
 static int spritebatch_internal_sprite_less_than_or_equal(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
-	if (a->sort_bits <= b->sort_bits) return 1;
-	else if (a->texture_id <= b->texture_id) return 1;
-	else return 0;
+	if (a->sort_bits < b->sort_bits) return 1;
+	if (a->sort_bits == b->sort_bits && a->texture_id <= b->texture_id) return 1;
+	return 0;
 }
 
 void spritebatch_internal_merge_sort_iteration(spritebatch_sprite_t* a, int lo, int split, int hi, spritebatch_sprite_t* b)
@@ -1260,7 +1260,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 			sb->sprite_capacity = new_capacity;
 
 			SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
-			sb->sprites_scratch = SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
+			sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
 		}
 		sb->sprites[sb->sprite_count++] = sprite;
 	}
