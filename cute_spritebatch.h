@@ -1260,7 +1260,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 			sb->sprite_capacity = new_capacity;
 
 			SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
-			sb->sprites_scratch = SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
+			sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
 		}
 		sb->sprites[sb->sprite_count++] = sprite;
 	}
