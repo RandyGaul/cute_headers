@@ -91,9 +91,13 @@ sprite_t make_sprite(SPRITEBATCH_U64 image_id, float x, float y, float scale, fl
 	return s;
 }
 
+int call_count = 0;
+
 // callbacks for cute_spritebatch.h
 void batch_report(spritebatch_sprite_t* sprites, int count, int texture_w, int texture_h, void* udata)
 {
+	++call_count;
+
 	(void)udata;
 	(void)texture_w;
 	(void)texture_h;
@@ -511,6 +515,8 @@ int main(int argc, char** argv)
 
 		static int tick = 0;
 		printf("tick %d\n", tick++);
+		printf("call count: %d\n", call_count);
+		call_count = 0;
 
 		// push some sprites to cute_spritebatch
 		scenes[scene]();
