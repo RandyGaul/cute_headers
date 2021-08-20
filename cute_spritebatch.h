@@ -140,6 +140,8 @@
 		1.04 (08/20/2021) qsort -> mergesort to avoid bugs, optional macro to override
 		                  default sorting routines provided by Kariem, added new func-
 		                  tion `spritebatch_prefetch`
+		1.05 (08/20/2021) sort predicate fixes and an optional sprites_sorter_callback
+                          to allow users to plug their own sprites sorting algorithm
 */
 
 #ifndef SPRITEBATCH_H
@@ -249,6 +251,21 @@ typedef SPRITEBATCH_U64 (generate_texture_handle_fn)(void* pixels, int w, int h,
 // or a particular atlas has not been used for a while, and is ready to be released.
 typedef void (destroy_texture_handle_fn)(SPRITEBATCH_U64 texture_id, void* udata);
 
+// (Optional) If the user provides this callback, cute_spritebatch will call it to sort all of sprites before submit_batch 
+// callback is called. The intention of sorting is to minimize the submit_batch calls. cute_spritebatch
+// provides its own internal sorting function which will be used if the user does not provide this callback
+// Example using std::sort (C++) - Please note the lambda needs to be a non-capturing one.
+//config.sprites_sorter_callback = [](spritebatch_sprite_t* sprites, int count)
+//{
+//	std::sort(sprites, sprites + count,
+//		[](const spritebatch_sprite_t& a, const spritebatch_sprite_t& b) {
+//			if (a.sort_bits < b.sort_bits) return true;
+//			if (a.sort_bits == b.sort_bits && a.texture_id < b.texture_id) return true;
+//			return false;
+//		});
+//};
+typedef void (sprites_sorter_fn)(spritebatch_sprite_t* sprites, int count);
+
 // Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
 // Useful if DLL's are reloaded, or swapped, etc.
 void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_fn* batch_callback, get_pixels_fn* get_pixels_callback, generate_texture_handle_fn* generate_texture_callback, destroy_texture_handle_fn* delete_texture_callback);
@@ -276,6 +293,7 @@ struct spritebatch_config_t
 	get_pixels_fn* get_pixels_callback;
 	generate_texture_handle_fn* generate_texture_callback;
 	destroy_texture_handle_fn* delete_texture_callback;
+	sprites_sorter_fn* sprites_sorter_callback; // (Optional)
 	void* allocator_context;
 };
 
@@ -446,6 +464,7 @@ struct spritebatch_t
 	get_pixels_fn* get_pixels_callback;
 	generate_texture_handle_fn* generate_texture_callback;
 	destroy_texture_handle_fn* delete_texture_callback;
+	sprites_sorter_fn* sprites_sorter_callback;
 	void* mem_ctx;
 	void* udata;
 };
@@ -918,6 +937,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // end of hashtable.h
 
 
+bool sprite_batch_internal_use_scratch_buffer(spritebatch_t* sb)
+{
+	return sb->sprites_sorter_callback == 0;
+}
+
 int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udata)
 {
 	// read config params
@@ -936,6 +960,7 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 	sb->get_pixels_callback = config->get_pixels_callback;
 	sb->generate_texture_callback = config->generate_texture_callback;
 	sb->delete_texture_callback = config->delete_texture_callback;
+	sb->sprites_sorter_callback = config->sprites_sorter_callback;
 	sb->mem_ctx = config->allocator_context;
 	sb->udata = udata;
 
@@ -958,9 +983,17 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 	sb->sprite_count = 0;
 	sb->sprite_capacity = 1024;
 	sb->sprites = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
-	sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
+
+	if (sprite_batch_internal_use_scratch_buffer(sb))
+	{
+		sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
+	}
 	if (!sb->sprites) return 1;
-	if (!sb->sprites_scratch) return 1;
+
+	if (sprite_batch_internal_use_scratch_buffer(sb))
+	{
+		if (!sb->sprites_scratch) return 1;
+	}
 
 	// initialize key buffer (for marking hash table entries for deletion)
 	sb->key_buffer_count = 0;
@@ -984,7 +1017,10 @@ void spritebatch_term(spritebatch_t* sb)
 {
 	SPRITEBATCH_FREE(sb->input_buffer, sb->mem_ctx);
 	SPRITEBATCH_FREE(sb->sprites, sb->mem_ctx);
-	SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
+	if (sb->sprites_scratch)
+	{
+		SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
+	}
 	SPRITEBATCH_FREE(sb->key_buffer, sb->mem_ctx);
 	SPRITEBATCH_FREE(sb->pixel_buffer, ctx->mem_ctx);
 	hashtable_term(&sb->sprites_to_lonely_textures);
@@ -1007,12 +1043,13 @@ void spritebatch_term(spritebatch_t* sb)
 	SPRITEBATCH_MEMSET(sb, 0, sizeof(spritebatch_t));
 }
 
-void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_fn* batch_callback, get_pixels_fn* get_pixels_callback, generate_texture_handle_fn* generate_texture_callback, destroy_texture_handle_fn* delete_texture_callback)
+void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_fn* batch_callback, get_pixels_fn* get_pixels_callback, generate_texture_handle_fn* generate_texture_callback, destroy_texture_handle_fn* delete_texture_callback, sprites_sorter_fn* sprites_sorter_callback)
 {
 	sb->batch_callback = batch_callback;
 	sb->get_pixels_callback = get_pixels_callback;
 	sb->generate_texture_callback = generate_texture_callback;
 	sb->delete_texture_callback = delete_texture_callback;
+	sb->sprites_sorter_callback = sprites_sorter_callback;
 }
 
 void spritebatch_set_default_config(spritebatch_config_t* config)
@@ -1028,6 +1065,7 @@ void spritebatch_set_default_config(spritebatch_config_t* config)
 	config->batch_callback = 0;
 	config->generate_texture_callback = 0;
 	config->delete_texture_callback = 0;
+	config->sprites_sorter_callback = 0;
 	config->allocator_context = 0;
 }
 
@@ -1110,6 +1148,18 @@ void spritebatch_internal_merge_sort(spritebatch_sprite_t* a, spritebatch_sprite
 {
 	SPRITEBATCH_MEMCPY(b, a, sizeof(spritebatch_sprite_t) * n);
 	spritebatch_internal_merge_sort_recurse(b, 0, n, a);
+}
+
+void spritebatch_internal_sort_sprites(spritebatch_t* sb)
+{
+	if (sb->sprites_sorter_callback)
+	{
+		sb->sprites_sorter_callback(sb->sprites, sb->sprite_count);
+	}
+	else
+	{
+		spritebatch_internal_merge_sort(sb->sprites, sb->sprites_scratch, sb->sprite_count);
+	}
 }
 
 static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
@@ -1259,8 +1309,15 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 			sb->sprites = (spritebatch_sprite_t*)new_data;
 			sb->sprite_capacity = new_capacity;
 
-			SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
-			sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
+			if (sb->sprites_scratch)
+			{
+				SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
+			}
+
+			if (sprite_batch_internal_use_scratch_buffer(sb))
+			{
+				sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
+			}
 		}
 		sb->sprites[sb->sprite_count++] = sprite;
 	}
@@ -1318,7 +1375,7 @@ int spritebatch_flush(spritebatch_t* sb)
 	}
 
 	// sort internal sprite buffer and submit batches
-	spritebatch_internal_merge_sort(sb->sprites, sb->sprites_scratch, sb->sprite_count);
+	spritebatch_internal_sort_sprites(sb);
 
 	int min = 0;
 	int max = 0;
