@@ -193,7 +193,7 @@ struct spritebatch_sprite_t
 // Pushes a sprite onto an internal buffer. Does no other logic.
 int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
 
-// Ensures the image associated with your unique `image_id` is loaded up into an atlas. This
+// Ensures the image associated with your unique `image_id` is loaded up into spritebatch. This
 // function pretends to draw a sprite referencing `image_id` but doesn't actually do any
 // drawing at all. Use this function as an optimization to pre-load images you know will be
 // drawn very soon, e.g. prefetch all ten images within a single animation just as it starts
