@@ -138,7 +138,8 @@
 		                  the edges of all textures (useful for certain shader effects)
 		1.03 (08/18/2020) refactored `spritebatch_push` so that sprites can have userdata
 		1.04 (08/20/2021) qsort -> mergesort to avoid bugs, optional macro to override
-		                  default sorting routines provided by Kariem
+		                  default sorting routines provided by Kariem, added new func-
+		                  tion `spritebatch_prefetch`
 */
 
 #ifndef SPRITEBATCH_H
@@ -191,6 +192,13 @@ struct spritebatch_sprite_t
 
 // Pushes a sprite onto an internal buffer. Does no other logic.
 int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
+
+// Ensures the image associated with your unique `image_id` is loaded up into an atlas. This
+// function pretends to draw a sprite referencing `image_id` but doesn't actually do any
+// drawing at all. Use this function as an optimization to pre-load images you know will be
+// drawn very soon, e.g. prefetch all ten images within a single animation just as it starts
+// playing.
+void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h);
 
 // Increments internal timestamps on all textures, for use in `spritebatch_defrag`.
 void spritebatch_tick(spritebatch_t* sb);
@@ -1060,6 +1068,14 @@ int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 	return 1;
 }
 
+int spritebatch_internal_lonely_sprite(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, spritebatch_sprite_t* sprite_out, int skip_missing_textures);
+
+void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
+{
+	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+	if (!atlas_ptr) spritebatch_internal_lonely_sprite(sb, image_id, w, h, NULL, 0);
+}
+
 static int spritebatch_internal_sprite_less_than_or_equal(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
 	if (a->sort_bits <= b->sort_bits) return 1;
@@ -1162,30 +1178,33 @@ spritebatch_internal_lonely_texture_t* spritebatch_internal_lonelybuffer_push(sp
 	return (spritebatch_internal_lonely_texture_t*)hashtable_insert(&sb->sprites_to_lonely_textures, image_id, &texture);
 }
 
-int spritebatch_internal_lonely_sprite(spritebatch_t* sb, spritebatch_internal_sprite_t* s, spritebatch_sprite_t* sprite, int skip_missing_textures)
+int spritebatch_internal_lonely_sprite(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, spritebatch_sprite_t* sprite_out, int skip_missing_textures)
 {
-	spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)hashtable_find(&sb->sprites_to_lonely_textures, s->image_id);
+	spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)hashtable_find(&sb->sprites_to_lonely_textures, image_id);
 
 	if (skip_missing_textures)
 	{
-		if (!tex) spritebatch_internal_lonelybuffer_push(sb, s->image_id, s->w, s->h, 0);
+		if (!tex) spritebatch_internal_lonelybuffer_push(sb, image_id, w, h, 0);
 		return 1;
 	}
 
 	else
 	{
-		if (!tex) tex = spritebatch_internal_lonelybuffer_push(sb, s->image_id, s->w, s->h, 1);
-		else if (tex->texture_id == ~0) tex->texture_id = spritebatch_internal_generate_texture_handle(sb, s->image_id, s->w, s->h);
+		if (!tex) tex = spritebatch_internal_lonelybuffer_push(sb, image_id, w, h, 1);
+		else if (tex->texture_id == ~0) tex->texture_id = spritebatch_internal_generate_texture_handle(sb, image_id, w, h);
 		tex->timestamp = 0;
-		sprite->texture_id = tex->texture_id;
-		sprite->minx = sprite->miny = 0;
-		sprite->maxx = sprite->maxy = 1.0f;
 
-		if (SPRITEBATCH_LONELY_FLIP_Y_AXIS_FOR_UV)
-		{
-			float tmp = sprite->miny;
-			sprite->miny = sprite->maxy;
-			sprite->maxy = tmp;
+		if (sprite_out) {
+			sprite_out->texture_id = tex->texture_id;
+			sprite_out->minx = sprite_out->miny = 0;
+			sprite_out->maxx = sprite_out->maxy = 1.0f;
+
+			if (SPRITEBATCH_LONELY_FLIP_Y_AXIS_FOR_UV)
+			{
+				float tmp = sprite_out->miny;
+				sprite_out->miny = sprite_out->maxy;
+				sprite_out->maxy = tmp;
+			}
 		}
 
 		return 0;
@@ -1227,7 +1246,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 		sprite.maxy = tex->maxy;
 	}
 
-	else skipped_tex = spritebatch_internal_lonely_sprite(sb, s, &sprite, skip_missing_textures);
+	else skipped_tex = spritebatch_internal_lonely_sprite(sb, s->image_id, s->w, s->h, &sprite, skip_missing_textures);
 
 	if (!skipped_tex)
 	{
