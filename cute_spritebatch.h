@@ -1229,7 +1229,7 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 
 	if (!skipped_tex)
 	{
-		if (sb->sprite_count > sb->sprite_capacity) {
+		if (sb->sprite_count >= sb->sprite_capacity) {
 			int new_capacity = sb->sprite_capacity * 2;
 			void* new_data = SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * new_capacity, sb->mem_ctx);
 			if (!new_data) return 0;
