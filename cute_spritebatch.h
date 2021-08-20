@@ -251,17 +251,19 @@ typedef void (destroy_texture_handle_fn)(SPRITEBATCH_U64 texture_id, void* udata
 
 // (Optional) If the user provides this callback, cute_spritebatch will call it to sort all of sprites before submit_batch 
 // callback is called. The intention of sorting is to minimize the submit_batch calls. cute_spritebatch
-// provides its own internal sorting function which will be used if the user does not provide this callback
+// provides its own internal sorting function which will be used if the user does not provide this callback.
+// 
 // Example using std::sort (C++) - Please note the lambda needs to be a non-capturing one.
-//config.sprites_sorter_callback = [](spritebatch_sprite_t* sprites, int count)
-//{
-//	std::sort(sprites, sprites + count,
-//		[](const spritebatch_sprite_t& a, const spritebatch_sprite_t& b) {
-//			if (a.sort_bits < b.sort_bits) return true;
-//			if (a.sort_bits == b.sort_bits && a.texture_id < b.texture_id) return true;
-//			return false;
-//		});
-//};
+// 
+//     config.sprites_sorter_callback = [](spritebatch_sprite_t* sprites, int count)
+//     {
+//         std::sort(sprites, sprites + count,
+//         [](const spritebatch_sprite_t& a, const spritebatch_sprite_t& b) {
+//             if (a.sort_bits < b.sort_bits) return true;
+//             if (a.sort_bits == b.sort_bits && a.texture_id < b.texture_id) return true;
+//             return false;
+//         });
+//     };
 typedef void (sprites_sorter_fn)(spritebatch_sprite_t* sprites, int count);
 
 // Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
@@ -1150,14 +1152,8 @@ void spritebatch_internal_merge_sort(spritebatch_sprite_t* a, spritebatch_sprite
 
 void spritebatch_internal_sort_sprites(spritebatch_t* sb)
 {
-	if (sb->sprites_sorter_callback)
-	{
-		sb->sprites_sorter_callback(sb->sprites, sb->sprite_count);
-	}
-	else
-	{
-		spritebatch_internal_merge_sort(sb->sprites, sb->sprites_scratch, sb->sprite_count);
-	}
+	if (sb->sprites_sorter_callback) sb->sprites_sorter_callback(sb->sprites, sb->sprite_count);
+	else spritebatch_internal_merge_sort(sb->sprites, sb->sprites_scratch, sb->sprite_count);
 }
 
 static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
