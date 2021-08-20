@@ -19,7 +19,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_path](cute_path.h)** | c-string utility functions for Shlwapi.h style path manipulation | 1.01 | C/C++
 **[cute_alloc](cute_alloc.h)** | straight-forward but useful allocator collection | 1.01 | C/C++
 **[cute_math2d](cute_math2d.h)** | 2d vector math and shape routines | 1.0 | C++
-**[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.02 | C/C++
+**[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.04 | C/C++
 **[cute_filewatch](cute_filewatch.h)** | Directory watcher wrapping assetsys.h, for virtual file paths and zip mounting | 1.01 | C/C++
 **[cute_font](cute_font.h)** | Load font atlases, and fill vertex buffers for rasterized fonts, word wrapping, CPU-side clipping, kerning | 1.01 | C/C++
 **[cute_sync](cute_sync.h)** | Collection of practical synchronization primitives, including read/write lock and threadpool/task system | 1.01 | C/C++

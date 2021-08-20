@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_spritebatch.h - v1.02
+	cute_spritebatch.h - v1.04
 
 	To create implementation (the function definitions)
 		#define SPRITEBATCH_IMPLEMENTATION
@@ -137,6 +137,8 @@
 		                  with memory management, added support for pixel padding along
 		                  the edges of all textures (useful for certain shader effects)
 		1.03 (08/18/2020) refactored `spritebatch_push` so that sprites can have userdata
+		1.04 (08/20/2021) qsort -> mergesort to avoid bugs, optional macro to override
+		                  default sorting routines provided by Kariem
 */
 
 #ifndef SPRITEBATCH_H
