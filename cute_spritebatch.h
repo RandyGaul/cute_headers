@@ -45,7 +45,7 @@
 
 		The `spritebatch_defrag` function performs atlas creation and texture management. It
 		should be called periodically. It can be called once per game tick (once per render),
-		or optionally called at a different frequency (once ever N game ticks).
+		or optionally called at a different frequency (once every N game ticks).
 
 	PROS AND CONS:
 
@@ -70,11 +70,13 @@
 		  which implies a RAM hit as well as more things to clog the CPU cache.
 		- If each texture comes from a separate image on-disk, opening individual files on
 		  disk can be very slow. For example on Windows just performing permissions and
-		  related work to open a file is time-consuming.
+		  related work to open a file is time-consuming. This can be mitigated by moving
+		  assets into a single larger file, for example a .zip archive and read from using
+		  a file io abstraction like PHYSFS.
 		- For large numbers of separate images, some file abstraction is necessary to avoid
 		  a large performance hit on opening/closing many individual files. This problem is
 		  *not* solved by cute_spritebatch.h, and instead should be solved by some separate
-		  file abstraction system.
+		  file abstraction system. PHYSFS is a good example of a solid file io abstraciton.
 
 	EXAMPLE USAGE:
 
