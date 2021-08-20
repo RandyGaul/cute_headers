@@ -137,11 +137,9 @@
 		                  with memory management, added support for pixel padding along
 		                  the edges of all textures (useful for certain shader effects)
 		1.03 (08/18/2020) refactored `spritebatch_push` so that sprites can have userdata
-		1.04 (08/20/2021) qsort -> mergesort to avoid bugs, optional macro to override
-		                  default sorting routines provided by Kariem, added new func-
-		                  tion `spritebatch_prefetch`
-		1.05 (08/20/2021) sort predicate fixes and an optional sprites_sorter_callback
-                          to allow users to plug their own sprites sorting algorithm
+		1.04 (08/20/2021) qsort -> mergesort to avoid bugs, optional override
+		                  sprites_sorter_callback sorting routines provided by Kariem,
+		                  added new function `spritebatch_prefetch`
 */
 
 #ifndef SPRITEBATCH_H
