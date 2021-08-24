@@ -984,6 +984,7 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 	sb->sprite_capacity = 1024;
 	sb->sprites = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
 
+	sb->sprites_scratch = 0;
 	if (sprite_batch_internal_use_scratch_buffer(sb))
 	{
 		sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
