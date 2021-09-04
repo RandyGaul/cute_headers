@@ -1123,7 +1123,7 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
 {
 	spritebatch_sprite_t s;
-	CUTE_MEMSET(&s, 0, sizeof(s));
+	SPRITEBATCH_MEMSET(&s, 0, sizeof(s));
 
 	s.w = w;
 	s.h = h;
