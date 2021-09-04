@@ -1125,18 +1125,18 @@ spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_
 	spritebatch_sprite_t s;
 	CUTE_MEMSET(&s, 0, sizeof(s));
 
+	s.w = w;
+	s.h = h;
 	s.c = 1;
 	s.s = 0;
 
 	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
-	if (!atlas_ptr) {
+	if (atlas_ptr) {
 		spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
 		s.texture_id = atlas->texture_id;
 
 		spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, image_id);
 		if (tex) {
-			s.w = tex->w;
-			s.h = tex->h;
 			s.maxx = tex->maxx;
 			s.maxy = tex->maxy;
 			s.minx = tex->minx;
