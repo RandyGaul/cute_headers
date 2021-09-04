@@ -203,7 +203,7 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 // If a match for `image_id` is found, the texture id and uv coordinates are looked up and returned
 // as a sprite instance. This is sometimes useful to render sprites through an external mechanism,
 // such as Dear ImGui.
-spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id);
+spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h);
 
 // Increments internal timestamps on all textures, for use in `spritebatch_defrag`.
 void spritebatch_tick(spritebatch_t* sb);
@@ -1120,7 +1120,7 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 	if (!atlas_ptr) spritebatch_internal_lonely_sprite(sb, image_id, w, h, NULL, 0);
 }
 
-spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id)
+spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h)
 {
 	spritebatch_sprite_t s;
 	CUTE_MEMSET(&s, 0, sizeof(s));
