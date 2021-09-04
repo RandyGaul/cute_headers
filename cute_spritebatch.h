@@ -1140,6 +1140,8 @@ spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_
 			s.minx = tex->minx;
 			s.miny = tex->miny;
 		}
+	} else {
+		spritebatch_internal_lonely_sprite(sb, image_id, w, h, &s, 0);
 	}
 
 	return s;
