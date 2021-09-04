@@ -1133,7 +1133,7 @@ spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_
 		spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
 		spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, image_id);
 		if (tex) {
-			s.texture_id = tex->image_id;
+			s.texture_id = atlas->texture_id;
 			s.w = tex->w;
 			s.h = tex->h;
 			s.maxx = tex->maxx;
