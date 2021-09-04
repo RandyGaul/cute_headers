@@ -200,6 +200,11 @@ int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
 // playing.
 void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h);
 
+// If a match for `image_id` is found, the texture id and uv coordinates are looked up and returned
+// as a sprite instance. This is sometimes useful to render sprites through an external mechanism,
+// such as Dear ImGui.
+spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id);
+
 // Increments internal timestamps on all textures, for use in `spritebatch_defrag`.
 void spritebatch_tick(spritebatch_t* sb);
 
@@ -984,6 +989,7 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 	sb->sprite_capacity = 1024;
 	sb->sprites = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
 
+	sb->sprites_scratch = 0;
 	if (sprite_batch_internal_use_scratch_buffer(sb))
 	{
 		sb->sprites_scratch = (spritebatch_sprite_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_sprite_t) * sb->sprite_capacity, sb->mem_ctx);
@@ -1112,6 +1118,31 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 {
 	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
 	if (!atlas_ptr) spritebatch_internal_lonely_sprite(sb, image_id, w, h, NULL, 0);
+}
+
+spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id)
+{
+	spritebatch_sprite_t s;
+	CUTE_MEMSET(&s, 0, sizeof(s));
+
+	s.c = 1;
+	s.s = 0;
+
+	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+	if (!atlas_ptr) {
+		spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
+		spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, image_id);
+		if (tex) {
+			s.w = tex->w;
+			s.h = tex->h;
+			s.maxx = tex->maxx;
+			s.maxy = tex->maxy;
+			s.minx = tex->minx;
+			s.miny = tex->miny;
+		}
+	}
+
+	return s;
 }
 
 static int spritebatch_internal_sprite_less_than_or_equal(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
