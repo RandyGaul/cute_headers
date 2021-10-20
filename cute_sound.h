@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v1.11
+	cute_sound.h - v1.12
 
 
 	To create implementation (the function definitions)
@@ -73,6 +73,8 @@
 		1.10 (08/24/2019) Introduced plugin interface, reimplemented pitch shifting
 		                  as a plugin, added optional `ctx` to alloc functions
 		1.11 (04/23/2020) scalar SIMD mode and various compiler warning/error fixes
+		1.12 (10/20/2021) removed old and broken assert if driver requested non-
+		                  power of two sample size for mixing updates
 
 
 	CONTRIBUTORS
