@@ -908,10 +908,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 		CUTE_ASEPRITE_ASSERT(bpp == 1);
 		ase->mode = ASE_MODE_INDEXED;
 	}
-	if (s_read_uint32(s) & 1) {
-		// Layer opacity has valid value.
-		// Ok... So?
-	}
+	uint32_t valid_layer_opacity = s_read_uint32(s) & 1;
 	int speed = s_read_uint16(s);
 	s_skip(s, sizeof(uint32_t) * 2); // Spec says skip these bytes, as they're zero'd.
 	ase->transparent_palette_entry_index = s_read_uint8(s);
@@ -963,6 +960,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				int blend_mode = (int)s_read_uint16(s);
 				if (blend_mode) CUTE_ASEPRITE_WARNING("Unknown blend mode encountered.");
 				layer->opacity = s_read_uint8(s) / 255.0f;
+				if (!valid_layer_opacity) layer->opacity = 1.0f;
 				s_skip(s, 3); // For future use (set to zero).
 				layer->name = s_read_string(s);
 				last_udata = &layer->udata;
