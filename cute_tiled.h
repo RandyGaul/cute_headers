@@ -318,6 +318,7 @@ struct cute_tiled_layer_t
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
 	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	int tintcolor;                       // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
 	cute_tiled_string_t image;           // An image filepath. Used if layer is type `imagelayer`.
 	int visible;                         // 0 or 1. Whether layer is shown or hidden in editor.
@@ -2091,6 +2092,12 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 		case 8489814081865549564U: // transparentcolor
 			cute_tiled_expect(m, '"');
 			cute_tiled_read_hex_int(m, &layer->transparentcolor);
+			cute_tiled_expect(m, '"');
+			break;
+
+		case 1211175872446544425U: // tintcolor
+			cute_tiled_expect(m, '"');
+			cute_tiled_read_hex_int(m, &layer->tintcolor);
 			cute_tiled_expect(m, '"');
 			break;
 
