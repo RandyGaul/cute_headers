@@ -422,6 +422,15 @@ int path_compact(const char* path, char* out, int n)
 		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "."));
 		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(pop, ""));
 
+		path = "../../file.ext";
+		path_pop_ext(path, out, ext);
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "../../file"));
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(ext, "ext"));
+
+		path_pop(path, out, pop);
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "../.."));
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(pop, "file.ext"));
+
 		path = "asdf/file.ext";
 		path_name_of_folder_im_in(path, out);
 		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "asdf"));
