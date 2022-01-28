@@ -303,10 +303,10 @@ CUTE_C2_API int c2RaytoCapsule(c2Ray A, c2Capsule B, c2Raycast* out);
 CUTE_C2_API int c2RaytoPoly(c2Ray A, const c2Poly* B, const c2x* bx_ptr, c2Raycast* out);
 
 // manifold generation
-// these functions are (generally) slower than the boolean versions, but will compute one
-// or two points that represent the plane of contact. This information is
-// is usually needed to resolve and prevent shapes from colliding. If no coll
-// ision occured the count member of the manifold struct is set to 0.
+// These functions are (generally) slower than the boolean versions, but will compute one
+// or two points that represent the plane of contact. This information is usually needed
+// to resolve and prevent shapes from colliding. If no collision occured the count member
+// of the manifold struct is set to 0.
 CUTE_C2_API void c2CircletoCircleManifold(c2Circle A, c2Circle B, c2Manifold* m);
 CUTE_C2_API void c2CircletoAABBManifold(c2Circle A, c2AABB B, c2Manifold* m);
 CUTE_C2_API void c2CircletoCapsuleManifold(c2Circle A, c2Capsule B, c2Manifold* m);
