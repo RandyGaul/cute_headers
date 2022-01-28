@@ -176,7 +176,8 @@ typedef struct c2v
 	float y;
 } c2v;
 
-// 2d rotation composed of cos/sin pair
+// 2d rotation composed of cos/sin pair for a single angle
+// We use two floats as a small optimization to avoid computing sin/cos unnecessarily
 typedef struct c2r
 {
 	float c;
