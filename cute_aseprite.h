@@ -852,7 +852,8 @@ static ase_color_t s_blend(ase_color_t src, ase_color_t dst, uint8_t opacity)
 		g = dst.g + (src.g - dst.g) * src.a / a;
 		b = dst.b + (src.b - dst.b) * src.a / a;
 	}
-	return (ase_color_t) { (uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a };
+    ase_color_t ret = { (uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a };
+	return ret;
 }
 
 static int s_min(int a, int b)
