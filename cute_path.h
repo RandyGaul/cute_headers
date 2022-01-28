@@ -141,7 +141,7 @@ int path_pop_ext(const char* path, char* out, char* ext)
 		last_period = p;
 	}
 
-	int len = (int)(last_period-path);
+	int len = (int)(last_period - path);
 	if (len > CUTE_PATH_MAX_PATH - 1) len = CUTE_PATH_MAX_PATH - 1;
 
 	if (out != NULL)
