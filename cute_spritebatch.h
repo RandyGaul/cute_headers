@@ -76,7 +76,7 @@
 		- For large numbers of separate images, some file abstraction is necessary to avoid
 		  a large performance hit on opening/closing many individual files. This problem is
 		  *not* solved by cute_spritebatch.h, and instead should be solved by some separate
-		  file abstraction system. PHYSFS is a good example of a solid file io abstraciton.
+		  file abstraction system. PHYSFS is a good example of a solid file io abstraction.
 
 	EXAMPLE USAGE:
 
@@ -176,7 +176,7 @@ struct spritebatch_sprite_t
 	float minx, miny; // u coordinate -- This value is for internal use only -- do not set.
 	float maxx, maxy; // v coordinate -- This value is for internal use only -- do not set.
 
-	// This field is *completely optional* -- just set it to zero if you don't wanter to bother.
+	// This field is *completely optional* -- just set it to zero if you don't want to bother.
 	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
 	int sort_bits;
 
@@ -273,7 +273,7 @@ typedef void (sprites_sorter_fn)(spritebatch_sprite_t* sprites, int count);
 
 // Sets all function pointers originally defined in the `config` struct when calling `spritebatch_init`.
 // Useful if DLL's are reloaded, or swapped, etc.
-void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_fn* batch_callback, get_pixels_fn* get_pixels_callback, generate_texture_handle_fn* generate_texture_callback, destroy_texture_handle_fn* delete_texture_callback);
+void spritebatch_reset_function_ptrs(spritebatch_t* sb, submit_batch_fn* batch_callback, get_pixels_fn* get_pixels_callback, generate_texture_handle_fn* generate_texture_callback, destroy_texture_handle_fn* delete_texture_callback, sprites_sorter_fn* sprites_sorter_callback);
 
 // Initializes a set of good default paramaters. The users must still set
 // the four callbacks inside of `config`.
@@ -941,6 +941,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 // end of hashtable.h
 
+#include <stdbool.h>
 
 bool sprite_batch_internal_use_scratch_buffer(spritebatch_t* sb)
 {
