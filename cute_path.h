@@ -110,38 +110,46 @@ int path_is_slash(char c)
 
 int path_pop_ext(const char* path, char* out, char* ext)
 {
-	int initial_skipped_periods = 0;
-	while (*path == '.')
+	if (out != NULL)
+		*out = '\0';
+	if (ext != NULL)
+		*ext = '\0';
+
+	// skip leading dots
+	const char *p = path;
+	while (*p == '.')
+		++p;
+
+	const char *last_slash = path;
+	const char *last_period = NULL;
+	while (*p != '\0')
 	{
-		++path;
-		++initial_skipped_periods;
+		if (path_is_slash(*p))
+			last_slash = p;
+		else if (*p == '.')
+			last_period = p;
+		++p;
 	}
 
-	const char* period = path;
-	char c;
-	while ((c = *period++)) if (c == '.') break;
+	if (last_period != NULL && last_period > last_slash)
+	{
+		if (ext != NULL)
+			CUTE_PATH_STRNCPY(ext, last_period + 1, CUTE_PATH_MAX_EXT);
+	}
+	else
+	{
+		last_period = p;
+	}
 
-	int has_period = c == '.';
-	int len = (int)(period - path) - 1 + initial_skipped_periods;
+	int len = (int)(last_period - path);
 	if (len > CUTE_PATH_MAX_PATH - 1) len = CUTE_PATH_MAX_PATH - 1;
 
-	if (out)
+	if (out != NULL)
 	{
-		CUTE_PATH_STRNCPY(out, path - initial_skipped_periods, len);
-		out[len] = 0;
+		CUTE_PATH_STRNCPY(out, path, len);
+		out[len] = '\0';
 	}
 
-	if (ext)
-	{
-		if (has_period)
-		{
-			CUTE_PATH_STRNCPY(ext, path - initial_skipped_periods + len + 1, CUTE_PATH_MAX_EXT);
-		}
-		else
-		{
-			ext[0] = 0;
-		}
-	}
 	return len;
 }
 
@@ -413,6 +421,15 @@ int path_compact(const char* path, char* out, int n)
 		path_pop(path, out, pop);
 		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "."));
 		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(pop, ""));
+
+		path = "../../file.ext";
+		path_pop_ext(path, out, ext);
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "../../file"));
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(ext, "ext"));
+
+		path_pop(path, out, pop);
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(out, "../.."));
+		CUTE_PATH_EXPECT(!CUTE_PATH_STRCMP(pop, "file.ext"));
 
 		path = "asdf/file.ext";
 		path_name_of_folder_im_in(path, out);
