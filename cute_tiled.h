@@ -2391,7 +2391,11 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			break;
 
 		case 8196820454517111669U: // version
+			if (*m->in == '"')
+				m->in++;
 			cute_tiled_read_float(m, &tileset->version);
+			if (*m->in == '"')
+				m->in++;
 			break;
 
 		case 8368542207491637236U: // properties
