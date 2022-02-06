@@ -1042,6 +1042,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					ase->color_profile.icc_profile_data_length = s_read_uint32(s);
 					ase->color_profile.icc_profile_data = CUTE_ASEPRITE_ALLOC(ase->color_profile.icc_profile_data_length, mem_ctx);
 					CUTE_ASEPRITE_MEMCPY(ase->color_profile.icc_profile_data, s->in, ase->color_profile.icc_profile_data_length);
+					s->in += ase->color_profile.icc_profile_data_length;
 				}
 			}	break;
 
@@ -1141,6 +1142,9 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				s_skip(s, (int)chunk_size);
 				break;
 			}
+
+			uint32_t size_read = (uint32_t)(s->in - chunk_start);
+			CUTE_ASSERT(size_read == chunk_size);
 		}
 	}
 
