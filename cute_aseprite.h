@@ -44,7 +44,7 @@
 		1.00 (08/25/2020) initial release
 		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
 		1.02 (02/05/2022) fixed icc profile parse bug, support transparent pal-
-		                  ette index
+		                  ette index, can parse 1.3 files (no tileset support)
 */
 
 /*
@@ -104,7 +104,7 @@ void cute_aseprite_free(ase_t* aseprite);
 
 #define CUTE_ASEPRITE_MAX_LAYERS (64)
 #define CUTE_ASEPRITE_MAX_SLICES (128)
-#define CUTE_ASEPRITE_MAX_PALETTE_ENTRIES (256)
+#define CUTE_ASEPRITE_MAX_PALETTE_ENTRIES (1024)
 #define CUTE_ASEPRITE_MAX_TAGS (256)
 
 #include <stdint.h>
@@ -164,7 +164,7 @@ struct ase_layer_t
 	ase_layer_flags_t flags;
 	ase_layer_type_t type;
 	const char* name;
-	int child_level;
+	ase_layer_t* parent;
 	float opacity;
 	ase_udata_t udata;
 };
@@ -214,6 +214,7 @@ struct ase_tag_t
 	ase_animation_direction_t loop_animation_direction;
 	uint8_t r, g, b;
 	const char* name;
+	ase_udata_t udata;
 };
 
 struct ase_slice_t
@@ -933,6 +934,10 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	CUTE_ASEPRITE_MEMSET(ase->frames, 0, sizeof(ase_frame_t) * (size_t)ase->frame_count);
 
 	ase_udata_t* last_udata = NULL;
+	int was_on_tags = 0;
+	int tag_index = 0;
+
+	ase_layer_t* layer_stack[CUTE_ASEPRITE_MAX_LAYERS];
 
 	// Parse all chunks in the .aseprite file.
 	for (int i = 0; i < ase->frame_count; ++i) {
@@ -961,7 +966,12 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				ase_layer_t* layer = ase->layers + ase->layer_count++;
 				layer->flags = (ase_layer_flags_t)s_read_uint16(s);
 				layer->type = (ase_layer_type_t)s_read_uint16(s);
-				layer->child_level = (int)s_read_uint16(s);
+				layer->parent = NULL;
+				int child_level = (int)s_read_uint16(s);
+				layer_stack[child_level] = layer;
+				if (child_level) {
+					layer->parent = layer_stack[child_level - 1];
+				}
 				s_skip(s, sizeof(uint16_t)); // Default layer width in pixels (ignored).
 				s_skip(s, sizeof(uint16_t)); // Default layer height in pixels (ignored).
 				int blend_mode = (int)s_read_uint16(s);
@@ -1066,11 +1076,13 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					tag.name = s_read_string(s);
 					ase->tags[k] = tag;
 				}
+				was_on_tags = 1;
 			}	break;
 
 			case 0x2019: // Palette chunk.
 			{
 				ase->palette.entry_count = (int)s_read_uint32(s);
+				CUTE_ASEPRITE_ASSERT(ase->palette.entry_count <= CUTE_ASEPRITE_MAX_PALETTE_ENTRIES);
 				int first_index = (int)s_read_uint32(s);
 				int last_index = (int)s_read_uint32(s);
 				s_skip(s, 8); // For future (set to zero).
@@ -1092,7 +1104,11 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2020: // Udata chunk.
 			{
-				CUTE_ASEPRITE_ASSERT(last_udata);
+				CUTE_ASEPRITE_ASSERT(last_udata || was_on_tags);
+				if (was_on_tags && !last_udata) {
+					CUTE_ASEPRITE_ASSERT(tag_index < ase->tag_count);
+					last_udata = &ase->tags[tag_index++].udata;
+				}
 				int flags = (int)s_read_uint32(s);
 				if (flags & 1) {
 					last_udata->has_text = 1;
@@ -1161,8 +1177,20 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			if (!(cel->layer->flags & ASE_LAYER_FLAGS_VISIBLE)) {
 				continue;
 			}
+			if (cel->layer->parent && !(cel->layer->parent->flags & ASE_LAYER_FLAGS_VISIBLE)) {
+				continue;
+			}
 			while (cel->is_linked) {
-				cel = ase->frames[cel->linked_frame_index].cels + j;
+				ase_frame_t* frame = ase->frames + cel->linked_frame_index;
+				int found = 0;
+				for (int k = 0; k < frame->cel_count; ++k) {
+					if (frame->cels[k].layer == cel->layer) {
+						cel = frame->cels + k;
+						found = 1;
+						break;
+					}
+				}
+				CUTE_ASEPRITE_ASSERT(found);
 			}
 			void* src = cel->pixels;
 			uint8_t opacity = (uint8_t)(cel->opacity * cel->layer->opacity * 255.0f);
