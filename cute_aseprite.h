@@ -883,7 +883,10 @@ static ase_color_t s_color(ase_t* ase, void* src, int index)
 		CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
 		uint8_t palette_index = ((uint8_t*)src)[index];
 		if (palette_index == ase->transparent_palette_entry_index) {
-			result = { 0, 0, 0, 0 };
+			result.r = 0;
+			result.g = 0;
+			result.b = 0;
+			result.a = 0;
 		} else {
 			result = ase->palette.entries[palette_index].color;
 		}
@@ -1163,7 +1166,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			}
 
 			uint32_t size_read = (uint32_t)(s->in - chunk_start);
-			CUTE_ASSERT(size_read == chunk_size);
+			CUTE_ASEPRITE_ASSERT(size_read == chunk_size);
 		}
 	}
 
