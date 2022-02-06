@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_c2.h - v1.09
+	cute_c2.h - v1.10
 
 	To create implementation (the function definitions)
 		#define CUTE_C2_IMPLEMENTATION
@@ -100,6 +100,7 @@
 		                  radius from c2GJK, fixed various bugs in capsule to poly
 		                  manifold, did a pass on all docs
 		1.09 (07/27/2019) Added c2Inflate - to inflate/deflate shapes for c2TOI
+		1.10 (02/05/2022) Implemented GJK-Raycast for c2TOI (from E. Catto's Box2D)
 
 
 	Contributors
@@ -356,6 +357,16 @@ typedef struct c2GJKCache
 // cute c2 function, and simply render the geometry larger on-screen by scaling it up.
 CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
 
+// Stores results of a time of impact calculation done by `c2TOI`.
+struct c2TOIResult
+{
+	int hit;        // 1 if shapes were touching at the TOI, 0 if they never hit.
+	float toi;      // The time of impact between two shapes.
+	c2v n;          // Surface normal from shape A to B at the time of impact.
+	c2v p;          // Point of contact between shapes A and B at time of impact.
+	int iterations; // Number of iterations the solver underwent.
+};
+
 // This is an advanced function, intended to be used by people who know what they're doing.
 //
 // Computes the time of impact from shape A and shape B. The velocity of each shape is provided
@@ -385,7 +396,7 @@ CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const v
 //    See the function `c2Inflate` for some more details.
 // 4. Compute the collision manifold between the inflated shapes (for example, use c2PolytoPolyManifold).
 // 5. Gently push the shapes apart. This will give the next call to c2TOI some breathing room.
-CUTE_C2_API float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations);
+CUTE_C2_API c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius);
 
 // Inflating a shape.
 //
@@ -730,7 +741,6 @@ static C2_INLINE c2v c2L(c2Simplex* s)
 	{
 	case 1: return s->a.p;
 	case 2: return C2_BARY2(p);
-	case 3: return C2_BARY3(p);
 	default: return c2V(0, 0);
 	}
 }
@@ -1072,17 +1082,10 @@ float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_T
 	return dist;
 }
 
-static C2_INLINE float c2Step(float t, const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, c2v* a, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, c2v* b, int use_radius, c2GJKCache* cache)
-{
-	c2x ax = *ax_ptr;
-	c2x bx = *bx_ptr;
-	ax.p = c2Add(ax.p, c2Mulvs(vA, t));
-	bx.p = c2Add(bx.p, c2Mulvs(vB, t));
-	float d = c2GJK(A, typeA, &ax, B, typeB, &bx, a, b, use_radius, NULL, cache);
-	return d;
-}
-
-float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius, int* iterations)
+// Referenced from Box2D's b2ShapeCast function.
+// GJK-Raycast algorithm by Gino van den Bergen.
+// "Smooth Mesh Contacts with GJK" in Game Physics Pearls, 2010.
+c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v vB, int use_radius)
 {
 	float t = 0;
 	c2x ax;
@@ -1091,31 +1094,89 @@ float c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const void*
 	else ax = *ax_ptr;
 	if (!bx_ptr) bx = c2xIdentity();
 	else bx = *bx_ptr;
-	c2v a, b;
-	c2GJKCache cache;
-	cache.count = 0;
-	float d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
-	c2v v = c2Sub(vB, vA);
 
-	int iters = 0;
-	float eps = 1.0e-6f;
-	while (d > eps && t < 1)
+	c2Proxy pA;
+	c2Proxy pB;
+	c2MakeProxy(A, typeA, &pA);
+	c2MakeProxy(B, typeB, &pB);
+
+	c2Simplex s;
+	s.count = 0;
+	c2sv* verts = &s.a;
+
+	c2v rv = c2Sub(vB, vA);
+	int iA = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, c2Neg(rv)));
+	c2v sA = c2Mulxv(ax, pA.verts[iA]);
+	int iB = c2Support(pB.verts, pB.count, c2MulrvT(bx.r, rv));
+	c2v sB = c2Mulxv(bx, pB.verts[iB]);
+	c2v v = c2Sub(sA, sB);
+
+	float rA = pA.radius;
+	float rB = pB.radius;
+	float radius = rA + rB;
+	float tolerance = 1.0e-4f;
+
+	c2TOIResult result;
+	result.hit = false;
+	result.n = c2V(0, 0);
+	result.p = c2V(0, 0);
+	result.toi = 1.0f;
+	result.iterations = 0;
+
+	while (result.iterations < 20 && c2Len(v) - radius > tolerance)
 	{
-		++iters;
-		float velocity_bound = c2Abs(c2Dot(c2Norm(c2Sub(b, a)), v));
-		if (!velocity_bound) return 1;
-		float delta = d / velocity_bound;
-		float t0 = t;
-		float t1 = t + delta;
-		if (t0 == t1) break;
-		t = t1;
-		d = c2Step(t, A, typeA, &ax, vA, &a, B, typeB, &bx, vB, &b, use_radius, &cache);
+		iA = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, c2Neg(v)));
+		sA = c2Mulxv(ax, pA.verts[iA]);
+		iB = c2Support(pB.verts, pB.count, c2MulrvT(bx.r, v));
+		sB = c2Mulxv(bx, pB.verts[iB]);
+		c2v p = c2Sub(sA, sB);
+		v = c2Norm(v);
+		float vp = c2Dot(v, p) - radius;
+		float vr = c2Dot(v, rv);
+		if (vp > t * vr) {
+			if (vr <= 0) return result;
+			t = vp / vr;
+			if (t > 1.0f) return result;
+			result.n = c2Neg(v);
+			s.count = 0;
+		}
+
+		c2sv* sv = verts + s.count;
+		sv->iA = iB;
+		sv->sA = c2Add(sB, c2Mulvs(rv, t));
+		sv->iB = iA;
+		sv->sB = sA;
+		sv->p = c2Sub(sv->sB, sv->sA);
+		sv->u = 1.0f;
+		s.count += 1;
+
+		switch (s.count)
+		{
+		case 2: c22(&s); break;
+		case 3: c23(&s); break;
+		}
+
+		if (s.count == 3) {
+			return result;
+		}
+
+		v = c2L(&s);
+		result.iterations++;
 	}
 
-	t = t >= 1 ? 1 : t;
-	if (iterations) *iterations = iters;
+	if (result.iterations == 0) {
+		result.hit = false;
+	} else {
+		result.n = c2SafeNorm(c2Neg(v));
+		int i = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, result.n));
+		c2v p = c2Mulxv(ax, pA.verts[i]);
+		if (use_radius) p = c2Add(c2Add(p, c2Mulvs(result.n, rA)), c2Mulvs(vA, t));
+		result.p = p;
+		result.toi = t;
+		result.hit = true;
+	}
 
-	return t;
+	return result;
 }
 
 int c2Hull(c2v* verts, int count)
