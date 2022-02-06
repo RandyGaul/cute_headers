@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_aseprite.h - v1.01
+	cute_aseprite.h - v1.02
 
 	To create implementation (the function definitions)
 		#define CUTE_ASEPRITE_IMPLEMENTATION
@@ -43,6 +43,8 @@
 	Revision history:
 		1.00 (08/25/2020) initial release
 		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
+		1.02 (02/05/2022) fixed icc profile parse bug, support transparent pal-
+		                  ette index
 */
 
 /*

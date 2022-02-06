@@ -268,9 +268,9 @@ int path_compact(const char* path, char* out, int n)
 	if (n <= 6) return 0;
 
 	const char* sep = "...";
-	const int seplen = strlen(sep);
+	const int seplen = (int)strlen(sep);
 
-	int pathlen = strlen(path);
+	int pathlen = (int)strlen(path);
 	out[0] = 0;
 
 	if (pathlen <= n)
@@ -289,7 +289,7 @@ int path_compact(const char* path, char* out, int n)
 	} while (!path_is_slash(path[i]) && i > 0);
 
 	const char* back = path + i;
-	int backlen = strlen(back);
+	int backlen = (int)strlen(back);
 
 	// No path separator was found or the first character was one
 	if (pathlen == backlen)

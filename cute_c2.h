@@ -544,7 +544,7 @@ int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 		case C2_TYPE_AABB:    return c2CircletoAABB(*(c2Circle*)A, *(c2AABB*)B);
 		case C2_TYPE_CAPSULE: return c2CircletoCapsule(*(c2Circle*)A, *(c2Capsule*)B);
 		case C2_TYPE_POLY:    return c2CircletoPoly(*(c2Circle*)A, (const c2Poly*)B, bx);
-		default:         return 0;
+		default:              return 0;
 		}
 		break;
 
@@ -555,7 +555,7 @@ int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 		case C2_TYPE_AABB:    return c2AABBtoAABB(*(c2AABB*)A, *(c2AABB*)B);
 		case C2_TYPE_CAPSULE: return c2AABBtoCapsule(*(c2AABB*)A, *(c2Capsule*)B);
 		case C2_TYPE_POLY:    return c2AABBtoPoly(*(c2AABB*)A, (const c2Poly*)B, bx);
-		default:         return 0;
+		default:              return 0;
 		}
 		break;
 
@@ -566,7 +566,7 @@ int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 		case C2_TYPE_AABB:    return c2AABBtoCapsule(*(c2AABB*)B, *(c2Capsule*)A);
 		case C2_TYPE_CAPSULE: return c2CapsuletoCapsule(*(c2Capsule*)A, *(c2Capsule*)B);
 		case C2_TYPE_POLY:    return c2CapsuletoPoly(*(c2Capsule*)A, (const c2Poly*)B, bx);
-		default:         return 0;
+		default:              return 0;
 		}
 		break;
 
@@ -577,7 +577,7 @@ int c2Collided(const void* A, const c2x* ax, C2_TYPE typeA, const void* B, const
 		case C2_TYPE_AABB:    return c2AABBtoPoly(*(c2AABB*)B, (const c2Poly*)A, ax);
 		case C2_TYPE_CAPSULE: return c2CapsuletoPoly(*(c2Capsule*)B, (const c2Poly*)A, ax);
 		case C2_TYPE_POLY:    return c2PolytoPoly((const c2Poly*)A, ax, (const c2Poly*)B, bx);
-		default:         return 0;
+		default:              return 0;
 		}
 		break;
 
