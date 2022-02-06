@@ -326,7 +326,7 @@ struct cute_rw_lock_t
 		// 0x0400=Windows NT 4.0, 0x0500=Windows 2000, 0x0501=Windows XP, 0x0502=Windows Server 2003, 0x0600=Windows Vista,
 		// 0x0601=Windows 7, 0x0602=Windows 8, 0x0603=Windows 8.1, 0x0A00=Windows 10
 	#endif
-	#include <windows.h>
+	#include <Windows.h>
 #elif defined(CUTE_SYNC_POSIX)
 	#include <pthread.h>
 	#include <semaphore.h>
@@ -356,7 +356,7 @@ struct cute_rw_lock_t
 #if !defined(CUTE_SYNC_YIELD)
 	#ifdef CUTE_SYNC_WINDOWS
 		#define WIN32_LEAN_AND_MEAN
-		#include <windows.h> // winnt
+		#include <Windows.h> // winnt
 		#define CUTE_SYNC_YIELD YieldProcessor
 	#elif defined(CUTE_SYNC_POSIX)
 		#include <sched.h>
@@ -880,7 +880,8 @@ void cute_cv_destroy(cute_cv_t* cv)
 cute_semaphore_t cute_semaphore_create(int initial_count)
 {
 	cute_semaphore_t semaphore;
-	sem_init((sem_t*)&semaphore.id, 0, (unsigned)initial_count);
+	semaphore.id = CUTE_ALLOC(sizeof(sem_t), NULL);
+	sem_init((sem_t*)semaphore.id, 0, (unsigned)initial_count);
 	semaphore.count.i = initial_count;
 	return semaphore;
 }
@@ -897,7 +898,7 @@ int cute_semaphore_try(cute_semaphore_t* semaphore)
 
 int cute_semaphore_wait(cute_semaphore_t* semaphore)
 {
-	return !sem_try((sem_t*)semaphore->id);
+	return !sem_wait((sem_t*)semaphore->id);
 }
 
 int cute_semaphore_value(cute_semaphore_t* semaphore)
@@ -910,6 +911,7 @@ int cute_semaphore_value(cute_semaphore_t* semaphore)
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
 	sem_destroy((sem_t*)semaphore->id);
+	CUTE_FREE(semaphore->id);
 }
 
 #elif defined(__APPLE__)
