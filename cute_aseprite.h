@@ -852,7 +852,7 @@ static ase_color_t s_blend(ase_color_t src, ase_color_t dst, uint8_t opacity)
 		g = dst.g + (src.g - dst.g) * src.a / a;
 		b = dst.b + (src.b - dst.b) * src.a / a;
 	}
-    ase_color_t ret = { (uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a };
+	ase_color_t ret = { (uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)a };
 	return ret;
 }
 
@@ -879,7 +879,11 @@ static ase_color_t s_color(ase_t* ase, void* src, int index)
 	} else {
 		CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
 		uint8_t palette_index = ((uint8_t*)src)[index];
-		result = ase->palette.entries[palette_index].color;
+		if (palette_index == ase->transparent_palette_entry_index) {
+			result = { 0, 0, 0, 0 };
+		} else {
+			result = ase->palette.entries[palette_index].color;
+		}
 	}
 	return result;
 }
