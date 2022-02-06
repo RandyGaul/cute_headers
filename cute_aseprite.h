@@ -1098,6 +1098,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					} else {
 						entry.color_name = NULL;
 					}
+					CUTE_ASEPRITE_ASSERT(k < CUTE_ASEPRITE_MAX_PALETTE_ENTRIES);
 					ase->palette.entries[k] = entry;
 				}
 			}	break;
