@@ -1114,6 +1114,11 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 	float rA = pA.radius;
 	float rB = pB.radius;
 	float radius = rA + rB;
+	if (!use_radius) {
+		rA = 0;
+		rB = 0;
+		radius = 0;
+	}
 	float tolerance = 1.0e-4f;
 
 	c2TOIResult result;
@@ -1170,7 +1175,7 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 		result.n = c2SafeNorm(c2Neg(v));
 		int i = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, result.n));
 		c2v p = c2Mulxv(ax, pA.verts[i]);
-		if (use_radius) p = c2Add(c2Add(p, c2Mulvs(result.n, rA)), c2Mulvs(vA, t));
+		p = c2Add(c2Add(p, c2Mulvs(result.n, rA)), c2Mulvs(vA, t));
 		result.p = p;
 		result.toi = t;
 		result.hit = true;
