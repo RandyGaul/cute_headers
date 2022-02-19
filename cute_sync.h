@@ -911,7 +911,7 @@ int cute_semaphore_value(cute_semaphore_t* semaphore)
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
 	sem_destroy((sem_t*)semaphore->id);
-	CUTE_SYNC_FREE(semaphore->id);
+	CUTE_SYNC_FREE(semaphore->id, NULL);
 }
 
 #elif defined(__APPLE__)
