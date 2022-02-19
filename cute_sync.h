@@ -880,7 +880,7 @@ void cute_cv_destroy(cute_cv_t* cv)
 cute_semaphore_t cute_semaphore_create(int initial_count)
 {
 	cute_semaphore_t semaphore;
-	semaphore.id = CUTE_ALLOC(sizeof(sem_t), NULL);
+	semaphore.id = CUTE_SYNC_ALLOC(sizeof(sem_t), NULL);
 	sem_init((sem_t*)semaphore.id, 0, (unsigned)initial_count);
 	semaphore.count.i = initial_count;
 	return semaphore;
@@ -911,7 +911,7 @@ int cute_semaphore_value(cute_semaphore_t* semaphore)
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
 	sem_destroy((sem_t*)semaphore->id);
-	CUTE_FREE(semaphore->id);
+	CUTE_SYNC_FREE(semaphore->id);
 }
 
 #elif defined(__APPLE__)
