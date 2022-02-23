@@ -668,8 +668,9 @@ static int strpool_embedded_internal_add_block( strpool_embedded_t* pool, int si
     {
     if( pool->block_count >= pool->block_capacity )
         {
+        strpool_embedded_internal_block_t* new_blocks;
         pool->block_capacity *= 2;
-        strpool_embedded_internal_block_t* new_blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
+        new_blocks = (strpool_embedded_internal_block_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
             pool->block_capacity * sizeof( *pool->blocks ) );
         STRPOOL_EMBEDDED_ASSERT( new_blocks );
         STRPOOL_EMBEDDED_MEMCPY( new_blocks, pool->blocks, pool->block_count * sizeof( *pool->blocks ) );
@@ -737,6 +738,7 @@ void strpool_embedded_init( strpool_embedded_t* pool, strpool_embedded_config_t 
 
 void strpool_embedded_term( strpool_embedded_t* pool )
     {
+    int i;
 #if 0
     // Debug statistics
     printf( "\n\n" );
@@ -777,7 +779,7 @@ void strpool_embedded_term( strpool_embedded_t* pool )
     printf( "\n\n" );
 #endif
 
-    for( int i = 0; i < pool->block_count; ++i ) STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks[ i ].data );
+    for( i = 0; i < pool->block_count; ++i ) STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks[ i ].data );
     STRPOOL_EMBEDDED_FREE( pool->memctx, pool->blocks );
     STRPOOL_EMBEDDED_FREE( pool->memctx, pool->handles );
     STRPOOL_EMBEDDED_FREE( pool->memctx, pool->entries );
@@ -821,7 +823,8 @@ static strpool_embedded_internal_entry_t* strpool_embedded_internal_get_entry( s
 
 static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_embedded_t const* pool, char const* string, int length )
     {
-    for( int i = 0; i < pool->block_count; ++i )
+    int i;
+    for( i = 0; i < pool->block_count; ++i )
         {
         strpool_embedded_internal_block_t* block = &pool->blocks[ i ];
         // Check if string comes from pool
@@ -829,8 +832,9 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_em
             {
             STRPOOL_EMBEDDED_U32* ptr = (STRPOOL_EMBEDDED_U32*) string;
             int stored_length = (int)( *( ptr - 1 ) ); // Length is stored immediately before string
+            STRPOOL_EMBEDDED_U32 hash;
             if( stored_length != length || string[ length ] != '\0' ) return 0; // Invalid string
-            STRPOOL_EMBEDDED_U32 hash = *( ptr - 2 ); // Hash is stored before the length field
+            hash = *( ptr - 2 ); // Hash is stored before the length field
             return hash;
             }
         }
@@ -842,10 +846,11 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_find_in_blocks( strpool_em
 static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_calculate_hash( char const* string, int length, int ignore_case )
     {
     STRPOOL_EMBEDDED_U32 hash = 5381U;
+    int i;
 
     if( ignore_case)
         {
-        for( int i = 0; i < length; ++i )
+        for( i = 0; i < length; ++i )
             {
             char c = string[ i ];
             c = ( c <= 'z' && c >= 'a' ) ? c - ( 'a' - 'A' ) : c;
@@ -854,7 +859,7 @@ static STRPOOL_EMBEDDED_U32 strpool_embedded_internal_calculate_hash( char const
         }
     else
         {
-        for( int i = 0; i < length; ++i )
+        for( i = 0; i < length; ++i )
             {
             char c = string[ i ];
             hash = ( ( hash << 5U ) + hash) ^ c;
@@ -870,6 +875,7 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
     {
     int old_capacity = pool->hash_capacity;
     strpool_embedded_internal_hash_slot_t* old_table = pool->hash_table;
+    int i;
 
     pool->hash_capacity *= 2;
 
@@ -878,7 +884,7 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
     STRPOOL_EMBEDDED_ASSERT( pool->hash_table );
     STRPOOL_EMBEDDED_MEMSET( pool->hash_table, 0, pool->hash_capacity * sizeof( *pool->hash_table ) );
 
-    for( int i = 0; i < old_capacity; ++i )
+    for( i = 0; i < old_capacity; ++i )
         {
         STRPOOL_EMBEDDED_U32 hash_key = old_table[ i ].hash_key;
         if( hash_key )
@@ -901,8 +907,9 @@ static void strpool_embedded_internal_expand_hash_table( strpool_embedded_t* poo
 
 static void strpool_embedded_internal_expand_entries( strpool_embedded_t* pool )
     {
+    strpool_embedded_internal_entry_t* new_entries;
     pool->entry_capacity *= 2;
-    strpool_embedded_internal_entry_t* new_entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
+    new_entries = (strpool_embedded_internal_entry_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->entry_capacity * sizeof( *pool->entries ) );
     STRPOOL_EMBEDDED_ASSERT( new_entries );
     STRPOOL_EMBEDDED_MEMCPY( new_entries, pool->entries, pool->entry_count * sizeof( *pool->entries ) );
@@ -913,8 +920,9 @@ static void strpool_embedded_internal_expand_entries( strpool_embedded_t* pool )
 
 static void strpool_embedded_internal_expand_handles( strpool_embedded_t* pool )
     {
+    strpool_embedded_internal_handle_t* new_handles;
     pool->handle_capacity *= 2;
-    strpool_embedded_internal_handle_t* new_handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
+    new_handles = (strpool_embedded_internal_handle_t*) STRPOOL_EMBEDDED_MALLOC( pool->memctx,
         pool->handle_capacity * sizeof( *pool->handles ) );
     STRPOOL_EMBEDDED_ASSERT( new_handles );
     STRPOOL_EMBEDDED_MEMCPY( new_handles, pool->handles, pool->handle_count * sizeof( *pool->handles ) );
@@ -925,12 +933,15 @@ static void strpool_embedded_internal_expand_handles( strpool_embedded_t* pool )
 
 static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* pool, int size, int* alloc_size )
     {
+    char* data;
+    int i;
+    int offset;
     if( size < (int)sizeof( strpool_embedded_internal_free_block_t ) ) size = sizeof( strpool_embedded_internal_free_block_t );
     if( size < pool->min_data_size ) size = pool->min_data_size;
     size = (int)strpool_embedded_internal_pow2ceil( (STRPOOL_EMBEDDED_U32)size );
 
     // Try to find a large enough free slot in existing blocks
-    for( int i = 0; i < pool->block_count; ++i )
+    for( i = 0; i < pool->block_count; ++i )
         {
         int free_list = pool->blocks[ i ].free_list;
         int prev_list = -1;
@@ -962,7 +973,7 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
         }
 
     // Use current block, if enough space left
-    int offset = (int) ( pool->blocks[ pool->current_block ].tail - pool->blocks[ pool->current_block ].data );
+    offset = (int) ( pool->blocks[ pool->current_block ].tail - pool->blocks[ pool->current_block ].data );
     if( size <= pool->blocks[ pool->current_block ].capacity - offset )
         {
         char* data = pool->blocks[ pool->current_block ].tail;
@@ -973,7 +984,7 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
 
     // Allocate a new block
     pool->current_block = strpool_embedded_internal_add_block( pool, size > pool->block_size ? size : pool->block_size );
-    char* data = pool->blocks[ pool->current_block ].tail;
+    data = pool->blocks[ pool->current_block ].tail;
     pool->blocks[ pool->current_block ].tail += size;
     *alloc_size = size;
     return data;
@@ -982,22 +993,32 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
 
 STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char const* string, int length )
     {
+    STRPOOL_EMBEDDED_U32 hash;
+    int base_slot;
+    int base_count;
+    int slot;
+    int first_free;
+    int handle_index;
+    strpool_embedded_internal_entry_t* entry;
+    int data_size;
+    char* data;
     if( !string || length < 0 ) return 0;
 
-    STRPOOL_EMBEDDED_U32 hash = strpool_embedded_internal_find_in_blocks( pool, string, length );
+    hash = strpool_embedded_internal_find_in_blocks( pool, string, length );
     // If no stored hash, calculate it from data
     if( !hash ) hash = strpool_embedded_internal_calculate_hash( string, length, pool->ignore_case );
 
     // Return handle to existing string, if it is already in pool
-    int base_slot = (int)( hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
-    int base_count = pool->hash_table[ base_slot ].base_count;
-    int slot = base_slot;
-    int first_free = slot;
+    base_slot = (int)( hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
+    base_count = pool->hash_table[ base_slot ].base_count;
+    slot = base_slot;
+    first_free = slot;
     while( base_count > 0 )
         {
         STRPOOL_EMBEDDED_U32 slot_hash = pool->hash_table[ slot ].hash_key;
+        int slot_base;
         if( slot_hash == 0 && pool->hash_table[ first_free ].hash_key != 0 ) first_free = slot;
-        int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
+        slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
         if( slot_base == base_slot )
             {
             STRPOOL_EMBEDDED_ASSERT( base_count > 0 );
@@ -1034,8 +1055,9 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
         while( base_count )
             {
             STRPOOL_EMBEDDED_U32 slot_hash = pool->hash_table[ slot ].hash_key;
+            int slot_base;
             if( slot_hash == 0 && pool->hash_table[ first_free ].hash_key != 0 ) first_free = slot;
-            int slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
+            slot_base = (int)( slot_hash & (STRPOOL_EMBEDDED_U32)( pool->hash_capacity - 1 ) );
             if( slot_base == base_slot )  --base_count;
             slot = ( slot + 1 ) & ( pool->hash_capacity - 1 );
             }
@@ -1053,8 +1075,6 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
     pool->hash_table[ slot ].hash_key = hash;
     pool->hash_table[ slot ].entry_index = pool->entry_count;
     ++pool->hash_table[ base_slot ].base_count;
-
-    int handle_index;
 
     if( pool->handle_count < pool->handle_capacity )
         {
@@ -1079,11 +1099,11 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
 
     pool->handles[ handle_index ].entry_index = pool->entry_count;
 
-    strpool_embedded_internal_entry_t* entry = &pool->entries[ pool->entry_count ];
+    entry = &pool->entries[ pool->entry_count ];
     ++pool->entry_count;
 
-    int data_size = length + 1 + (int) ( 2 * sizeof( STRPOOL_EMBEDDED_U32 ) );
-    char* data = strpool_embedded_internal_get_data_storage( pool, data_size, &data_size );
+    data_size = length + 1 + (int) ( 2 * sizeof( STRPOOL_EMBEDDED_U32 ) );
+    data = strpool_embedded_internal_get_data_storage( pool, data_size, &data_size );
     entry->hash_slot = slot;
     entry->handle_index = handle_index;
     entry->data = data;
@@ -1230,8 +1250,8 @@ const char* cute_tiled_error_file = NULL; 	// The filepath of the file being par
 
 	void cute_tiled_warning(const char* warning, int line)
 	{
-		cute_tiled_error_cline = line;
 		const char *error_file = cute_tiled_error_file ? cute_tiled_error_file : "MEMORY";
+		cute_tiled_error_cline = line;
 		printf("WARNING (cute_tiled.h:%i): %s (%s:%i)\n", cute_tiled_error_cline, warning, error_file, cute_tiled_error_line);
 	}
 #endif
@@ -1265,6 +1285,7 @@ struct cute_tiled_map_internal_t
 
 void* cute_tiled_alloc(cute_tiled_map_internal_t* m, int size)
 {
+	void* data;
 	if (size > m->page_size) return NULL; // Should never happen.
 	if (m->bytes_left_on_page < size)
 	{
@@ -1276,7 +1297,7 @@ void* cute_tiled_alloc(cute_tiled_map_internal_t* m, int size)
 		m->bytes_left_on_page = m->page_size;
 	}
 
-	void* data = ((char*)m->pages->data) + (m->page_size - m->bytes_left_on_page);
+	data = ((char*)m->pages->data) + (m->page_size - m->bytes_left_on_page);
 	m->bytes_left_on_page -= size;
 	return data;
 }
@@ -1298,10 +1319,10 @@ CUTE_TILED_U64 cute_tiled_FNV1a(const void* buf, int len)
 
 static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path, int* size, void* mem_ctx)
 {
-	CUTE_TILED_UNUSED(mem_ctx);
 	char* data = 0;
 	CUTE_TILED_FILE* fp = CUTE_TILED_FOPEN(path, "rb");
 	int sz = 0;
+	CUTE_TILED_UNUSED(mem_ctx);
 
 	if (fp)
 	{
@@ -1320,12 +1341,14 @@ static char* cute_tiled_read_file_to_memory_and_null_terminate(const char* path,
 
 cute_tiled_map_t* cute_tiled_load_map_from_file(const char* path, void* mem_ctx)
 {
+	int size;
+	void* file;
+	cute_tiled_map_t* map;
 	cute_tiled_error_file = path;
 
-	int size;
-	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
+	file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
 	if (!file) CUTE_TILED_WARNING("Unable to find map file.");
-	cute_tiled_map_t* map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
+	map = cute_tiled_load_map_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
 
 	cute_tiled_error_file = NULL;
@@ -1416,9 +1439,10 @@ static int cute_tiled_skip_object_internal(cute_tiled_map_internal_t* m)
 	cute_tiled_expect(m, '{');
 
 	while (depth) {
+		char c;
 		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
 
-		char c = cute_tiled_next(m);
+		c = cute_tiled_next(m);
 
 		switch(c)
 		{
@@ -1453,9 +1477,10 @@ static int cute_tiled_skip_array_internal(cute_tiled_map_internal_t* m)
 
 	while (depth)
 	{
+		char c;
 		CUTE_TILED_CHECK(m->in <= m->end, "Attempted to read passed input buffer (is this a valid JSON file?).");
 
-		char c = cute_tiled_next(m);
+		c = cute_tiled_next(m);
 
 		switch(c)
 		{
@@ -1491,8 +1516,9 @@ static int cute_tiled_read_string_internal(cute_tiled_map_internal_t* m)
 
 	while (!done)
 	{
+		char c;
 		CUTE_TILED_CHECK(count < CUTE_TILED_INTERNAL_BUFFER_MAX, "String exceeded max length of CUTE_TILED_INTERNAL_BUFFER_MAX.");
-		char c = cute_tiled_string_next(m);
+		c = cute_tiled_string_next(m);
 
 		switch (c)
 		{
@@ -1546,6 +1572,8 @@ cute_tiled_err:
 
 static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* out)
 {
+	char* end;
+	unsigned long long int val;
 	switch (cute_tiled_peak(m))
 	{
 	case '#':
@@ -1554,14 +1582,13 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 
 	case '0':
 	{
+		char c;
 		cute_tiled_next(m);
-		char c = cute_tiled_next(m);
+		c = cute_tiled_next(m);
 		CUTE_TILED_CHECK((c == 'x') | (c == 'X'), "Expected 'x' or 'X' while parsing a hex number.");
 	}	break;
 	}
 
-	char* end;
-	unsigned long long int val;
 	val = strtoull(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
@@ -1636,8 +1663,9 @@ int cute_tiled_read_csv_integers_internal(cute_tiled_map_internal_t* m, int* cou
 		cute_tiled_read_int(m, &val);
 		if (count == capacity)
 		{
+			int* new_integers;
 			capacity *= 2;
-			int* new_integers = (int*)CUTE_TILED_ALLOC(capacity * sizeof(int), m->mem_ctx);
+			new_integers = (int*)CUTE_TILED_ALLOC(capacity * sizeof(int), m->mem_ctx);
 			CUTE_TILED_MEMCPY(new_integers, integers, sizeof(int) * count);
 			CUTE_TILED_FREE(integers, m->mem_ctx);
 			integers = new_integers;
@@ -1698,11 +1726,13 @@ int cute_tiled_read_vertex_array_internal(cute_tiled_map_internal_t* m, int* out
 
 	while (cute_tiled_peak(m) != ']')
 	{
+		int swap;
+		float x = 0, y = 0;
 		cute_tiled_expect(m, '{');
 		cute_tiled_expect(m, '"');
 
-		int swap = cute_tiled_try(m, 'x') ? 0 : 1;
-		float x = 0, y = 0;
+		swap = cute_tiled_try(m, 'x') ? 0 : 1;
+
 		cute_tiled_expect(m, '"');
 		cute_tiled_expect(m, ':');
 		cute_tiled_read_float(m, swap ? &y : &x);
@@ -1717,8 +1747,9 @@ int cute_tiled_read_vertex_array_internal(cute_tiled_map_internal_t* m, int* out
 
 		if (vert_count == capacity)
 		{
+			float* new_verts;
 			capacity *= 2;
-			float* new_verts = (float*)CUTE_TILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
+			new_verts = (float*)CUTE_TILED_ALLOC(sizeof(float) * capacity * 2, m->mem_ctx);
 			CUTE_TILED_MEMCPY(new_verts, verts, sizeof(float) * 2 * vert_count);
 			CUTE_TILED_FREE(verts, m->mem_ctx);
 			verts = new_verts;
@@ -1772,9 +1803,11 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 
 	while (cute_tiled_peak(m) != ']')
 	{
+		cute_tiled_property_t prop;
+		char type_char;
+		char c;
 		cute_tiled_expect(m, '{');
 
-		cute_tiled_property_t prop;
 		prop.type = CUTE_TILED_PROPERTY_NONE;
 
 		// Read in the property name.
@@ -1784,12 +1817,12 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		// Read in the property type. The value type is deduced while parsing, this is only used for float because the JSON format omits decimals on round floats.
 		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_expect(m, '"');
-		char type_char = cute_tiled_next(m);
+		type_char = cute_tiled_next(m);
 
 		// Skip extraneous JSON information and go find the actual value data.
 		cute_tiled_skip_until_after(m, ':');
 
-		char c = cute_tiled_peak(m);
+		c = cute_tiled_peak(m);
 
 		if (((c == 't') | (c == 'T')) | ((c == 'f') | (c == 'F')))
 		{
@@ -1870,8 +1903,9 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 
 		if (count == capacity)
 		{
+			cute_tiled_property_t* new_props;
 			capacity *= 2;
-			cute_tiled_property_t* new_props = (cute_tiled_property_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_property_t), m->mem_ctx);
+			new_props = (cute_tiled_property_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_property_t), m->mem_ctx);
 			CUTE_TILED_MEMCPY(new_props, props, sizeof(cute_tiled_property_t) * count);
 			CUTE_TILED_FREE(props, m->mem_ctx);
 			props = new_props;
@@ -1908,9 +1942,10 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 
 	while (cute_tiled_peak(m) != '}')
 	{
+		CUTE_TILED_U64 h;
 		cute_tiled_read_string(m);
 		cute_tiled_expect(m, ':');
-		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
 		switch (h)
 		{
@@ -2007,9 +2042,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 	while (cute_tiled_peak(m) != '}')
 	{
+		CUTE_TILED_U64 h;
 		cute_tiled_read_string(m);
 		cute_tiled_expect(m, ':');
-		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
 		switch (h)
 		{
@@ -2157,9 +2193,8 @@ int cute_tiled_read_animation_frames_internal(cute_tiled_map_internal_t* m, cute
 
 	while (cute_tiled_peak(m) != ']')
 	{
-		cute_tiled_expect(m, '{');
-
 		cute_tiled_frame_t frame;
+		cute_tiled_expect(m, '{');
 
 		// Read in the duration and tileid.
 		cute_tiled_skip_until_after(m, ':');
@@ -2170,8 +2205,9 @@ int cute_tiled_read_animation_frames_internal(cute_tiled_map_internal_t* m, cute
 
 		if (count == capacity)
 		{
+			cute_tiled_frame_t* new_frames;
 			capacity *= 2;
-			cute_tiled_frame_t* new_frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
+			new_frames = (cute_tiled_frame_t*)CUTE_TILED_ALLOC(capacity * sizeof(cute_tiled_frame_t), m->mem_ctx);
 			CUTE_TILED_MEMCPY(new_frames, frames, sizeof(cute_tiled_frame_t) * count);
 			CUTE_TILED_FREE(frames, m->mem_ctx);
 			frames = new_frames;
@@ -2207,9 +2243,10 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
+		CUTE_TILED_U64 h;
 		cute_tiled_read_string(m);
 		cute_tiled_expect(m, ':');
-		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
 		switch (h)
 		{
@@ -2279,9 +2316,10 @@ int cute_tiled_read_point_internal(cute_tiled_map_internal_t* m, int* point_x, i
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
+		CUTE_TILED_U64 h;
 		cute_tiled_read_string(m);
 		cute_tiled_expect(m, ':');
-		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
 		switch (h)
 		{
@@ -2338,9 +2376,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 
 	while (cute_tiled_peak(m) != '}')
 	{
+		CUTE_TILED_U64 h;
 		cute_tiled_read_string(m);
 		cute_tiled_expect(m, ':');
-		CUTE_TILED_U64 h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
 
 		switch (h)
 		{
@@ -2624,7 +2663,8 @@ static CUTE_TILED_INLINE void cute_tiled_deintern_string(cute_tiled_map_internal
 
 static void cute_tiled_deintern_properties(cute_tiled_map_internal_t* m, cute_tiled_property_t* properties, int property_count)
 {
-	for (int i = 0; i < property_count; ++i)
+	int i;
+	for (i = 0; i < property_count; ++i)
 	{
 		cute_tiled_property_t* p = properties + i;
 		cute_tiled_deintern_string(m, &p->name);
@@ -2636,13 +2676,14 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 {
 	while (layer)
 	{
+		cute_tiled_object_t* object;
 		cute_tiled_deintern_string(m, &layer->draworder);
 		cute_tiled_deintern_string(m, &layer->name);
 		cute_tiled_deintern_string(m, &layer->type);
 		cute_tiled_deintern_string(m, &layer->image);
 		cute_tiled_deintern_properties(m, layer->properties, layer->property_count);
 
-		cute_tiled_object_t* object = layer->objects;
+		object = layer->objects;
 		while (object)
 		{
 			cute_tiled_deintern_string(m, &object->name);
@@ -2659,6 +2700,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 
 static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_tiled_tileset_t* tileset)
 {
+	cute_tiled_tile_descriptor_t* tile_descriptor;
 	cute_tiled_deintern_string(m, &tileset->image);
 	cute_tiled_deintern_string(m, &tileset->name);
 	cute_tiled_deintern_string(m, &tileset->type);
@@ -2666,7 +2708,7 @@ static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_
 	cute_tiled_deintern_string(m, &tileset->tiledversion);
 	cute_tiled_deintern_string(m, &tileset->objectalignment);
 	cute_tiled_deintern_properties(m, tileset->properties, tileset->property_count);
-	cute_tiled_tile_descriptor_t* tile_descriptor = tileset->tiles;
+	tile_descriptor = tileset->tiles;
 	while (tile_descriptor)
 	{
 		cute_tiled_deintern_string(m, &tile_descriptor->image);
@@ -2678,27 +2720,29 @@ static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_
 
 static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 {
+	cute_tiled_tileset_t* tileset;
+	cute_tiled_layer_t* layer;
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);
 	cute_tiled_deintern_string(m, &m->map.type);
 	cute_tiled_deintern_properties(m, m->map.properties, m->map.property_count);
 
-	cute_tiled_tileset_t* tileset = m->map.tilesets;
+	tileset = m->map.tilesets;
 	while (tileset)
 	{
 		cute_tiled_patch_tileset_strings(m, tileset);
 		tileset = tileset->next;
 	}
 
-	cute_tiled_layer_t* layer = m->map.layers;
+	layer = m->map.layers;
 	cute_tiled_deintern_layer(m, layer);
 }
 
 static void cute_tiled_free_objects(cute_tiled_object_t* objects, void* mem_ctx)
 {
-	CUTE_TILED_UNUSED(mem_ctx);
 	cute_tiled_object_t* object = objects;
+	CUTE_TILED_UNUSED(mem_ctx);
 	while (object)
 	{
 		if (object->properties) CUTE_TILED_FREE(object->properties, mem_ctx);
@@ -2709,8 +2753,8 @@ static void cute_tiled_free_objects(cute_tiled_object_t* objects, void* mem_ctx)
 
 static void cute_tiled_free_layers(cute_tiled_layer_t* layers, void* mem_ctx)
 {
-	CUTE_TILED_UNUSED(mem_ctx);
 	cute_tiled_layer_t* layer = layers;
+	CUTE_TILED_UNUSED(mem_ctx);
 	while (layer)
 	{
 		if (layer->data) CUTE_TILED_FREE(layer->data, mem_ctx);
@@ -2723,16 +2767,19 @@ static void cute_tiled_free_layers(cute_tiled_layer_t* layers, void* mem_ctx)
 
 static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 {
+	cute_tiled_tileset_t* tileset;
+	cute_tiled_page_t* page;
 	strpool_embedded_term(&m->strpool);
 
 	cute_tiled_free_layers(m->map.layers, m->mem_ctx);
 	if (m->map.properties) CUTE_TILED_FREE(m->map.properties, m->mem_ctx);
 
-	cute_tiled_tileset_t* tileset = m->map.tilesets;
+	tileset = m->map.tilesets;
 	while (tileset)
 	{
+		cute_tiled_tile_descriptor_t* desc;
 		if (tileset->properties) CUTE_TILED_FREE(tileset->properties, m->mem_ctx);
-		cute_tiled_tile_descriptor_t* desc = tileset->tiles;
+		desc = tileset->tiles;
 		while (desc)
 		{
 			if (desc->properties) CUTE_TILED_FREE(desc->properties, m->mem_ctx);
@@ -2747,7 +2794,7 @@ static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 	// cute_tiled_read_vertex_array
 	// cute_tiled_read_properties
 
-	cute_tiled_page_t* page = m->pages;
+	page = m->pages;
 	while (page)
 	{
 		cute_tiled_page_t* next = page->next;
@@ -2777,6 +2824,7 @@ void cute_tiled_reverse_layers(cute_tiled_map_t* map)
 
 static cute_tiled_map_internal_t* cute_tiled_map_internal_alloc_internal(void* memory, int size_in_bytes, void* mem_ctx)
 {
+	strpool_embedded_config_t config;
 	cute_tiled_map_internal_t* m = (cute_tiled_map_internal_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_map_internal_t), mem_ctx);
 	CUTE_TILED_MEMSET(m, 0, sizeof(cute_tiled_map_internal_t));
 	m->in = (char*)memory;
@@ -2787,7 +2835,7 @@ static cute_tiled_map_internal_t* cute_tiled_map_internal_alloc_internal(void* m
 	m->pages = (cute_tiled_page_t*)CUTE_TILED_ALLOC(sizeof(cute_tiled_page_t) + m->page_size, mem_ctx);
 	m->pages->next = 0;
 	m->pages->data = m->pages + 1;
-	strpool_embedded_config_t config = strpool_embedded_default_config;
+	config = strpool_embedded_default_config;
 	config.memctx = mem_ctx;
 	strpool_embedded_init(&m->strpool, &config);
 	return m;
@@ -2795,11 +2843,14 @@ static cute_tiled_map_internal_t* cute_tiled_map_internal_alloc_internal(void* m
 
 cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_in_bytes, void* mem_ctx)
 {
+	cute_tiled_map_internal_t* m;
+	cute_tiled_layer_t* layer;
+	cute_tiled_tileset_t* tileset;
 	cute_tiled_error_line = 1;
 
-	cute_tiled_map_internal_t* m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
-	cute_tiled_layer_t* layer = m->map.layers;
-	cute_tiled_tileset_t* tileset = m->map.tilesets;
+	m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
+	layer = m->map.layers;
+	tileset = m->map.tilesets;
 	cute_tiled_expect(m, '{');
 	while (cute_tiled_peak(m) != '}')
 	{
@@ -2839,12 +2890,14 @@ void cute_tiled_free_map(cute_tiled_map_t* map)
 
 cute_tiled_tileset_t* cute_tiled_load_external_tileset(const char* path, void* mem_ctx)
 {
+	int size;
+	void* file;
+	cute_tiled_tileset_t* tileset;
 	cute_tiled_error_file = path;
 
-	int size;
-	void* file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
+	file = cute_tiled_read_file_to_memory_and_null_terminate(path, &size, mem_ctx);
 	if (!file) CUTE_TILED_WARNING("Unable to find external tileset file.");
-	cute_tiled_tileset_t* tileset = cute_tiled_load_external_tileset_from_memory(file, size, mem_ctx);
+	tileset = cute_tiled_load_external_tileset_from_memory(file, size, mem_ctx);
 	CUTE_TILED_FREE(file, mem_ctx);
 
 	cute_tiled_error_file = NULL;
