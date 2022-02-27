@@ -1258,6 +1258,14 @@ const char* cute_tiled_error_file = NULL; 	// The filepath of the file being par
 
 #include <stdlib.h>
 
+#if !defined(CUTE_TILED_STRTOLL)
+	#define CUTE_TILED_STRTOLL strtoll
+#endif
+
+#if !defined(CUTE_TILED_STRTOULL)
+	#define CUTE_TILED_STRTOULL strtoull
+#endif
+
 typedef struct cute_tiled_page_t cute_tiled_page_t;
 typedef struct cute_tiled_map_internal_t cute_tiled_map_internal_t;
 
@@ -1554,7 +1562,7 @@ cute_tiled_err:
 static int cute_tiled_read_int_internal(cute_tiled_map_internal_t* m, int* out)
 {
 	char* end;
-	int val = (int)strtoll(m->in, &end, 10);
+	int val = (int)CUTE_TILED_STRTOLL(m->in, &end, 10);
 	if (*end == '.') strtod(m->in, &end); // If we're reading a float as an int, then just skip the decimal part.
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
@@ -1589,7 +1597,7 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 	}	break;
 	}
 
-	val = strtoull(m->in, &end, 16);
+	val = CUTE_TILED_STRTOULL(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 	m->in = end;
 	*out = (int)val;
