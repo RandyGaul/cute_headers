@@ -1228,9 +1228,15 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	#endif
 #endif
 
-#if !defined(CUTE_TILED_STDIO)
+#if defined(CUTE_TILED_SNPRINTF) || defined(CUTE_TILED_STDIO)
 	#include <stdio.h>  // snprintf, fopen, fclose, etc.
+#endif
+
+#if !defined(CUTE_TILED_SNPRINTF)
 	#define CUTE_TILED_SNPRINTF snprintf
+#endif
+
+#if !defined(CUTE_TILED_STDIO)
 	#define CUTE_TILED_SEEK_SET SEEK_SET
 	#define CUTE_TILED_SEEK_END SEEK_END
 	#define CUTE_TILED_FILE FILE
