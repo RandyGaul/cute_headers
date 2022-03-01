@@ -40,6 +40,7 @@
 		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
 		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
+		mupf              1.04 - Adding support for C89
 */
 
 /*
@@ -172,7 +173,6 @@ typedef struct cute_tiled_layer_t cute_tiled_layer_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
 typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
-typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
 typedef union cute_tiled_string_t cute_tiled_string_t;
 
@@ -1227,9 +1227,15 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	#endif
 #endif
 
-#if !defined(CUTE_TILED_STDIO)
+#if defined(CUTE_TILED_SNPRINTF) || defined(CUTE_TILED_STDIO)
 	#include <stdio.h>  // snprintf, fopen, fclose, etc.
+#endif
+
+#if !defined(CUTE_TILED_SNPRINTF)
 	#define CUTE_TILED_SNPRINTF snprintf
+#endif
+
+#if !defined(CUTE_TILED_STDIO)
 	#define CUTE_TILED_SEEK_SET SEEK_SET
 	#define CUTE_TILED_SEEK_END SEEK_END
 	#define CUTE_TILED_FILE FILE
