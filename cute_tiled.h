@@ -32,6 +32,7 @@
 		1.04 (04/30/2020) support for Tiled 1.3.3 with the help of aganm
 		1.05 (07/19/2020) support for Tiled 1.4.1 and tileset tile animations
 		1.06 (04/05/2021) support for Tiled 1.5.0 parallax
+		1.07 (03/01/2022) support for c89
 */
 
 /*
@@ -40,7 +41,7 @@
 		dpeter99          1.03 - Help with updating to Tiled 1.2.1 JSON format
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
 		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
-		mupf              1.04 - Adding support for C89
+		mupf              1.07 - Adding support for C89
 */
 
 /*
