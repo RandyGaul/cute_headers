@@ -358,14 +358,14 @@ typedef struct c2GJKCache
 CUTE_C2_API float c2GJK(const void* A, C2_TYPE typeA, const c2x* ax_ptr, const void* B, C2_TYPE typeB, const c2x* bx_ptr, c2v* outA, c2v* outB, int use_radius, int* iterations, c2GJKCache* cache);
 
 // Stores results of a time of impact calculation done by `c2TOI`.
-struct c2TOIResult
+typedef struct c2TOIResult
 {
 	int hit;        // 1 if shapes were touching at the TOI, 0 if they never hit.
 	float toi;      // The time of impact between two shapes.
 	c2v n;          // Surface normal from shape A to B at the time of impact.
 	c2v p;          // Point of contact between shapes A and B at time of impact.
 	int iterations; // Number of iterations the solver underwent.
-};
+} c2TOIResult;
 
 // This is an advanced function, intended to be used by people who know what they're doing.
 //
