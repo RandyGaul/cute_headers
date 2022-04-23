@@ -244,6 +244,11 @@ typedef struct cn_endpoint_t
  * connect token and see the `address_list` of servers to try and connect to. The client then
  * sends the connect token to one of these servers to start the connection handshake. If the
  * handshake completes successfully, the client will connect to the server.
+ *
+ * The connect token is protected by an AEAD primitive (https://en.wikipedia.org/wiki/Authenticated_encryption),
+ * which means the token cannot be modified or forged as long as the `shared_secret_key` is
+ * not leaked. In the event your secret key is accidentally leaked, you can always roll a
+ * new one and distribute it to your webservice and game servers.
  */
 cn_error_t cn_generate_connect_token(
 	uint64_t application_id,                          // A unique number to identify your game, can be whatever value you like.
