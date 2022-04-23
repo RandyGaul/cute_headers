@@ -5,6 +5,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 | library | description | latest version| language(s)
 |---------|-------------|---------------|-------------
 **[cute_c2](cute_c2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation, shape cast/sweep test, raycasts | 1.10 | C/C++
+**[cute_net](cute_net.h)** | Net library for games requiring an optional reliability layer of UDP with state-of-the-art security out-of-the-box | 1.00 | C/C++
 **[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.07 | C/C++
 **[cute_aseprite](cute_aseprite.h)** | Parses .ase/.aseprite files into a compact and convenient struct collection | 1.02 | C/C++
 **[cute_sound](cute_sound.h)** | Load/play/loop/pitch (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time, done via plugin, see [cute_sound_pitch_plugin](cute_sound_pitch_plugin.h)) | 1.12 | C/C++
