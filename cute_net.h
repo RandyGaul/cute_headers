@@ -124,18 +124,21 @@
 
 		The function `cn_generate_connect_token` can be used to generate connect tokens for the web service to distribute.
 
-		Here is a full example of a client and server, where the client sends a string to the
-		server to print to the console.
-
-			Client example: https://gist.github.com/RandyGaul/e45def05353e244055dde11e7a04ac71
-			Server example: https://gist.github.com/RandyGaul/f3b3c0864d760c37de74be2a573c52e5
-
 		The web service distributes connect tokens. Cute net does not provide an implementation
 		of a web service because there are many different good solutions out there already. The
 		goal is to only respond and provide connect tokens to clients who have authenticated
 		themselves over a secure connection with the web service, such as through HTTPS. For
 		example: this is how cute net can be used to filter out players who have no purchased the
 		game or signed up with an account.
+
+
+	EXAMPLES
+	
+		Here is a full example of a client and server, where the client sends a string to the
+		server to print to the console.
+
+			Client example: https://gist.github.com/RandyGaul/e45def05353e244055dde11e7a04ac71
+			Server example: https://gist.github.com/RandyGaul/f3b3c0864d760c37de74be2a573c52e5
 
 
 	UNIT TESTS
