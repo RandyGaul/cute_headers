@@ -239,7 +239,11 @@ typedef struct cn_endpoint_t
  * a server. You can use this function within whenever a validated client wants to play.
  * 
  * It's recommended to setup a web service specifically for allowing players to authenticate
- * themselves (login). Once done, the web service can 
+ * themselves (login). Once authenticated, the webservice can call this function and hand
+ * the connect token to the client. The client can then read the public section of the
+ * connect token and see the `address_list` of servers to try and connect to. The client then
+ * sends the connect token to one of these servers to start the connection handshake. If the
+ * handshake completes successfully, the client will connect to the server.
  */
 cn_error_t cn_generate_connect_token(
 	uint64_t application_id,                          // A unique number to identify your game, can be whatever value you like.
