@@ -14,12 +14,9 @@
 
 		Cute net provides you a way to securely connect clients to servers, and
 		implements all the machinery for sending both reliable-in-order and
-		fire-and-forget (UDP style) packets.
-
-		Security is baked in with connect tokens, all over UDP with optional support
-		for reliable-in-order packets. This makes cute net great for many kinds of
-		games, ranging from games who just want TCP-style packets (such as a turn-
-		based RPG), to fast paced platformer or fighting games.
+		fire-and-forget (UDP style) packets. This is great for many kinds of games,
+		ranging from games who just want TCP-style packets (such as a turn-based
+		RPG), to fast paced platformer or fighting games.
 
 
 	FEATURES
@@ -237,19 +234,30 @@ typedef struct cn_endpoint_t
 
 #define CN_CONNECT_TOKEN_SIZE 1114
 
+/**
+ * Generates a connect token, useable by clients to authenticate and securely connect to
+ * a server. You can use this function within whenever a validated client wants to play.
+ * 
+ * It's recommended to setup a web service specifically for allowing players to authenticate
+ * themselves (login). Once done, the web service can 
+ */
 cn_error_t cn_generate_connect_token(
-	uint64_t application_id,
-	uint64_t creation_timestamp,
-	const cn_crypto_key_t* client_to_server_key,
-	const cn_crypto_key_t* server_to_client_key,
-	uint64_t expiration_timestamp,
-	uint32_t handshake_timeout,
-	int address_count,
-	const char** address_list,
-	uint64_t client_id,
-	const uint8_t* user_data,
-	const cn_crypto_sign_secret_t* shared_secret_key,
-	uint8_t* token_ptr_out // Pointer to your buffer, should be `CN_CONNECT_TOKEN_SIZE` bytes large.
+	uint64_t application_id,                          // A unique number to identify your game, can be whatever value you like.
+	                                                  // This must be the same number as in `cn_client_make` and `cn_server_create`.
+	uint64_t creation_timestamp,                      // A unix timestamp of the current time.
+	const cn_crypto_key_t* client_to_server_key,      // A unique key for this connect token for the client to encrypt packets, and server to
+	                                                  // decrypt packets. This can be generated with `cn_crypto_generate_key` on your web service.
+	const cn_crypto_key_t* server_to_client_key,      // A unique key for this connect token for the server to encrypt packets, and the client to
+	                                                  // decrypt packets. This can be generated with `cn_crypto_generate_key` on your web service.
+	uint64_t expiration_timestamp,                    // A unix timestamp for when this connect token expires and becomes invalid.
+	uint32_t handshake_timeout,                       // The number of seconds the connection will stay alive during the handshake process before
+	                                                  // the client and server reject the handshake process as failed.
+	int address_count,                                // Must be from 1 to 32 (inclusive). The number of addresses in `address_list`.
+	const char** address_list,                        // A list of game servers the client can try connecting to, of length `address_count`.
+	uint64_t client_id,                               // The unique client identifier.
+	const uint8_t* user_data,                         // Optional buffer of data of `CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE` (256) bytes. Can be NULL.
+	const cn_crypto_sign_secret_t* shared_secret_key, // Only your webservice and game servers know this key.
+	uint8_t* token_ptr_out                            // Pointer to your buffer, should be `CN_CONNECT_TOKEN_SIZE` bytes large.
 );
 
 //--------------------------------------------------------------------------------------------------
