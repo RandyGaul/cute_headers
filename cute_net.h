@@ -236,7 +236,7 @@ typedef struct cn_endpoint_t
 
 /**
  * Generates a connect token, useable by clients to authenticate and securely connect to
- * a server. You can use this function within whenever a validated client wants to play.
+ * a server. You can use this function whenever a validated client wants to join your game servers.
  * 
  * It's recommended to setup a web service specifically for allowing players to authenticate
  * themselves (login). Once authenticated, the webservice can call this function and hand
