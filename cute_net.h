@@ -252,7 +252,7 @@ typedef struct cn_endpoint_t
  */
 cn_error_t cn_generate_connect_token(
 	uint64_t application_id,                          // A unique number to identify your game, can be whatever value you like.
-	                                                  // This must be the same number as in `cn_client_make` and `cn_server_create`.
+	                                                  // This must be the same number as in `cn_client_create` and `cn_server_create`.
 	uint64_t creation_timestamp,                      // A unix timestamp of the current time.
 	const cn_crypto_key_t* client_to_server_key,      // A unique key for this connect token for the client to encrypt packets, and server to
 	                                                  // decrypt packets. This can be generated with `cn_crypto_generate_key` on your web service.
