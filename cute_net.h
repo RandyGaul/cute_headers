@@ -5408,6 +5408,8 @@ int cn_socket_send(cn_socket_t* socket, cn_simulator_t* sim, cn_endpoint_t to, c
 
 // -------------------------------------------------------------------------------------------------
 
+static bool s_cn_is_init = false;
+
 cn_error_t cn_generate_connect_token(
 	uint64_t application_id,
 	uint64_t creation_timestamp,
@@ -5423,6 +5425,14 @@ cn_error_t cn_generate_connect_token(
 	uint8_t* token_ptr_out
 )
 {
+	if (!s_cn_is_init) {
+		if (cn_is_error(cn_init())) {
+			return cn_error_failure("Unable to initialization Cute Net.");
+		} else {
+			s_cn_is_init = true;
+		}
+	}
+
 	CN_ASSERT(address_count >= 1 && address_count <= 32);
 	CN_ASSERT(creation_timestamp < expiration_timestamp);
 
@@ -8762,8 +8772,6 @@ void cn_transport_update(cn_transport_t* transport, double dt)
 
 //--------------------------------------------------------------------------------------------------
 // CLIENT
-
-static bool s_cn_is_init = false;
 
 typedef struct cn_client_t
 {
