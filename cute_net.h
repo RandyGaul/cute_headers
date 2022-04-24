@@ -5128,6 +5128,7 @@ typedef struct cn_simulator_t cn_simulator_t;
 struct cn_protocol_client_t
 {
 	bool use_ipv6;
+	uint16_t port;
 	cn_protocol_client_state_t state;
 	double last_packet_recieved_time;
 	double last_packet_sent_time;
@@ -6416,6 +6417,7 @@ cn_protocol_client_t* cn_protocol_client_create(uint16_t port, uint64_t applicat
 	CN_MEMSET(client, 0, sizeof(cn_protocol_client_t));
 	s_protocol_client_set_state(client, CN_PROTOCOL_CLIENT_STATE_DISCONNECTED);
 	client->use_ipv6 = use_ipv6;
+	client->port = port;
 	client->application_id = application_id;
 	client->mem_ctx = user_allocator_context;
 	client->packet_queue = cn_circular_buffer_create(CN_MB, client->mem_ctx);
@@ -6452,7 +6454,7 @@ cn_error_t cn_protocol_client_connect(cn_protocol_client_t* client, const uint8_
 
 	CN_MEMCPY(client->connect_token_packet, connect_token_packet, CN_PROTOCOL_CONNECT_TOKEN_PACKET_SIZE);
 
-	if (cn_socket_init1(&client->socket, client->use_ipv6 ? CN_ADDRESS_TYPE_IPV6 : CN_ADDRESS_TYPE_IPV4, 0, CN_PROTOCOL_CLIENT_SEND_BUFFER_SIZE, CN_PROTOCOL_CLIENT_RECEIVE_BUFFER_SIZE)) {
+	if (cn_socket_init1(&client->socket, client->use_ipv6 ? CN_ADDRESS_TYPE_IPV6 : CN_ADDRESS_TYPE_IPV4, client->port, CN_PROTOCOL_CLIENT_SEND_BUFFER_SIZE, CN_PROTOCOL_CLIENT_RECEIVE_BUFFER_SIZE)) {
 		return cn_error_failure("Unable to open socket.");
 	}
 
