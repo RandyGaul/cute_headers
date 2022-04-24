@@ -196,6 +196,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct cn_error_t cn_error_t;
 typedef struct cn_client_t cn_client_t;
@@ -1614,7 +1615,7 @@ hydro_unpad(const unsigned char *buf, size_t padded_buflen, size_t blocksize)
 		_mm_storeu_si128((__m128i *) (void *) &state[4], y);
 		_mm_storeu_si128((__m128i *) (void *) &state[8], z);
 	}
-
+	#undef S
 #else
 
 	static void
@@ -4232,7 +4233,7 @@ CN_INLINE void cn_read_bytes(uint8_t** p, uint8_t* byte_array, int num_bytes)
 	}
 }
 
-CN_INLINE cn_endpoint_t cn_read_endpoint(uint8_t** p)
+cn_endpoint_t cn_read_endpoint(uint8_t** p)
 {
 	cn_endpoint_t endpoint;
 	endpoint.type = (cn_address_type_t)cn_read_uint8(p);
@@ -5559,7 +5560,7 @@ typedef struct cn_memory_pool_t
 
 cn_memory_pool_t* cn_memory_pool_create(int element_size, int element_count, void* user_allocator_context)
 {
-	size_t stride = element_size > sizeof(void*) ? element_size : sizeof(void*);
+	size_t stride = (size_t)element_size > sizeof(void*) ? element_size : sizeof(void*);
 	size_t arena_size = sizeof(cn_memory_pool_t) + stride * element_count;
 	cn_memory_pool_t* pool = (cn_memory_pool_t*)CN_ALLOC(arena_size, user_allocator_context);
 
@@ -5938,7 +5939,6 @@ void* cn_protocol_packet_open(uint8_t* buffer, int size, const cn_crypto_key_t* 
 uint8_t* cn_protocol_client_read_connect_token_from_web_service(uint8_t* buffer, uint64_t application_id, uint64_t current_time, cn_protocol_connect_token_t* token)
 {
 	int ret = 0;
-	uint8_t* buffer_start = buffer;
 
 	// Read rest section.
 	CN_CHECK(CN_STRNCMP((const char*)buffer, (const char*)CN_PROTOCOL_VERSION_STRING, CN_PROTOCOL_VERSION_STRING_LEN));
@@ -5979,7 +5979,6 @@ cn_error_t cn_protocol_server_decrypt_connect_token_packet(uint8_t* packet_buffe
 
 	// Decrypt the secret section.
 	uint8_t* secret_section = packet_buffer + 568;
-	uint8_t* additional_data = packet_buffer;
 
 	if (cn_is_error(cn_crypto_decrypt((cn_crypto_key_t*)sk, secret_section, CN_PROTOCOL_CONNECT_TOKEN_SECRET_SECTION_SIZE, 0))) {
 		return cn_error_failure("Failed decryption.");
@@ -6413,7 +6412,7 @@ static void s_protocol_client_set_state(cn_protocol_client_t* client, cn_protoco
 
 cn_protocol_client_t* cn_protocol_client_create(uint16_t port, uint64_t application_id, bool use_ipv6, void* user_allocator_context)
 {
-	cn_protocol_client_t* client = (cn_protocol_client_t*)CN_ALLOC(sizeof(cn_protocol_client_t), app->mem_ctx);
+	cn_protocol_client_t* client = (cn_protocol_client_t*)CN_ALLOC(sizeof(cn_protocol_client_t), user_allocator_context);
 	CN_MEMSET(client, 0, sizeof(cn_protocol_client_t));
 	s_protocol_client_set_state(client, CN_PROTOCOL_CLIENT_STATE_DISCONNECTED);
 	client->use_ipv6 = use_ipv6;
@@ -6902,7 +6901,7 @@ void cn_handle_allocator_destroy(cn_handle_allocator_t* table)
 
 cn_handle_t cn_handle_allocator_alloc(cn_handle_allocator_t* table, uint32_t index)
 {
-	int freelist_index = table->freelist;
+	uint32_t freelist_index = table->freelist;
 	if (freelist_index == UINT32_MAX) {
 		int first_index = table->handles_capacity;
 		if (!first_index) first_index = 1;
@@ -6995,7 +6994,6 @@ cn_error_t cn_protocol_server_start(cn_protocol_server_t* server, const char* ad
 {
 	int cleanup_map = 0;
 	int cleanup_cache = 0;
-	int cleanup_handles = 0;
 	int cleanup_socket = 0;
 	int cleanup_endpoint_table = 0;
 	int cleanup_client_id_table = 0;
@@ -7124,10 +7122,10 @@ void cn_protocol_server_stop(cn_protocol_server_t* server)
 		double duplicate_chance = server->sim->duplicate_chance;
 		cn_simulator_destroy(server->sim);
 		server->sim = cn_simulator_create(&server->socket, server->mem_ctx);
-		server->sim->latency = server->sim->latency;
-		server->sim->jitter = server->sim->jitter;
-		server->sim->drop_chance = server->sim->drop_chance;
-		server->sim->duplicate_chance = server->sim->duplicate_chance;
+		server->sim->latency = latency;
+		server->sim->jitter = jitter;
+		server->sim->drop_chance = drop_chance;
+		server->sim->duplicate_chance = duplicate_chance;
 	}
 }
 
@@ -7302,14 +7300,14 @@ static void s_protocol_server_receive_packets(cn_protocol_server_t* server)
 			switch (type)
 			{
 			case CN_PROTOCOL_PACKET_TYPE_KEEPALIVE:
-				if (index == ~0) break;
+				if (index == ~0u) break;
 				server->client_last_packet_received_time[index] = 0;
 				if (!server->client_is_confirmed[index]) //log(CN_LOG_LEVEL_INFORMATIONAL, "Protocol Server: Client %" PRIu64 " is now *confirmed*.", server->client_id[index]);
 				server->client_is_confirmed[index] = 1;
 				break;
 
 			case CN_PROTOCOL_PACKET_TYPE_DISCONNECT:
-				if (index == ~0) break;
+				if (index == ~0u) break;
 				//log(CN_LOG_LEVEL_INFORMATIONAL, "Protocol Server: Client %" PRIu64 " has sent the server a DISCONNECT packet.", server->client_id[index]);
 				s_protocol_server_disconnect_client(server, index, 0);
 				break;
@@ -7332,7 +7330,7 @@ static void s_protocol_server_receive_packets(cn_protocol_server_t* server)
 			}	break;
 
 			case CN_PROTOCOL_PACKET_TYPE_PAYLOAD:
-				if (index == ~0) break;
+				if (index == ~0u) break;
 				server->client_last_packet_received_time[index] = 0;
 				if (!server->client_is_confirmed[index]) //log(CN_LOG_LEVEL_INFORMATIONAL, "Protocol Server: Client %" PRIu64 " is now *confirmed*.", server->client_id[index]);
 				server->client_is_confirmed[index] = 1;
@@ -8321,7 +8319,7 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 	int assembly_reliable_init = 0;
 	int assembly_unreliable_init = 0;
 
-	cn_transport_t* transport = (cn_transport_t*)CN_ALLOC(sizeof(cn_transport_t), config->user_allocator_context);
+	cn_transport_t* transport = (cn_transport_t*)CN_ALLOC(sizeof(cn_transport_t), config.user_allocator_context);
 	if (!transport) return NULL;
 	transport->fragment_size = config.fragment_size;
 	transport->max_packet_size = config.max_packet_size;
@@ -8357,7 +8355,7 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 		if (sequence_sent_fragments_init) cn_sequence_buffer_cleanup(&transport->sent_fragments, NULL);
 		if (assembly_reliable_init) s_packet_assembly_cleanup(&transport->reliable_and_in_order_assembly);
 		if (assembly_unreliable_init) s_packet_assembly_cleanup(&transport->fire_and_forget_assembly);
-		CN_FREE(transport, config->user_allocator_context);
+		CN_FREE(transport, config.user_allocator_context);
 	}
 
 	return ret ? NULL : transport;
@@ -8531,7 +8529,6 @@ cn_error_t s_transport_send(cn_transport_t* transport, const void* data, int siz
 	int final_fragment_size = size - (fragment_count * fragment_size);
 	if (final_fragment_size > 0) fragment_count++;
 
-	double timestamp = transport->ack_system->time;
 	uint16_t reassembly_sequence = transport->fire_and_forget_assembly.reassembly_sequence++;
 	uint8_t* buffer = transport->fire_and_forget_buffer;
 
@@ -8679,7 +8676,6 @@ cn_error_t cn_transport_process_packet(cn_transport_t* transport, void* data, in
 
 	// Store completed packet for retrieval by user.
 	if (reassembly->fragment_count_so_far == fragment_count) {
-		uint16_t assembled_sequence = reassembly_sequence;
 		if (cn_packet_queue_push(&assembly->assembled_packets, reassembly->packet, reassembly->packet_size) < 0) {
 			//TODO: Log. Dropped packet since reassembly buffer was too small.
 			CN_FREE(reassembly->packet, transport->mem_ctx);
