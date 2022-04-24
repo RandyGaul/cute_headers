@@ -221,7 +221,7 @@ typedef enum cn_address_type_t
 	CN_ADDRESS_TYPE_IPV6
 } cn_address_type_t;
 
-typedef struct cn_endpoint_t
+struct cn_endpoint_t
 {
 	cn_address_type_t type;
 	uint16_t port;
@@ -231,7 +231,7 @@ typedef struct cn_endpoint_t
 		uint8_t ipv4[4];
 		uint16_t ipv6[8];
 	} u;
-} cn_endpoint_t;
+};
 
 //--------------------------------------------------------------------------------------------------
 // CONNECT TOKEN
@@ -443,11 +443,11 @@ void cn_server_enable_network_simulator(cn_server_t* server, double latency, dou
 #define CN_ERROR_SUCCESS (0)
 #define CN_ERROR_FAILURE (-1)
 
-typedef struct cn_error_t
+struct cn_error_t
 {
 	int code;
 	const char* details;
-} cn_error_t;
+};
 
 CN_INLINE bool cn_is_error(cn_error_t err) { return err.code == CN_ERROR_FAILURE; }
 CN_INLINE cn_error_t cn_error_failure(const char* details) { cn_error_t error; error.code = CN_ERROR_FAILURE; error.details = details; return error; }
@@ -5125,7 +5125,7 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 
 typedef struct cn_simulator_t cn_simulator_t;
 
-typedef struct cn_protocol_client_t
+struct cn_protocol_client_t
 {
 	bool use_ipv6;
 	cn_protocol_client_state_t state;
@@ -5152,11 +5152,11 @@ typedef struct cn_protocol_client_t
 	uint8_t buffer[CN_PROTOCOL_PACKET_SIZE_MAX];
 	uint8_t connect_token_packet[CN_PROTOCOL_CONNECT_TOKEN_PACKET_SIZE];
 	void* mem_ctx;
-} cn_protocol_client_t;
+};
 
 // -------------------------------------------------------------------------------------------------
 
-typedef struct cn_protocol_server_t
+struct cn_protocol_server_t
 {
 	bool running;
 	uint64_t application_id;
@@ -5189,7 +5189,7 @@ typedef struct cn_protocol_server_t
 
 	uint8_t buffer[CN_PROTOCOL_PACKET_SIZE_MAX];
 	void* mem_ctx;
-} cn_protocol_server_t;
+};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -8772,12 +8772,12 @@ void cn_transport_update(cn_transport_t* transport, double dt)
 //--------------------------------------------------------------------------------------------------
 // CLIENT
 
-typedef struct cn_client_t
+struct cn_client_t
 {
 	cn_protocol_client_t* p_client;
 	cn_transport_t* transport;
 	void* mem_ctx;
-} cn_client_t;
+};
 
 static cn_error_t s_send(int client_index, void* packet, int size, void* udata)
 {
@@ -8913,7 +8913,7 @@ void cn_client_enable_network_simulator(cn_client_t* client, double latency, dou
 //--------------------------------------------------------------------------------------------------
 // SERVER
 
-typedef struct cn_server_t
+struct cn_server_t
 {
 	bool running;
 	cn_endpoint_t endpoint;
@@ -8926,7 +8926,7 @@ typedef struct cn_server_t
 	cn_transport_t* client_transports[CN_SERVER_MAX_CLIENTS];
 	cn_protocol_server_t* p_server;
 	void* mem_ctx;
-} cn_server_t;
+};
 
 static cn_error_t s_send_packet_fn(int client_index, void* packet, int size, void* udata)
 {
