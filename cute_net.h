@@ -6578,11 +6578,11 @@ static void s_protocol_disconnect(cn_protocol_client_t* client, cn_protocol_clie
 	}
 
 	if (send_packets) {
-		cn_protocol_packet_disconnect_t packet;
-		packet.packet_type = CN_PROTOCOL_PACKET_TYPE_DISCONNECT;
+		cn_protocol_packet_disconnect_t disconnect_packet;
+		disconnect_packet.packet_type = CN_PROTOCOL_PACKET_TYPE_DISCONNECT;
 		for (int i = 0; i < CN_PROTOCOL_REDUNDANT_DISCONNECT_PACKET_COUNT; ++i)
 		{
-			s_protocol_client_send(client, &packet);
+			s_protocol_client_send(client, &disconnect_packet);
 		}
 	}
 
@@ -6629,7 +6629,7 @@ static void s_protocol_receive_packets(cn_protocol_client_t* client)
 			continue;
 		}
 
-		uint64_t sequence = ~0;
+		uint64_t sequence = ~0u;
 		void* packet_ptr = cn_protocol_packet_open(buffer, sz, &client->connect_token.server_to_client_key, NULL, &client->replay_buffer, &sequence);
 		if (!packet_ptr) continue;
 
@@ -6924,7 +6924,7 @@ cn_handle_allocator_t* cn_handle_allocator_create(int initial_capacity, void* us
 {
 	cn_handle_allocator_t* table = (cn_handle_allocator_t*)CN_ALLOC(sizeof(cn_handle_allocator_t), user_allocator_context);
 	if (!table) return NULL;
-	table->freelist = ~0;
+	table->freelist = ~0u;
 	table->handles_capacity = initial_capacity;
 	table->handles_count = 0;
 	table->handles = NULL;
@@ -7321,7 +7321,7 @@ static void s_protocol_server_receive_packets(cn_protocol_server_t* server)
 			cn_protocol_replay_buffer_t* replay_buffer = NULL;
 			const cn_crypto_key_t* client_to_server_key;
 			cn_protocol_encryption_state_t* state = NULL;
-			uint32_t index = ~0;
+			uint32_t index = ~0u;
 
 			int endpoint_already_connected = !!client_id_ptr;
 			if (endpoint_already_connected) {
@@ -7498,12 +7498,12 @@ cn_error_t cn_protocol_server_send_to_client(cn_protocol_server_t* server, const
 
 	int index = client_index;
 	if (!server->client_is_confirmed[index]) {
-		cn_protocol_packet_connection_accepted_t packet;
-		packet.packet_type = CN_PROTOCOL_PACKET_TYPE_CONNECTION_ACCEPTED;
-		packet.client_id = server->client_id[index];
-		packet.max_clients = CN_PROTOCOL_SERVER_MAX_CLIENTS;
-		packet.connection_timeout = server->connection_timeout;
-		if (cn_protocol_packet_write(&packet, server->buffer, server->client_sequence[index]++, server->client_server_to_client_key + index) == 16 + 73) {
+		cn_protocol_packet_connection_accepted_t conn_accepted_packet;
+		conn_accepted_packet.packet_type = CN_PROTOCOL_PACKET_TYPE_CONNECTION_ACCEPTED;
+		conn_accepted_packet.client_id = server->client_id[index];
+		conn_accepted_packet.max_clients = CN_PROTOCOL_SERVER_MAX_CLIENTS;
+		conn_accepted_packet.connection_timeout = server->connection_timeout;
+		if (cn_protocol_packet_write(&conn_accepted_packet, server->buffer, server->client_sequence[index]++, server->client_server_to_client_key + index) == 16 + 73) {
 			cn_socket_send(&server->socket, server->sim, server->client_endpoint[index], server->buffer, 16 + 73);
 			//log(CN_LOG_LEVEL_INFORMATIONAL, "Protocol Server: Sent %s to client %" PRIu64 ".", s_protocol_packet_str(packet.packet_type), server->client_id[index]);
 			server->client_last_packet_sent_time[index] = 0;
