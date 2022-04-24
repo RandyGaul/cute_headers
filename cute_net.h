@@ -18,6 +18,9 @@
 		ranging from games who just want TCP-style packets (such as a turn-based
 		RPG), to fast paced platformer or fighting games.
 
+		You can disable IPv6 support by putting this before you #include cute_net.h:
+			#define CUTE_NET_NO_IPV6
+
 
 	FEATURES
 
@@ -218,7 +221,9 @@ typedef enum cn_address_type_t
 {
 	CN_ADDRESS_TYPE_NONE,
 	CN_ADDRESS_TYPE_IPV4,
+#ifndef CUTE_NET_NO_IPV6
 	CN_ADDRESS_TYPE_IPV6
+#endif
 } cn_address_type_t;
 
 struct cn_endpoint_t
@@ -229,7 +234,9 @@ struct cn_endpoint_t
 	union
 	{
 		uint8_t ipv4[4];
+#ifndef CUTE_NET_NO_IPV6
 		uint16_t ipv6[8];
+#endif
 	} u;
 };
 
@@ -4144,7 +4151,9 @@ void cn_write_endpoint(uint8_t** p, cn_endpoint_t endpoint)
 		cn_write_uint8(p, endpoint.u.ipv4[1]);
 		cn_write_uint8(p, endpoint.u.ipv4[2]);
 		cn_write_uint8(p, endpoint.u.ipv4[3]);
-	} else if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
+	}
+#ifndef CUTE_NET_NO_IPV6
+	else if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
 		cn_write_uint16(p, endpoint.u.ipv6[0]);
 		cn_write_uint16(p, endpoint.u.ipv6[1]);
 		cn_write_uint16(p, endpoint.u.ipv6[2]);
@@ -4153,7 +4162,9 @@ void cn_write_endpoint(uint8_t** p, cn_endpoint_t endpoint)
 		cn_write_uint16(p, endpoint.u.ipv6[5]);
 		cn_write_uint16(p, endpoint.u.ipv6[6]);
 		cn_write_uint16(p, endpoint.u.ipv6[7]);
-	} else {
+	} 
+#endif
+	else {
 		CN_ASSERT(0);
 	}
 	cn_write_uint16(p, endpoint.port);
@@ -4242,7 +4253,9 @@ cn_endpoint_t cn_read_endpoint(uint8_t** p)
 		endpoint.u.ipv4[1] = cn_read_uint8(p);
 		endpoint.u.ipv4[2] = cn_read_uint8(p);
 		endpoint.u.ipv4[3] = cn_read_uint8(p);
-	} else if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
+	}
+#ifndef CUTE_NET_NO_IPV6
+	else if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
 		endpoint.u.ipv6[0] = cn_read_uint16(p);
 		endpoint.u.ipv6[1] = cn_read_uint16(p);
 		endpoint.u.ipv6[2] = cn_read_uint16(p);
@@ -4251,7 +4264,9 @@ cn_endpoint_t cn_read_endpoint(uint8_t** p)
 		endpoint.u.ipv6[5] = cn_read_uint16(p);
 		endpoint.u.ipv6[6] = cn_read_uint16(p);
 		endpoint.u.ipv6[7] = cn_read_uint16(p);
-	} else {
+	}
+#endif
+	else {
 		CN_ASSERT(0);
 	}
 	endpoint.port = cn_read_uint16(p);
@@ -4694,19 +4709,19 @@ int cn_endpoint_init(cn_endpoint_t* endpoint, const char* address_and_port_strin
 	char* str = buffer;
 	int len = (int)CN_STRLEN(str);
 
+#ifndef CUTE_NET_NO_IPV6
 	str = s_parse_ipv6_for_port(endpoint, str, len);
-
 	struct in6_addr sockaddr6;
-	if (inet_pton(AF_INET6, str, &sockaddr6) == 1)
-	{
+	if (inet_pton(AF_INET6, str, &sockaddr6) == 1) {
 		endpoint->type = CN_ADDRESS_TYPE_IPV6;
 		int i;
-		for (i = 0; i < 8; ++i)
-		{
+		for (i = 0; i < 8; ++i) {
 			endpoint->u.ipv6[i] = ntohs(((uint16_t*)&sockaddr6)[i]);
 		}
 		return 0;
 	}
+#endif
+
 
 	len = s_parse_ipv4_for_port(endpoint, str);
 
@@ -4729,6 +4744,7 @@ void cn_endpoint_to_string(cn_endpoint_t endpoint, char* buffer, int buffer_size
 	CN_ASSERT(buffer);
 	CN_ASSERT(buffer_size >= 0);
 
+#ifndef CUTE_NET_NO_IPV6
 	if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
 		if (endpoint.port == 0) {
 			uint16_t ipv6_network_order[8];
@@ -4740,7 +4756,10 @@ void cn_endpoint_to_string(cn_endpoint_t endpoint, char* buffer, int buffer_size
 			inet_ntop(AF_INET6, (void*)ipv6_network_order, buffer, INET6_ADDRSTRLEN);
 			CN_SNPRINTF(buffer, CN_ENDPOINT_STRING_MAX_LENGTH, "[%s]:%d", buffer, endpoint.port);
 		}
-	} else if (endpoint.type == CN_ADDRESS_TYPE_IPV4) {
+	} 
+	else 
+#endif
+	if (endpoint.type == CN_ADDRESS_TYPE_IPV4) {
 		if (endpoint.port != 0) {
 			CN_SNPRINTF(buffer, CN_ENDPOINT_STRING_MAX_LENGTH, "%d.%d.%d.%d:%d",
 				endpoint.u.ipv4[0],
@@ -4769,11 +4788,15 @@ int cn_endpoint_equals(cn_endpoint_t a, cn_endpoint_t b)
 		for (int i = 0; i < 4; ++i)
 			if (a.u.ipv4[i] != b.u.ipv4[i])
 				return 0;
-	} else if (a.type == CN_ADDRESS_TYPE_IPV6) {
+	} 
+#ifndef CUTE_NET_NO_IPV6
+	else if (a.type == CN_ADDRESS_TYPE_IPV6) {
 		for (int i = 0; i < 8; ++i)
 			if (a.u.ipv6[i] != b.u.ipv6[i])
 				return 0;
-	} else {
+	} 
+#endif
+	else {
 		return 0;
 	}
 
@@ -4809,7 +4832,12 @@ void cn_socket_cleanup(cn_socket_t* socket)
 
 static int s_socket_init(cn_socket_t* the_socket, cn_address_type_t address_type, int send_buffer_size, int receive_buffer_size)
 {
-	the_socket->handle = socket(address_type == CN_ADDRESS_TYPE_IPV6 ? AF_INET6 : AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+#ifndef CUTE_NET_NO_IPV6
+	int af = address_type == CN_ADDRESS_TYPE_IPV6 ? AF_INET6 : AF_INET;
+#else
+	int af = AF_INET;
+#endif
+	the_socket->handle = socket(af, SOCK_DGRAM, IPPROTO_UDP);
 
 #ifdef CN_WINDOWS
 	if (the_socket->handle == INVALID_SOCKET)
@@ -4821,6 +4849,7 @@ static int s_socket_init(cn_socket_t* the_socket, cn_address_type_t address_type
 		return -1;
 	}
 
+#ifndef CUTE_NET_NO_IPV6
 	// Allow users to enforce ipv6 only.
 	// See: https://msdn.microsoft.com/en-us/library/windows/desktop/ms738574(v=vs.85).aspx
 	if (address_type == CN_ADDRESS_TYPE_IPV6)
@@ -4833,6 +4862,7 @@ static int s_socket_init(cn_socket_t* the_socket, cn_address_type_t address_type
 			return -1;
 		}
 	}
+#endif
 
 	// Increase socket send buffer size.
 	if (setsockopt(the_socket->handle, SOL_SOCKET, SO_SNDBUF, (char*)&send_buffer_size, sizeof(int)) != 0)
@@ -4858,6 +4888,7 @@ static int s_socket_bind_port_and_set_non_blocking(cn_socket_t* the_socket, cn_a
 	// Binding to port zero means "any port", so record which one was bound.
 	if (port == 0)
 	{
+#ifndef CUTE_NET_NO_IPV6
 		if (address_type == CN_ADDRESS_TYPE_IPV6)
 		{
 			struct sockaddr_in6 sin;
@@ -4871,6 +4902,7 @@ static int s_socket_bind_port_and_set_non_blocking(cn_socket_t* the_socket, cn_a
 			the_socket->endpoint.port = ntohs(sin.sin6_port);
 		}
 		else
+#endif
 		{
 			struct sockaddr_in sin;
 			socklen_t len = sizeof(sin);
@@ -4921,6 +4953,7 @@ int cn_socket_init1(cn_socket_t* the_socket, cn_address_type_t address_type, uin
 	}
 
 	// Bind port.
+#ifndef CUTE_NET_NO_IPV6
 	if (address_type == CN_ADDRESS_TYPE_IPV6)
 	{
 		struct sockaddr_in6 socket_endpoint;
@@ -4937,6 +4970,7 @@ int cn_socket_init1(cn_socket_t* the_socket, cn_address_type_t address_type, uin
 		}
 	}
 	else
+#endif
 	{
 		struct sockaddr_in socket_endpoint;
 		CN_MEMSET(&socket_endpoint, 0, sizeof(socket_endpoint));
@@ -4973,6 +5007,7 @@ int cn_socket_init2(cn_socket_t* the_socket, const char* address_and_port, int s
 	}
 
 	// Bind port.
+#ifndef CUTE_NET_NO_IPV6
 	if (endpoint.type == CN_ADDRESS_TYPE_IPV6)
 	{
 		struct sockaddr_in6 socket_endpoint;
@@ -4989,6 +5024,7 @@ int cn_socket_init2(cn_socket_t* the_socket, const char* address_and_port, int s
 		}
 	}
 	else
+#endif
 	{
 		struct sockaddr_in socket_endpoint;
 		CN_MEMSET(&socket_endpoint, 0, sizeof(socket_endpoint));
@@ -5022,6 +5058,7 @@ int cn_socket_send_internal(cn_socket_t* socket, cn_endpoint_t send_to, const vo
 	CN_ASSERT(socket->handle != 0);
 	CN_ASSERT(endpoint.type != CN_ADDRESS_TYPE_NONE);
 
+#ifndef CUTE_NET_NO_IPV6
 	if (endpoint.type == CN_ADDRESS_TYPE_IPV6)
 	{
 		struct sockaddr_in6 socket_address;
@@ -5036,7 +5073,9 @@ int cn_socket_send_internal(cn_socket_t* socket, cn_endpoint_t send_to, const vo
 		int result = sendto(socket->handle, (const char*)data, byte_count, 0, (struct sockaddr*)&socket_address, sizeof(socket_address));
 		return result;
 	}
-	else if (endpoint.type == CN_ADDRESS_TYPE_IPV4)
+	else 
+#endif
+	if (endpoint.type == CN_ADDRESS_TYPE_IPV4)
 	{
 		struct sockaddr_in socket_address;
 		CN_MEMSET(&socket_address, 0, sizeof(socket_address));
@@ -5088,6 +5127,7 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 	}
 #endif
 
+#ifndef CUTE_NET_NO_IPV6
 	if (sockaddr_from.ss_family == AF_INET6)
 	{
 		struct sockaddr_in6* addr_ipv6 = (struct sockaddr_in6*) &sockaddr_from;
@@ -5099,7 +5139,9 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 		}
 		from->port = ntohs(addr_ipv6->sin6_port);
 	}
-	else if (sockaddr_from.ss_family == AF_INET)
+	else
+#endif
+	if (sockaddr_from.ss_family == AF_INET)
 	{
 		struct sockaddr_in* addr_ipv4 = (struct sockaddr_in*) &sockaddr_from;
 		from->type = CN_ADDRESS_TYPE_IPV4;
@@ -6454,7 +6496,15 @@ cn_error_t cn_protocol_client_connect(cn_protocol_client_t* client, const uint8_
 
 	CN_MEMCPY(client->connect_token_packet, connect_token_packet, CN_PROTOCOL_CONNECT_TOKEN_PACKET_SIZE);
 
-	if (cn_socket_init1(&client->socket, client->use_ipv6 ? CN_ADDRESS_TYPE_IPV6 : CN_ADDRESS_TYPE_IPV4, client->port, CN_PROTOCOL_CLIENT_SEND_BUFFER_SIZE, CN_PROTOCOL_CLIENT_RECEIVE_BUFFER_SIZE)) {
+#ifndef CUTE_NET_NO_IPV6
+	cn_address_type_t sock_addr_type = client->use_ipv6 ? CN_ADDRESS_TYPE_IPV6 : CN_ADDRESS_TYPE_IPV4;
+#else
+	if (client->use_ipv6) {
+		return cn_error_failure("Unable to open socket. Cute net compiled without IPV6 support but client configured to use ipv6");
+	}
+	cn_address_type_t sock_addr_type = CN_ADDRESS_TYPE_IPV4;
+#endif
+	if (cn_socket_init1(&client->socket, sock_addr_type, client->port, CN_PROTOCOL_CLIENT_SEND_BUFFER_SIZE, CN_PROTOCOL_CLIENT_RECEIVE_BUFFER_SIZE)) {
 		return cn_error_failure("Unable to open socket.");
 	}
 
