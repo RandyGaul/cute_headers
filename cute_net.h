@@ -131,6 +131,9 @@
 		example: this is how cute net can be used to filter out players who have no purchased the
 		game or signed up with an account.
 
+		If you'd like more information on the low level details for the protocol specification, then
+		see here: https://github.com/RandyGaul/cute_framework/blob/master/docs/networking/protocol/protocol.md
+
 
 	EXAMPLES
 	
