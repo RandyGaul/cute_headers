@@ -179,6 +179,10 @@
 			#define CUTE_NET_IMPLEMENTATION
 			#include <cute_net.h>
 
+		You may override the number of max clients on a server via CN_SERVER_MAX_CLIENTS.
+		The memory per client is a constant factor, and not too much. From rough back of the
+		envelope math it was estimated to easily support 2k+ players on a single machine.
+
 
 	BUGS AND CRASHES
 
@@ -356,8 +360,10 @@ void cn_client_enable_network_simulator(cn_client_t* client, double latency, dou
 //--------------------------------------------------------------------------------------------------
 // SERVER
 
-// Modify this value as seen fit.
-#define CN_SERVER_MAX_CLIENTS 32
+// Override this macro as seen fit.
+#ifndef CN_SERVER_MAX_CLIENTS
+#	define CN_SERVER_MAX_CLIENTS 32
+#endif
 
 typedef struct cn_server_config_t
 {
