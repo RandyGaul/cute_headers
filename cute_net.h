@@ -18,9 +18,6 @@
 		ranging from games who just want TCP-style packets (such as a turn-based
 		RPG), to fast paced platformer or fighting games.
 
-		You can disable IPv6 support by putting this before you #include cute_net.h:
-			#define CUTE_NET_NO_IPV6
-
 
 	FEATURES
 
@@ -175,6 +172,12 @@
 			CN_MEMCMP
 			CN_SNPRINTF
 			CN_FPRINTF
+
+		You can disable IPv6 support by defining CUTE_NET_NO_IPV6 like so.
+
+			#define CUTE_NET_NO_IPV6
+			#define CUTE_NET_IMPLEMENTATION
+			#include <cute_net.h>
 
 
 	BUGS AND CRASHES
