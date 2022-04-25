@@ -5272,53 +5272,7 @@ struct cn_protocol_server_t
 #define CN_CHECK(X) if (X) ret = -1;
 #define CN_CRYPTO_CONTEXT "CN_CTX"
 
-void cn_crypto_encrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
-{
-	hydro_secretbox_encrypt(data, data, (uint64_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key);
-}
-
-cn_error_t cn_crypto_decrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
-{
-	if (hydro_secretbox_decrypt(data, data, (size_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key) != 0) {
-		return cn_error_failure("Message forged.");
-	} else {
-		return cn_error_success();
-	}
-}
-
-cn_crypto_key_t cn_crypto_generate_key()
-{
-	cn_crypto_key_t key;
-	hydro_secretbox_keygen(key.key);
-	return key;
-}
-
-void cn_crypto_random_bytes(void* data, int byte_count)
-{
-	hydro_random_buf(data, byte_count);
-}
-
-void cn_crypto_sign_keygen(cn_crypto_sign_public_t* public_key, cn_crypto_sign_secret_t* secret_key)
-{
-	hydro_sign_keypair key_pair;
-	hydro_sign_keygen(&key_pair);
-	CN_MEMCPY(public_key->key, key_pair.pk, 32);
-	CN_MEMCPY(secret_key->key, key_pair.sk, 64);
-}
-
-void cn_crypto_sign_create(const cn_crypto_sign_secret_t* secret_key, cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
-{
-	hydro_sign_create(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, secret_key->key);
-}
-
-cn_error_t cn_crypto_sign_verify(const cn_crypto_sign_public_t* public_key, const cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
-{
-	if (hydro_sign_verify(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, public_key->key) != 0) {
-		return cn_error_failure("Message forged.");
-	} else {
-		return cn_error_success();
-	}
-}
+static bool s_cn_is_init = false;
 
 cn_error_t cn_crypto_init()
 {
@@ -5338,6 +5292,69 @@ cn_error_t cn_init()
 #else
 #endif
 	return cn_crypto_init();
+}
+
+static CN_INLINE cn_error_t s_cn_init_check()
+{
+	if (!s_cn_is_init) {
+		if (cn_is_error(cn_init())) {
+			return cn_error_failure("Unable to initialization Cute Net.");
+		} else {
+			s_cn_is_init = true;
+		}
+	}
+	return cn_error_success();
+}
+
+void cn_crypto_encrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
+{
+	hydro_secretbox_encrypt(data, data, (uint64_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key);
+}
+
+cn_error_t cn_crypto_decrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
+{
+	if (hydro_secretbox_decrypt(data, data, (size_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key) != 0) {
+		return cn_error_failure("Message forged.");
+	} else {
+		return cn_error_success();
+	}
+}
+
+cn_crypto_key_t cn_crypto_generate_key()
+{
+	s_cn_init_check();
+	cn_crypto_key_t key;
+	hydro_secretbox_keygen(key.key);
+	return key;
+}
+
+void cn_crypto_random_bytes(void* data, int byte_count)
+{
+	s_cn_init_check();
+	hydro_random_buf(data, byte_count);
+}
+
+void cn_crypto_sign_keygen(cn_crypto_sign_public_t* public_key, cn_crypto_sign_secret_t* secret_key)
+{
+	s_cn_init_check();
+	hydro_sign_keypair key_pair;
+	hydro_sign_keygen(&key_pair);
+	CN_MEMCPY(public_key->key, key_pair.pk, 32);
+	CN_MEMCPY(secret_key->key, key_pair.sk, 64);
+}
+
+void cn_crypto_sign_create(const cn_crypto_sign_secret_t* secret_key, cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
+{
+	hydro_sign_create(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, secret_key->key);
+}
+
+cn_error_t cn_crypto_sign_verify(const cn_crypto_sign_public_t* public_key, const cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
+{
+	if (hydro_sign_verify(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, public_key->key) != 0) {
+		return cn_error_failure("Message forged.");
+	} else {
+		return cn_error_success();
+	}
 }
 
 void cn_cleanup()
@@ -5485,8 +5502,6 @@ int cn_socket_send(cn_socket_t* socket, cn_simulator_t* sim, cn_endpoint_t to, c
 
 // -------------------------------------------------------------------------------------------------
 
-static bool s_cn_is_init = false;
-
 cn_error_t cn_generate_connect_token(
 	uint64_t application_id,
 	uint64_t creation_timestamp,
@@ -5502,13 +5517,8 @@ cn_error_t cn_generate_connect_token(
 	uint8_t* token_ptr_out
 )
 {
-	if (!s_cn_is_init) {
-		if (cn_is_error(cn_init())) {
-			return cn_error_failure("Unable to initialization Cute Net.");
-		} else {
-			s_cn_is_init = true;
-		}
-	}
+	cn_error_t err = s_cn_init_check();
+	if (cn_is_error(err)) return err;
 
 	CN_ASSERT(address_count >= 1 && address_count <= 32);
 	CN_ASSERT(creation_timestamp < expiration_timestamp);
@@ -8869,13 +8879,8 @@ static cn_error_t s_send(int client_index, void* packet, int size, void* udata)
 
 cn_client_t* cn_client_create(uint16_t port, uint64_t application_id, bool use_ipv6, void* user_allocator_context)
 {
-	if (!s_cn_is_init) {
-		if (cn_is_error(cn_init())) {
-			return NULL;
-		} else {
-			s_cn_is_init = true;
-		}
-	}
+	cn_error_t err = s_cn_init_check();
+	if (cn_is_error(err)) return NULL;
 
 	cn_protocol_client_t* p_client = cn_protocol_client_create(port, application_id, use_ipv6, user_allocator_context);
 	if (!p_client) return NULL;
@@ -9018,13 +9023,8 @@ static cn_error_t s_send_packet_fn(int client_index, void* packet, int size, voi
 
 cn_server_t* cn_server_create(cn_server_config_t config)
 {
-	if (!s_cn_is_init) {
-		if (cn_is_error(cn_init())) {
-			return NULL;
-		} else {
-			s_cn_is_init = true;
-		}
-	}
+	cn_error_t err = s_cn_init_check();
+	if (cn_is_error(err)) return NULL;
 
 	cn_server_t* server = (cn_server_t*)CN_ALLOC(sizeof(cn_server_t), config.user_allocator_context);
 	CN_MEMSET(server, 0, sizeof(*server));
