@@ -131,9 +131,6 @@
 		example: this is how cute net can be used to filter out players who have no purchased the
 		game or signed up with an account.
 
-		If you'd like more information on the low level details for the protocol specification, then
-		see here: https://github.com/RandyGaul/cute_framework/blob/master/docs/networking/protocol/protocol.md
-
 
 	EXAMPLES
 	
@@ -9942,7 +9939,7 @@ int cn_client_server()
 	config.secret_key = sk;
 	config.application_id = application_id;
 	cn_server_t* server = cn_server_create(config);
-	cn_client_t* client = cn_client_create(5000, application_id, true, NULL);
+	cn_client_t* client = cn_client_create(0, application_id, true, NULL);
 	CN_TEST_ASSERT(server);
 	CN_TEST_ASSERT(client);
 
@@ -10018,7 +10015,7 @@ int cn_client_server_payload()
 	config.secret_key = sk;
 	config.application_id = application_id;
 	cn_server_t* server = cn_server_create(config);
-	cn_client_t* client = cn_client_create(5000, application_id, true, NULL);
+	cn_client_t* client = cn_client_create(0, application_id, true, NULL);
 	CN_TEST_ASSERT(server);
 	CN_TEST_ASSERT(client);
 
@@ -10114,7 +10111,7 @@ int cn_client_server_sim()
 	config.secret_key = sk;
 	config.application_id = application_id;
 	cn_server_t* server = cn_server_create(config);
-	cn_client_t* client = cn_client_create(5000, application_id, true, NULL);
+	cn_client_t* client = cn_client_create(0, application_id, true, NULL);
 	CN_TEST_ASSERT(server);
 	CN_TEST_ASSERT(client);
 
@@ -10755,7 +10752,7 @@ int cn_protocol_client_server()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -10823,7 +10820,7 @@ int cn_protocol_client_no_server_responses()
 		connect_token
 	)));
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
@@ -10886,7 +10883,7 @@ int cn_protocol_client_server_list()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5002", 5)));
@@ -10955,7 +10952,7 @@ int cn_protocol_server_challenge_response_timeout()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11024,7 +11021,7 @@ int cn_protocol_client_expired_token()
 		connect_token
 	)));
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 	cn_protocol_client_update(client, 0, 1);
@@ -11077,7 +11074,7 @@ int cn_protocol_client_connect_expired_token()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11147,7 +11144,7 @@ int cn_protocol_server_connect_expired_token()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11218,7 +11215,7 @@ int cn_protocol_client_bad_keys()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11291,7 +11288,7 @@ int cn_protocol_server_not_in_list_but_gets_request()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11360,7 +11357,7 @@ int cn_protocol_connect_a_few_clients()
 		&sk,
 		connect_token
 	)));
-	cn_protocol_client_t* client0 = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client0 = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client0);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client0, connect_token)));
 
@@ -11483,7 +11480,7 @@ int cn_protocol_keepalive()
 		&sk,
 		connect_token
 	)));
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
@@ -11551,7 +11548,7 @@ int cn_protocol_client_initiated_disconnect()
 		&sk,
 		connect_token
 	)));
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
@@ -11627,7 +11624,7 @@ int cn_protocol_server_initiated_disconnect()
 		&sk,
 		connect_token
 	)));
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
@@ -11714,7 +11711,7 @@ int cn_protocol_client_server_payloads()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
@@ -11828,7 +11825,7 @@ int cn_protocol_multiple_connections_and_payloads()
 			&sk,
 			connect_token
 		)));
-		cn_protocol_client_t* client = cn_protocol_client_create(5000 + i, application_id, true, NULL);
+		cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 		CN_TEST_CHECK_POINTER(client);
 		CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 		clients[i] = client;
@@ -11959,7 +11956,7 @@ int cn_protocol_client_reconnect()
 	cn_protocol_server_t* server = cn_protocol_server_create(application_id, &pk, &sk, NULL);
 	CN_TEST_CHECK_POINTER(server);
 
-	cn_protocol_client_t* client = cn_protocol_client_create(5001, application_id, true, NULL);
+	cn_protocol_client_t* client = cn_protocol_client_create(0, application_id, true, NULL);
 	CN_TEST_CHECK_POINTER(client);
 
 	CN_TEST_CHECK(cn_is_error(cn_protocol_server_start(server, "[::1]:5000", 5)));
