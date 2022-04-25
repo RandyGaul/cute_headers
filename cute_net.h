@@ -302,7 +302,7 @@ cn_error_t cn_generate_connect_token(
 	int address_count,                                // Must be from 1 to 32 (inclusive). The number of addresses in `address_list`.
 	const char** address_list,                        // A list of game servers the client can try connecting to, of length `address_count`.
 	uint64_t client_id,                               // The unique client identifier.
-	const uint8_t* user_data,                         // Optional buffer of data of `CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE` (256) bytes. Can be NULL.
+	const uint8_t* user_data,                         // Optional buffer of data of `CN_CONNECT_TOKEN_USER_DATA_SIZE` (256) bytes. Can be NULL.
 	const cn_crypto_sign_secret_t* shared_secret_key, // Only your webservice and game servers know this key.
 	uint8_t* token_ptr_out                            // Pointer to your buffer, should be `CN_CONNECT_TOKEN_SIZE` bytes large.
 );
