@@ -222,10 +222,6 @@ typedef struct cn_crypto_signature_t { uint8_t bytes[64]; } cn_crypto_signature_
 #endif
 
 //--------------------------------------------------------------------------------------------------
-// CRYPTO
-cn_crypto_key_t crypto_generate_key();
-
-//--------------------------------------------------------------------------------------------------
 // ENDPOINT
 
 typedef enum cn_address_type_t
@@ -260,6 +256,21 @@ int cn_endpoint_equals(cn_endpoint_t a, cn_endpoint_t b);
 
 #define CN_CONNECT_TOKEN_SIZE 1114
 #define CN_CONNECT_TOKEN_USER_DATA_SIZE 256
+
+/**
+ * Generates a cryptography key in a cryptographically secure way.
+ */
+cn_crypto_key_t cn_crypto_generate_key();
+
+/**
+ * Fills a buffer in a cryptographically secure way (i.e. a slow way).
+ */
+void cn_crypto_random_bytes(void* data, int byte_count);
+
+/**
+ * Generates a cryptographically secure keypair, used for facilitating connect tokens.
+ */
+void cn_crypto_sign_keygen(cn_crypto_sign_public_t* public_key, cn_crypto_sign_secret_t* secret_key);
 
 /**
  * Generates a connect token, useable by clients to authenticate and securely connect to
@@ -5275,7 +5286,7 @@ cn_error_t cn_crypto_decrypt(const cn_crypto_key_t* key, uint8_t* data, int data
 	}
 }
 
-cn_crypto_key_t crypto_generate_key()
+cn_crypto_key_t cn_crypto_generate_key()
 {
 	cn_crypto_key_t key;
 	hydro_secretbox_keygen(key.key);
@@ -9304,7 +9315,7 @@ void cn_static_asserts()
 
 	CN_STATIC_ASSERT(CN_SERVER_MAX_CLIENTS == CN_PROTOCOL_SERVER_MAX_CLIENTS, must_be_equal_for_a_simple_implementation);
 	CN_STATIC_ASSERT(CN_CONNECT_TOKEN_SIZE == CN_PROTOCOL_CONNECT_TOKEN_SIZE, must_be_equal);
-	CN_STATIC_ASSERT(CN_CONNECT_TOKEN_USER_DATA_SIZE == CN_PROTOCOL_TOKEN_USER_DATA_SIZE, must_be_equal);
+	CN_STATIC_ASSERT(CN_CONNECT_TOKEN_USER_DATA_SIZE == CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE, must_be_equal);
 }
 
 CN_TEST_CASE(cn_socket_init_send_recieve_shutdown, "Test sending one packet on an ipv4 socket, and then retrieve it.");
@@ -9621,8 +9632,8 @@ int cn_encryption_map_basic()
 	state.handshake_timeout = 5;
 	state.last_packet_recieved_time = 0;
 	state.last_packet_sent_time = 0;
-	state.client_to_server_key = crypto_generate_key();
-	state.server_to_client_key = crypto_generate_key();
+	state.client_to_server_key = cn_crypto_generate_key();
+	state.server_to_client_key = cn_crypto_generate_key();
 	state.client_id = 0;
 
 	cn_endpoint_t endpoint;
@@ -9652,8 +9663,8 @@ int cn_encryption_map_timeout_and_expiration()
 	state0.handshake_timeout = 5;
 	state0.last_packet_recieved_time = 0;
 	state0.last_packet_sent_time = 0;
-	state0.client_to_server_key = crypto_generate_key();
-	state0.server_to_client_key = crypto_generate_key();
+	state0.client_to_server_key = cn_crypto_generate_key();
+	state0.server_to_client_key = cn_crypto_generate_key();
 	state0.client_id = 0;
 
 	cn_protocol_encryption_state_t state1;
@@ -9662,8 +9673,8 @@ int cn_encryption_map_timeout_and_expiration()
 	state1.handshake_timeout = 6;
 	state1.last_packet_recieved_time = 0;
 	state1.last_packet_sent_time = 0;
-	state1.client_to_server_key = crypto_generate_key();
-	state1.server_to_client_key = crypto_generate_key();
+	state1.client_to_server_key = cn_crypto_generate_key();
+	state1.server_to_client_key = cn_crypto_generate_key();
 	state1.client_id = 0;
 
 	cn_endpoint_t endpoint0;
@@ -9766,7 +9777,7 @@ int cn_doubly_list()
 CN_TEST_CASE(cn_crypto_encrypt_decrypt, "Generate key, encrypt a message, decrypt the message.");
 int cn_crypto_encrypt_decrypt()
 {
-	cn_crypto_key_t k = crypto_generate_key();
+	cn_crypto_key_t k = cn_crypto_generate_key();
 
 	const char* message_string = "The message.";
 	int message_length = (int)CN_STRLEN(message_string) + 1;
@@ -9835,8 +9846,8 @@ int cn_connect_token_cache()
 CN_TEST_CASE(cn_test_generate_connect_token, "Basic test to generate a connect token and assert the expected token.");
 int cn_test_generate_connect_token()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -9912,8 +9923,8 @@ int cn_test_generate_connect_token()
 CN_TEST_CASE(cn_client_server, "Connect a client to server, then disconnect and shutdown both.");
 int cn_client_server()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	uint64_t application_id = 333;
 	uint64_t current_timestamp = 0;
 	uint64_t expiration_timestamp = 1;
@@ -9988,8 +9999,8 @@ int cn_client_server()
 CN_TEST_CASE(cn_client_server_payload, "Connect a client to server, send some packets, then disconnect and shutdown both.");
 int cn_client_server_payload()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	uint64_t application_id = 333;
 	uint64_t current_timestamp = 0;
 	uint64_t expiration_timestamp = 1;
@@ -10084,8 +10095,8 @@ int cn_client_server_payload()
 CN_TEST_CASE(cn_client_server_sim, "Run network simulator between a client and server.");
 int cn_client_server_sim()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	uint64_t application_id = 333;
 	uint64_t current_timestamp = 0;
 	uint64_t expiration_timestamp = 1;
@@ -10561,7 +10572,7 @@ int cn_transport_drop_fragments_reliable_hammer()
 CN_TEST_CASE(cn_packet_connection_accepted, "Write, encrypt, decrypt, and assert the *connection accepted packet*.");
 int cn_packet_connection_accepted()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_connection_accepted_t packet;
@@ -10592,7 +10603,7 @@ int cn_packet_connection_accepted()
 CN_TEST_CASE(cn_packet_connection_denied, "Write, encrypt, decrypt, and assert the *connection denied packet*.");
 int cn_packet_connection_denied()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_connection_denied_t packet;
@@ -10617,7 +10628,7 @@ int cn_packet_connection_denied()
 CN_TEST_CASE(cn_packet_keepalive, "Write, encrypt, decrypt, and assert the *keepalive packet*.");
 int cn_packet_keepalive()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_keepalive_t packet;
@@ -10642,7 +10653,7 @@ int cn_packet_keepalive()
 CN_TEST_CASE(cn_packet_disconnect, "Write, encrypt, decrypt, and assert the *disconnect packet*.");
 int cn_packet_disconnect()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_disconnect_t packet;
@@ -10667,7 +10678,7 @@ int cn_packet_disconnect()
 CN_TEST_CASE(cn_packet_challenge, "Write, encrypt, decrypt, and assert the *challenge request packet* and *challenge response packet*.");
 int cn_packet_challenge()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_challenge_t packet;
@@ -10696,7 +10707,7 @@ int cn_packet_challenge()
 CN_TEST_CASE(cn_packet_payload, "Write, encrypt, decrypt, and assert the *payload packet*.");
 int cn_packet_payload()
 {
-	cn_crypto_key_t key = crypto_generate_key();
+	cn_crypto_key_t key = cn_crypto_generate_key();
 	uint64_t sequence = 100;
 
 	cn_protocol_packet_payload_t packet;
@@ -10725,8 +10736,8 @@ int cn_packet_payload()
 CN_TEST_CASE(cn_protocol_client_server, "Create client and server, perform connection handshake, then disconnect.");
 int cn_protocol_client_server()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -10794,8 +10805,8 @@ int cn_protocol_client_server()
 CN_TEST_CASE(cn_protocol_client_no_server_responses, "Client tries to connect to servers, but none respond at all.");
 int cn_protocol_client_no_server_responses()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -10854,8 +10865,8 @@ int cn_protocol_client_no_server_responses()
 CN_TEST_CASE(cn_protocol_client_server_list, "Client tries to connect to servers, but only third responds.");
 int cn_protocol_client_server_list()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -10925,8 +10936,8 @@ int cn_protocol_client_server_list()
 CN_TEST_CASE(cn_protocol_server_challenge_response_timeout, "Client times out when sending challenge response.");
 int cn_protocol_server_challenge_response_timeout()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -10997,8 +11008,8 @@ int cn_protocol_server_challenge_response_timeout()
 CN_TEST_CASE(cn_protocol_client_expired_token, "Client gets an expired token before connecting.");
 int cn_protocol_client_expired_token()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11047,8 +11058,8 @@ int cn_protocol_client_expired_token()
 CN_TEST_CASE(cn_protocol_client_connect_expired_token, "Client detects its own token expires in the middle of a handshake.");
 int cn_protocol_client_connect_expired_token()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11117,8 +11128,8 @@ int cn_protocol_client_connect_expired_token()
 CN_TEST_CASE(cn_protocol_server_connect_expired_token, "Server detects token expires in the middle of a handshake.");
 int cn_protocol_server_connect_expired_token()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11188,8 +11199,8 @@ int cn_protocol_server_connect_expired_token()
 CN_TEST_CASE(cn_protocol_client_bad_keys, "Client attempts to connect without keys from REST SECTION of connect token.");
 int cn_protocol_client_bad_keys()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11233,8 +11244,8 @@ int cn_protocol_client_bad_keys()
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
 	// Invalidate client keys.
-	client->connect_token.client_to_server_key = crypto_generate_key();
-	client->connect_token.server_to_client_key = crypto_generate_key();
+	client->connect_token.client_to_server_key = cn_crypto_generate_key();
+	client->connect_token.server_to_client_key = cn_crypto_generate_key();
 
 	int iters = 0;
 	while (iters++ < 100)
@@ -11261,8 +11272,8 @@ int cn_protocol_client_bad_keys()
 CN_TEST_CASE(cn_protocol_server_not_in_list_but_gets_request, "Client tries to connect to server, but token does not contain server endpoint.");
 int cn_protocol_server_not_in_list_but_gets_request()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11333,8 +11344,8 @@ int cn_protocol_server_not_in_list_but_gets_request()
 CN_TEST_CASE(cn_protocol_connect_a_few_clients, "Multiple clients connecting to one server.");
 int cn_protocol_connect_a_few_clients()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11372,8 +11383,8 @@ int cn_protocol_connect_a_few_clients()
 	CN_TEST_CHECK_POINTER(client0);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client0, connect_token)));
 
-	client_to_server_key = crypto_generate_key();
-	server_to_client_key = crypto_generate_key();
+	client_to_server_key = cn_crypto_generate_key();
+	server_to_client_key = cn_crypto_generate_key();
 	client_id = 2;
 	CN_TEST_CHECK(cn_is_error(cn_generate_connect_token(
 		application_id,
@@ -11393,8 +11404,8 @@ int cn_protocol_connect_a_few_clients()
 	CN_TEST_CHECK_POINTER(client1);
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client1, connect_token)));
 
-	client_to_server_key = crypto_generate_key();
-	server_to_client_key = crypto_generate_key();
+	client_to_server_key = cn_crypto_generate_key();
+	server_to_client_key = cn_crypto_generate_key();
 	client_id = 3;
 	CN_TEST_CHECK(cn_is_error(cn_generate_connect_token(
 		application_id,
@@ -11456,8 +11467,8 @@ int cn_protocol_connect_a_few_clients()
 CN_TEST_CASE(cn_protocol_keepalive, "Client and server setup connection and maintain it through keepalive packets.");
 int cn_protocol_keepalive()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11524,8 +11535,8 @@ int cn_protocol_keepalive()
 CN_TEST_CASE(cn_protocol_client_initiated_disconnect, "Client initiates disconnect, assert disconnect occurs cleanly.");
 int cn_protocol_client_initiated_disconnect()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11600,8 +11611,8 @@ int cn_protocol_client_initiated_disconnect()
 CN_TEST_CASE(cn_protocol_server_initiated_disconnect, "Server initiates disconnect, assert disconnect occurs cleanly.");
 int cn_protocol_server_initiated_disconnect()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11684,8 +11695,8 @@ int cn_protocol_server_initiated_disconnect()
 CN_TEST_CASE(cn_protocol_client_server_payloads, "Client and server connect and send payload packets. Server should confirm client.");
 int cn_protocol_client_server_payloads()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
@@ -11818,8 +11829,8 @@ int cn_protocol_multiple_connections_and_payloads()
 
 	for (int i = 0; i < max_clients; ++i)
 	{
-		cn_crypto_key_t client_to_server_key = crypto_generate_key();
-		cn_crypto_key_t server_to_client_key = crypto_generate_key();
+		cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+		cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 		uint64_t client_id = (uint64_t)i;
 
 		CN_TEST_CHECK(cn_is_error(cn_generate_connect_token(
@@ -11929,8 +11940,8 @@ int cn_protocol_multiple_connections_and_payloads()
 CN_TEST_CASE(cn_protocol_client_reconnect, "Client connects to server, disconnects, and reconnects.");
 int cn_protocol_client_reconnect()
 {
-	cn_crypto_key_t client_to_server_key = crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = crypto_generate_key();
+	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
+	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	cn_crypto_sign_public_t pk;
 	cn_crypto_sign_secret_t sk;
 	cn_crypto_sign_keygen(&pk, &sk);
