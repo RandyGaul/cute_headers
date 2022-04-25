@@ -222,6 +222,10 @@ typedef struct cn_crypto_signature_t { uint8_t bytes[64]; } cn_crypto_signature_
 #endif
 
 //--------------------------------------------------------------------------------------------------
+// CRYPTO
+cn_crypto_key_t crypto_generate_key();
+
+//--------------------------------------------------------------------------------------------------
 // ENDPOINT
 
 typedef enum cn_address_type_t
@@ -247,10 +251,15 @@ struct cn_endpoint_t
 	} u;
 };
 
+int cn_endpoint_init(cn_endpoint_t* endpoint, const char* address_and_port_string);
+void cn_endpoint_to_string(cn_endpoint_t endpoint, char* buffer, int buffer_size);
+int cn_endpoint_equals(cn_endpoint_t a, cn_endpoint_t b);
+
 //--------------------------------------------------------------------------------------------------
 // CONNECT TOKEN
 
 #define CN_CONNECT_TOKEN_SIZE 1114
+#define CN_CONNECT_TOKEN_USER_DATA_SIZE 256
 
 /**
  * Generates a connect token, useable by clients to authenticate and securely connect to
@@ -382,7 +391,7 @@ typedef struct cn_server_config_t
 	void* user_allocator_context;
 } cn_server_config_t;
 
-cn_server_config_t CN_INLINE cn_server_config_defaults()
+CN_INLINE cn_server_config_t cn_server_config_defaults(void)
 {
 	cn_server_config_t config;
 	config.application_id = 0;
@@ -468,7 +477,7 @@ struct cn_error_t
 
 CN_INLINE bool cn_is_error(cn_error_t err) { return err.code == CN_ERROR_FAILURE; }
 CN_INLINE cn_error_t cn_error_failure(const char* details) { cn_error_t error; error.code = CN_ERROR_FAILURE; error.details = details; return error; }
-CN_INLINE cn_error_t cn_error_success() { cn_error_t error; error.code = CN_ERROR_SUCCESS; error.details = NULL; return error; }
+CN_INLINE cn_error_t cn_error_success(void) { cn_error_t error; error.code = CN_ERROR_SUCCESS; error.details = NULL; return error; }
 #define CN_RETURN_IF_ERROR(x) do { cn_error_t err = (x); if (cn_is_error(err)) return err; } while (0)
 
 #endif // CN_NET_H
@@ -4022,8 +4031,8 @@ hydro_sign_verify(const uint8_t csig[hydro_sign_BYTES], const void *m_, size_t m
 #define CN_PROTOCOL_SIGNATURE_SIZE 64
 
 #define CN_PROTOCOL_CONNECT_TOKEN_PACKET_SIZE 1024
-#define CN_PROTOCOL_CONNECT_TOKEN_SIZE 1114
-#define CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE 256
+#define CN_PROTOCOL_CONNECT_TOKEN_SIZE CN_CONNECT_TOKEN_SIZE
+#define CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE CN_CONNECT_TOKEN_USER_DATA_SIZE
 #define CN_PROTOCOL_CONNECT_TOKEN_SECRET_SECTION_SIZE (64 + 8 + 32 + 32 + 256)
 #define CN_PROTOCOL_CONNECT_TOKEN_ENDPOINT_MAX 32
 
