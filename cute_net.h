@@ -356,6 +356,7 @@ void cn_client_enable_network_simulator(cn_client_t* client, double latency, dou
 //--------------------------------------------------------------------------------------------------
 // SERVER
 
+// Modify this value as seen fit.
 #define CN_SERVER_MAX_CLIENTS 32
 
 typedef struct cn_server_config_t
@@ -5392,7 +5393,7 @@ struct cn_simulator_t
 
 cn_simulator_t* cn_simulator_create(cn_socket_t* socket, void* mem_ctx)
 {
-	cn_simulator_t* sim = CN_ALLOC(sizeof(cn_simulator_t), mem_ctx);
+	cn_simulator_t* sim = (cn_simulator_t*)CN_ALLOC(sizeof(cn_simulator_t), mem_ctx);
 	CN_MEMSET(sim, 0, sizeof(*sim));
 	sim->socket = socket;
 	sim->rnd = cn_rnd_seed(0);
@@ -6934,7 +6935,7 @@ cn_handle_allocator_t* cn_handle_allocator_create(int initial_capacity, void* us
 	table->mem_ctx = user_allocator_context;
 
 	if (initial_capacity) {
-		table->handles = CN_ALLOC(sizeof(cn_handle_t) * initial_capacity, user_allocator_context);
+		table->handles = (cn_handle_entry_t*)CN_ALLOC(sizeof(cn_handle_entry_t) * initial_capacity, user_allocator_context);
 		if (!table->handles) {
 			CN_FREE(table, user_allocator_context);
 			return NULL;
@@ -8853,7 +8854,7 @@ cn_client_t* cn_client_create(uint16_t port, uint64_t application_id, bool use_i
 	cn_protocol_client_t* p_client = cn_protocol_client_create(port, application_id, use_ipv6, user_allocator_context);
 	if (!p_client) return NULL;
 
-	cn_client_t* client = CN_ALLOC(sizeof(cn_client_t), user_allocator_context);
+	cn_client_t* client = (cn_client_t*)CN_ALLOC(sizeof(cn_client_t), user_allocator_context);
 	CN_MEMSET(client, 0, sizeof(*client));
 	client->p_client = p_client;
 	client->mem_ctx = user_allocator_context;
@@ -8999,7 +9000,7 @@ cn_server_t* cn_server_create(cn_server_config_t config)
 		}
 	}
 
-	cn_server_t* server = CN_ALLOC(sizeof(cn_server_t), config.user_allocator_context);
+	cn_server_t* server = (cn_server_t*)CN_ALLOC(sizeof(cn_server_t), config.user_allocator_context);
 	CN_MEMSET(server, 0, sizeof(*server));
 	server->mem_ctx = config.user_allocator_context;
 	server->config = config;
