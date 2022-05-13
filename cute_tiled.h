@@ -580,10 +580,10 @@ struct strpool_embedded_t
 
 #ifndef STRPOOL_EMBEDDED_STRNICMP
     #ifdef _WIN32
-        #include <strings.h>
+        #include <string.h>
         #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( _strnicmp( s1, s2, len ) )
     #else
-        #include <strings.h>
+        #include <string.h>
         #define STRPOOL_EMBEDDED_STRNICMP( s1, s2, len ) ( strncasecmp( s1, s2, len ) )
     #endif
 #endif
@@ -2866,6 +2866,13 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 	cute_tiled_layer_t* layer;
 	cute_tiled_tileset_t* tileset;
 	cute_tiled_error_line = 1;
+
+	if (!memory) {
+		// Make sure your map file was correctly found and loaded.
+		// If you called `cute_tiled_load_map_from_file` make sure your path was correct, and check
+		// your printf warnings.
+		CUTE_TILED_CRASH();
+	}
 
 	m = cute_tiled_map_internal_alloc_internal((void*)memory, size_in_bytes, mem_ctx);
 	layer = m->map.layers;

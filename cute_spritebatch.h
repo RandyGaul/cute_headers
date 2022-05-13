@@ -441,7 +441,7 @@ typedef struct
 typedef struct
 {
 	int w, h;
-	bool mark_for_cleanup;
+	int mark_for_cleanup;
 	SPRITEBATCH_U64 image_id;
 	SPRITEBATCH_U64 texture_id;
 } spritebatch_internal_premade_atlas;
@@ -1157,7 +1157,7 @@ void spritebatch_register_premade_atlas(spritebatch_t* sb, SPRITEBATCH_U64 image
 	info.w = w;
 	info.h = h;
 	info.image_id = image_id;
-	info.texture_id = ~0;
+	info.texture_id = ~0ULL;
 	info.mark_for_cleanup = false;
 	
 	hashtable_insert(&sb->sprites_to_premade_textures, image_id, &info);
