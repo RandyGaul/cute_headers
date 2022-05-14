@@ -8098,7 +8098,8 @@ cn_ack_system_t* cn_ack_system_create(cn_ack_system_config_t config)
 
 	ack_system->sequence = 0;
 	ack_system->acks_count = 0;
-	ack_system->acks = (uint16_t*)CN_ALLOC(sizeof(uint16_t) * config.initial_ack_capacity, mem_ctx);
+	ack_system->acks_capacity = config.initial_ack_capacity;
+	ack_system->acks = (uint16_t*)CN_ALLOC(sizeof(uint16_t) * ack_system->acks_capacity, mem_ctx);
 	CN_CHECK(cn_sequence_buffer_init(&ack_system->sent_packets, config.sent_packets_sequence_buffer_size, sizeof(cn_sent_packet_t), NULL, mem_ctx));
 	sent_packets_init = 1;
 	CN_CHECK(cn_sequence_buffer_init(&ack_system->received_packets, config.received_packets_sequence_buffer_size, sizeof(cn_received_packet_t), NULL, mem_ctx));
