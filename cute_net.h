@@ -143,7 +143,7 @@
 
 	UNIT TESTS
 
-		You may enable building the unit tests with CUTE_UNIT_TESTS. Simply call
+		You may enable building the unit tests with CUTE_NET_TESTS. Simply call
 
 			cn_run_tests(-1, false);
 
