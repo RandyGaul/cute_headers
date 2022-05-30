@@ -8614,7 +8614,7 @@ cn_error_t s_transport_send_reliably(cn_transport_t* transport, const void* data
 
 cn_error_t s_transport_send(cn_transport_t* transport, const void* data, int size)
 {
-	if (size < 1) return cn_error_failure("Negative `size` is not valid.");
+	if (size < 0) return cn_error_failure("Negative `size` is not valid.");
 	if (size > transport->max_size_single_send) return cn_error_failure("`size` exceeded `max_size_single_send` config param.");
 
 	int fragment_size = transport->fragment_size;
