@@ -76,7 +76,8 @@
 		                  power of two sample size for mixing updates
 		2.00 (05/21/2022) redesigned the entire API for v2.00, music support, broke
 		                  the pitch/plugin interface (to be fixed), CoreAudio is not
-		                  yet tested, but the SDL2 implementation is well tested
+		                  yet tested, but the SDL2 implementation is well tested,
+	                          ALSA support is dropped entirely
 
 
 	CONTRIBUTORS
