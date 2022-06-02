@@ -160,6 +160,8 @@
 		more modern machines, these aren't really concerns, even with mobile devices. If even after reading
 		this Q/A section you still want to stream your audio, you can try mini_al as an alternative:
 		https://github.com/dr-soft/mini_al
+
+		Some example change :)
 */
 
 #if !defined(CUTE_SOUND_H)
