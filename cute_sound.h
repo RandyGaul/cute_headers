@@ -484,6 +484,7 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 // Platform specific file inclusions.
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
+
 	#ifndef _WINDOWS_
 		#ifndef WIN32_LEAN_AND_MEAN
 			#define WIN32_LEAN_AND_MEAN
@@ -1472,6 +1473,7 @@ static void cs_free16(void* p, void* mem_ctx)
 
 	static DWORD WINAPI cs_ctx_thread(LPVOID lpParameter)
 	{
+		(void)lpParameter;
 		while (s_ctx->running) {
 			cs_mix();
 			if (s_ctx->sleep_milliseconds) cs_sleep(s_ctx->sleep_milliseconds);
@@ -1770,6 +1772,7 @@ void cs_shutdown()
 	cs_free16(s_ctx->samples, s_ctx->mem_ctx);
 	hashtable_term(&s_ctx->instance_map);
 	void* mem_ctx = s_ctx->mem_ctx;
+	(void)mem_ctx;
 	CUTE_SOUND_FREE(s_ctx, mem_ctx);
 }
 
@@ -1930,7 +1933,6 @@ static void cs_position(int* byte_to_lock, int* bytes_to_write)
 	DWORD lock = (s_ctx->running_index * s_ctx->bps) % s_ctx->buffer_size;
 	DWORD target_cursor = (write_cursor + s_ctx->latency_samples * s_ctx->bps);
 	if (target_cursor > (DWORD)s_ctx->buffer_size) target_cursor %= s_ctx->buffer_size;
-	DWORD old = target_cursor;
 	target_cursor = (DWORD)CUTE_SOUND_TRUNC(target_cursor, 16);
 	DWORD write;
 
@@ -2094,7 +2096,7 @@ void cs_mix()
 				int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
 				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
 				int sample_count = (mix_wide - 2 * delay_wide) * 4;
-
+				(void)sample_count;
 				// TODO
 				// Give all plugins a chance to inject altered samples into the mix streams.
 				//for (int i = 0; i < ctx->plugin_count; ++i) {
@@ -2520,8 +2522,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		int wide_offset = sample_count & 3;
 		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
-		cs__m128* a;
-		cs__m128* b;
+		cs__m128* a = NULL;
+		cs__m128* b = NULL;
 
 		switch (channel_count)
 		{
@@ -2762,6 +2764,7 @@ void cs_music_set_volume(float volume_0_to_1)
 
 void cs_music_set_pitch(float pitch)
 {
+	(void)pitch;
 	// TODO
 }
 
@@ -3025,6 +3028,8 @@ void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1)
 
 void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch_0_to_1)
 {
+	(void)sound;
+	(void)pitch_0_to_1;
 	// TODO.
 }
 
