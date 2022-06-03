@@ -2444,6 +2444,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 		}
 	}
 
+	if (err) *err = CUTE_SOUND_ERROR_NONE;
 	return audio;
 }
 
@@ -2580,6 +2581,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		audio->playing_count = 0;
 		free(samples);
 	}
+
+	if (err) *err = CUTE_SOUND_ERROR_NONE;
 	return audio;
 }
 
