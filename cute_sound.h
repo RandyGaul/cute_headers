@@ -187,7 +187,7 @@ typedef enum cs_error_t
 	CUTE_SOUND_ERROR_NONE,
 	CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB,
 	CUTE_SOUND_ERROR_FILE_NOT_FOUND,
-	CUTE_SOUND_ERROR_THIS_INVALID_SOUND,
+	CUTE_SOUND_ERROR_INVALID_SOUND,
 	CUTE_SOUND_ERROR_HWND_IS_NULL,
 	CUTE_SOUND_ERROR_DIRECTSOUND_CREATE_FAILED,
 	CUTE_SOUND_ERROR_CREATESOUNDBUFFER_FAILED,
@@ -223,6 +223,8 @@ const char* cs_error_as_string(cs_error_t error);
 /**
  * Pass in NULL for `os_handle`, except for the DirectSound backend this should
  * be hwnd.
+ * play_frequency_in_Hz depends on your audio file, 44100 seems to be fine.
+ * buffered_samples is clamped to be at least 1024.
  */
 cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_samples, void* user_allocator_context /* = NULL */);
 void cs_shutdown();
@@ -481,6 +483,7 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 
 // Platform specific file inclusions.
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
+
 
 	#ifndef _WINDOWS_
 		#ifndef WIN32_LEAN_AND_MEAN
@@ -1219,6 +1222,42 @@ cs_list_node_t* cs_list_back(cs_list_t* list)
 }
 
 // -------------------------------------------------------------------------------------------------
+
+const char* cs_error_as_string(cs_error_t error) {
+	switch (error) {
+	case CUTE_SOUND_ERROR_NONE: return "CUTE_SOUND_ERROR_NONE";
+	case CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB: return "CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB";
+	case CUTE_SOUND_ERROR_FILE_NOT_FOUND: return "CUTE_SOUND_ERROR_FILE_NOT_FOUND";
+	case CUTE_SOUND_ERROR_INVALID_SOUND: return "CUTE_SOUND_ERROR_INVALID_SOUND";
+	case CUTE_SOUND_ERROR_HWND_IS_NULL: return "CUTE_SOUND_ERROR_HWND_IS_NULL";
+	case CUTE_SOUND_ERROR_DIRECTSOUND_CREATE_FAILED: return "CUTE_SOUND_ERROR_DIRECTSOUND_CREATE_FAILED";
+	case CUTE_SOUND_ERROR_CREATESOUNDBUFFER_FAILED: return "CUTE_SOUND_ERROR_CREATESOUNDBUFFER_FAILED";
+	case CUTE_SOUND_ERROR_SETFORMAT_FAILED: return "CUTE_SOUND_ERROR_SETFORMAT_FAILED";
+	case CUTE_SOUND_ERROR_AUDIOCOMPONENTFINDNEXT_FAILED: return "CUTE_SOUND_ERROR_AUDIOCOMPONENTFINDNEXT_FAILED";
+	case CUTE_SOUND_ERROR_AUDIOCOMPONENTINSTANCENEW_FAILED: return "CUTE_SOUND_ERROR_AUDIOCOMPONENTINSTANCENEW_FAILED";
+	case CUTE_SOUND_ERROR_FAILED_TO_SET_STREAM_FORMAT: return "CUTE_SOUND_ERROR_FAILED_TO_SET_STREAM_FORMAT";
+	case CUTE_SOUND_ERROR_FAILED_TO_SET_RENDER_CALLBACK: return "CUTE_SOUND_ERROR_FAILED_TO_SET_RENDER_CALLBACK";
+	case CUTE_SOUND_ERROR_AUDIOUNITINITIALIZE_FAILED: return "CUTE_SOUND_ERROR_AUDIOUNITINITIALIZE_FAILED";
+	case CUTE_SOUND_ERROR_AUDIOUNITSTART_FAILED: return "CUTE_SOUND_ERROR_AUDIOUNITSTART_FAILED";
+	case CUTE_SOUND_ERROR_CANT_OPEN_AUDIO_DEVICE: return "CUTE_SOUND_ERROR_CANT_OPEN_AUDIO_DEVICE";
+	case CUTE_SOUND_ERROR_CANT_INIT_SDL_AUDIO: return "CUTE_SOUND_ERROR_CANT_INIT_SDL_AUDIO";
+	case CUTE_SOUND_ERROR_THE_FILE_IS_NOT_A_WAV_FILE: return "CUTE_SOUND_ERROR_THE_FILE_IS_NOT_A_WAV_FILE";
+	case CUTE_SOUND_ERROR_WAV_FILE_FORMAT_CHUNK_NOT_FOUND: return "CUTE_SOUND_ERROR_WAV_FILE_FORMAT_CHUNK_NOT_FOUND";
+	case CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND: return "CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND";
+	case CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED: return "CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED";
+	case CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED";
+	case CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED";
+	case CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE: return "CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE";
+	case CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED";
+	case CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED";
+	case CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED";
+	case CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT: return "CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT";
+	case CUTE_SOUND_ERROR_STB_VORBIS_DECODE_FAILED: return "CUTE_SOUND_ERROR_STB_VORBIS_DECODE_FAILED";
+	case CUTE_SOUND_ERROR_OGG_UNSUPPORTED_CHANNEL_COUNT: return "CUTE_SOUND_ERROR_OGG_UNSUPPORTED_CHANNEL_COUN";
+	default: return "UNKNOWN";
+	}
+}
+
 // Cute sound context functions.
 
 void cs_mix();
@@ -1470,6 +1509,7 @@ static void cs_free16(void* p, void* mem_ctx)
 
 	static DWORD WINAPI cs_ctx_thread(LPVOID lpParameter)
 	{
+		(void)lpParameter;
 		while (s_ctx->running) {
 			cs_mix();
 			if (s_ctx->sleep_milliseconds) cs_sleep(s_ctx->sleep_milliseconds);
@@ -1768,6 +1808,7 @@ void cs_shutdown()
 	cs_free16(s_ctx->samples, s_ctx->mem_ctx);
 	hashtable_term(&s_ctx->instance_map);
 	void* mem_ctx = s_ctx->mem_ctx;
+	(void)mem_ctx;
 	CUTE_SOUND_FREE(s_ctx, mem_ctx);
 }
 
@@ -1928,7 +1969,6 @@ static void cs_position(int* byte_to_lock, int* bytes_to_write)
 	DWORD lock = (s_ctx->running_index * s_ctx->bps) % s_ctx->buffer_size;
 	DWORD target_cursor = (write_cursor + s_ctx->latency_samples * s_ctx->bps);
 	if (target_cursor > (DWORD)s_ctx->buffer_size) target_cursor %= s_ctx->buffer_size;
-	DWORD old = target_cursor;
 	target_cursor = (DWORD)CUTE_SOUND_TRUNC(target_cursor, 16);
 	DWORD write;
 
@@ -2092,7 +2132,7 @@ void cs_mix()
 				int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
 				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
 				int sample_count = (mix_wide - 2 * delay_wide) * 4;
-
+				(void)sample_count;
 				// TODO
 				// Give all plugins a chance to inject altered samples into the mix streams.
 				//for (int i = 0; i < ctx->plugin_count; ++i) {
@@ -2440,6 +2480,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 		}
 	}
 
+	if (err) *err = CUTE_SOUND_ERROR_NONE;
 	return audio;
 }
 
@@ -2518,8 +2559,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		int wide_offset = sample_count & 3;
 		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
-		cs__m128* a;
-		cs__m128* b;
+		cs__m128* a = NULL;
+		cs__m128* b = NULL;
 
 		switch (channel_count)
 		{
@@ -2576,6 +2617,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		audio->playing_count = 0;
 		free(samples);
 	}
+
+	if (err) *err = CUTE_SOUND_ERROR_NONE;
 	return audio;
 }
 
@@ -2760,6 +2803,7 @@ void cs_music_set_volume(float volume_0_to_1)
 
 void cs_music_set_pitch(float pitch)
 {
+	(void)pitch;
 	// TODO
 }
 
@@ -3023,13 +3067,15 @@ void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1)
 
 void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch_0_to_1)
 {
+	(void)sound;
+	(void)pitch_0_to_1;
 	// TODO.
 }
 
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
-	if (!inst) return CUTE_SOUND_ERROR_THIS_INVALID_SOUND;
+	if (!inst) return CUTE_SOUND_ERROR_INVALID_SOUND;
 	if (sample_index > inst->audio->sample_count) return CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT;
 	inst->sample_index = sample_index;
 	return CUTE_SOUND_ERROR_NONE;
