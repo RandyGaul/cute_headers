@@ -8,7 +8,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_net](cute_net.h)** | Networking library for games requiring an optional reliability layer over UDP with a baked in security scheme | 1.00 | C/C++
 **[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.07 | C/C++
 **[cute_aseprite](cute_aseprite.h)** | Parses .ase/.aseprite files into a compact and convenient struct collection | 1.02 | C/C++
-**[cute_sound](cute_sound.h)** | Load/play/loop/pitch (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time, done via plugin, see [cute_sound_pitch_plugin](cute_sound_pitch_plugin.h)) | 1.12 | C/C++
+**[cute_sound](cute_sound.h)** | Load/play/loop/pitch (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, decent performance custom pitch shifter (does not stretch time, done via plugin, see [cute_sound_pitch_plugin](cute_sound_pitch_plugin.h)), music + crossfade support | 2.0 | C/C++
 **[cute_time](cute_time.h)** | Quick and dirty "main loop" timer function, along with utilities for integer-based high resolution timing | 1.0 | C/C++
 **[cute_memfile](cute_memfile.h)** | Utility for calling fscanf-alike functions on files embedded in memory | 1.0 | C++
 **[cute_files](cute_files.h)** | Directory traversal, both recursive and manual | 1.0 | C/C++
