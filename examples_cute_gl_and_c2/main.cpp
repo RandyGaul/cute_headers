@@ -1071,20 +1071,19 @@ void try_out_toi_via_conservative_advancment()
 	c2v vB = c2V(0, 0);
 	Rotate(&vA, &vA, 1);
 
-	int iterations = -1;
 	int use_radius = 1;
-	float t = c2TOI(&A, C2_TYPE_CIRCLE, NULL, vA, &B, C2_TYPE_CAPSULE, NULL, vB, use_radius, &iterations);
+	c2TOIResult result = c2TOI(&A, C2_TYPE_CIRCLE, NULL, vA, &B, C2_TYPE_CAPSULE, NULL, vB, use_radius);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(A.p, A.r);
 	DrawCapsule(B.a, B.b, B.r);
 	
-	if (t != 1) gl_line_color(ctx, 1, 0, 0);
+	if (result.toi != 1) gl_line_color(ctx, 1, 0, 0);
 	gl_line(ctx, A.p.x, A.p.y, 0, A.p.x + vA.x, A.p.y + vA.y, 0);
 
-	A.p = c2Add(A.p, c2Mulvs(vA, t));
-	B.a = c2Add(B.a, c2Mulvs(vB, t));
-	B.b = c2Add(B.b, c2Mulvs(vB, t));
+	A.p = c2Add(A.p, c2Mulvs(vA, result.toi));
+	B.a = c2Add(B.a, c2Mulvs(vB, result.toi));
+	B.b = c2Add(B.b, c2Mulvs(vB, result.toi));
 
 	DrawCircle(A.p, A.r);
 }
@@ -1108,14 +1107,14 @@ void prime31_bad_toi_normal()
 	aabb.max = c2V(100, 100);
 
 	c2v vel = c2V(5000, 0);
-	float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
+	c2TOIResult result = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1);
 
 	gl_line_color(ctx, 1, 1, 1);
 	DrawCircle(circle.p, circle.r);
 	DrawAABB(aabb.min, aabb.max);
 
 	gl_line_color(ctx, 1, 0, 0);
-	circle.p = c2Add(circle.p, c2Mulvs(vel, toi));
+	circle.p = c2Add(circle.p, c2Mulvs(vel, result.toi));
 	DrawCircle(circle.p, circle.r);
 }
 
@@ -1135,14 +1134,14 @@ void prime31_bad_toi_normal_animated()
 	{
 		circle.p.x += 2 * i;
 		c2v vel = c2V(0, -500);
-		float toi = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
+		c2TOIResult result = c2TOI(&circle, C2_TYPE_CIRCLE, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1);
 
 		gl_line_color(ctx, 1, 1, 1);
 		DrawCircle(circle.p, circle.r);
 		DrawAABB(aabb.min, aabb.max);
 
 		gl_line_color(ctx, 1, 0, 0);
-		circle.p = c2Add(circle.p, c2Mulvs(vel, toi));
+		circle.p = c2Add(circle.p, c2Mulvs(vel, result.toi));
 		DrawCircle(circle.p, circle.r);
 	}
 }
@@ -1164,15 +1163,15 @@ void prime31_bad_toi_normal_animated_aabb()
 		aabb_top.min.x += 2 * i;
 		aabb_top.max.x += 2 * i;
 		c2v vel = c2V(0, -500);
-		float toi = c2TOI(&aabb_top, C2_TYPE_AABB, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1, NULL);
+		c2TOIResult result = c2TOI(&aabb_top, C2_TYPE_AABB, NULL, vel, &aabb, C2_TYPE_AABB, NULL, c2V(0, 0), 1);
 
 		gl_line_color(ctx, 1, 1, 1);
 		DrawAABB(aabb_top.min, aabb_top.max);
 		DrawAABB(aabb.min, aabb.max);
 
 		gl_line_color(ctx, 1, 0, 0);
-		aabb_top.min = c2Add(aabb_top.min, c2Mulvs(vel, toi));
-		aabb_top.max = c2Add(aabb_top.max, c2Mulvs(vel, toi));
+		aabb_top.min = c2Add(aabb_top.min, c2Mulvs(vel, result.toi));
+		aabb_top.max = c2Add(aabb_top.max, c2Mulvs(vel, result.toi));
 		DrawAABB(aabb_top.min, aabb_top.max);
 	}
 }
@@ -1395,7 +1394,7 @@ void infinite_loop_tyler_glaiel_analytic_toi_and_gjk()
 	while (1) {
 		uint64_t t0 = glfwGetTimerValue();
 		for (int i = 0; i < N; ++i) {
-			c2TOI(quads + i, C2_TYPE_POLY, NULL, c2V(0, 0), &moving_quad, C2_TYPE_POLY, NULL, c2V(0, -100), 0, NULL);
+			c2TOI(quads + i, C2_TYPE_POLY, NULL, c2V(0, 0), &moving_quad, C2_TYPE_POLY, NULL, c2V(0, -100), 0);
 		}
 		uint64_t t1 = glfwGetTimerValue();
 		float dt0 = (float)((double)(t1 - t0) * inv_freq);
@@ -1516,6 +1515,30 @@ void try_out_and_render_dual()
 	DrawPoly(dual.verts, poly.count);
 }
 
+void c2toi_jeff()
+{
+	c2AABB a;
+	a.min = c2V(0, 0);
+	a.max = c2V(1, 1);
+
+	c2AABB b;
+	b.min = c2V(2, 0);
+	b.max = c2V(3, 1);
+
+	c2v vA = c2V(3, 0);
+	c2v vB = c2V(0, 0);
+
+	c2TOIResult result = c2TOI(&a, C2_TYPE_AABB, NULL, vA, &b, C2_TYPE_AABB, NULL, vB, false);
+
+	if (result.hit) {
+		gl_line_color(ctx, 1, 0, 0);
+		} else {
+		gl_line_color(ctx, 1, 1, 1);
+	}
+	DrawAABB(a.min, a.max);
+	DrawAABB(b.min, b.max);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1603,13 +1626,12 @@ int main()
 
 		float dt = ct_time();
 		t += dt;
-		t = fmod(t, 2.0f * 3.14159265f);
-		//tgSendF32(&post_fx, "u_time", 1, &t, 1);
+		t = fmodf(t, 2.0f * 3.14159265f);
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 24;
-		if (arrow_pressed) code = (code + 1) % 25;
+		static int code = 25;
+		if (arrow_pressed) code = (code + 1) % 26;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1637,6 +1659,7 @@ int main()
 		case 22: martincohen_ray_bug(); break;
 		case 23: tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case(); break;
 		case 24: try_out_and_render_dual();
+		case 25: c2toi_jeff();
 		}
 
 		// push a draw call to tinygl

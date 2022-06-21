@@ -1,5 +1,5 @@
 #define CUTE_NET_IMPLEMENTATION
-#include "cute_net.h"
+#include "../../cute_net.h"
 
 #include <time.h>
 
@@ -95,7 +95,7 @@ void panic(cn_error_t err) {
 
 // Get this header from here: https://github.com/RandyGaul/cute_headers/blob/master/cute_time.h
 #define CUTE_TIME_IMPLEMENTATION
-#include "cute_time.h"
+#include "../../cute_time.h"
 
 int main(void) {
 	// Must be unique for each different player in your game.

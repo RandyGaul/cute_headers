@@ -9,7 +9,7 @@ int main()
 	HWND hwnd = GetConsoleWindow();
 	cs_context_t* ctx = cs_make_context(hwnd, 44100, 8192, 0, NULL);
 	cs_loaded_sound_t jump_audio = cs_load_wav("../jump.wav");
-	cs_loaded_sound_t select_audio = cs_load_wav("select.wav");
+	cs_loaded_sound_t select_audio = cs_load_wav("piano2.wav");
 	cs_playing_sound_t jump_instance = cs_make_playing_sound(&jump_audio);
 	cs_playing_sound_t select_instance = cs_make_playing_sound(&select_audio);
 	printf("jump.wav has a sample rate of %d Hz.\n", jump_audio.sample_rate);

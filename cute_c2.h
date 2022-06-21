@@ -1172,7 +1172,7 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 	if (result.iterations == 0) {
 		result.hit = false;
 	} else {
-		result.n = c2SafeNorm(c2Neg(v));
+		if (c2Dot(v, v) > 0) result.n = c2SafeNorm(c2Neg(v));
 		int i = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, result.n));
 		c2v p = c2Mulxv(ax, pA.verts[i]);
 		p = c2Add(c2Add(p, c2Mulvs(result.n, rA)), c2Mulvs(vA, t));

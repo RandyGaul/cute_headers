@@ -1,5 +1,5 @@
 #define CUTE_NET_IMPLEMENTATION
-#include <cute_net.h>
+#include "../../cute_net.h"
 
 #include <time.h>
 
@@ -95,10 +95,10 @@ void panic(cn_error_t err) {
 
 // Get this header from here: https://github.com/RandyGaul/cute_headers/blob/master/cute_time.h
 #define CUTE_TIME_IMPLEMENTATION
-#include "cute_time.h"
+#include "../../cute_time.h"
 
 int main(void) {
-	const char* address_and_port = "127.0.0.1:5001";
+	const char* address_and_port = "192.168.1.3:5001";
 	cn_endpoint_t endpoint;
 	cn_endpoint_init(&endpoint, address_and_port);
 
