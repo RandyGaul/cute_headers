@@ -26,66 +26,11 @@ unsigned char g_secret_key_data[64] = {
 	0x19,0x3e,0xa4,0xed,0xbc,0x0f,0x87,0x98,0x80,0xac,0x89,0x82,0x30,0xe9,0x95,0x6c
 };
 
-void print_embedded_symbol(const char* sym, void* data, int sz) {
-	printf("// Embedded %s\n", sym);
-	printf("int %s_sz = %d;\n", sym, sz);
-	printf("unsigned char %s_data[%d] = {\n", sym, sz);
-
-	const unsigned char* buf = (const unsigned char*)data;
-	for (int i = 0; i < sz; ++i) {
-		printf(
-			i % 16 == 0 ? "\t0x%02x%s" : "0x%02x%s",
-			buf[i],
-			i == sz - 1 ? "" : (i + 1) % 16 == 0 ? ",\n" : ","
-		);
-	}
-	printf("\n};\n");
-}
-
-void print_embedded_keygen() {
-	cn_crypto_sign_public_t pk;
-	cn_crypto_sign_secret_t sk;
-	cn_crypto_sign_keygen(&pk, &sk);
-	print_embedded_symbol("g_public_key", &pk, sizeof(pk));
-	print_embedded_symbol("g_secret_key", &sk, sizeof(sk));
-}
-
 uint64_t unix_timestamp() {
 	time_t ltime;
 	time(&ltime);
 	struct tm* timeinfo = gmtime(&ltime);;
 	return (uint64_t)mktime(timeinfo);
-}
-
-cn_error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer) {
-	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
-	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
-	uint64_t current_timestamp = unix_timestamp();
-	uint64_t expiration_timestamp = current_timestamp + 60; // Token expires in one minute.
-	uint32_t handshake_timeout = 5;
-	const char* endpoints[] = {
-		address_and_port,
-	};
-
-	uint8_t user_data[CN_CONNECT_TOKEN_USER_DATA_SIZE];
-	memset(user_data, 0, sizeof(user_data));
-
-	cn_error_t err = cn_generate_connect_token(
-		g_application_id,
-		current_timestamp,
-		&client_to_server_key,
-		&server_to_client_key,
-		expiration_timestamp,
-		handshake_timeout,
-		sizeof(endpoints) / sizeof(endpoints[0]),
-		endpoints,
-		unique_client_id,
-		user_data,
-		(cn_crypto_sign_secret_t*)g_secret_key_data,
-		connect_token_buffer
-	);
-
-	return err;
 }
 
 void panic(cn_error_t err) {
@@ -98,7 +43,7 @@ void panic(cn_error_t err) {
 #include "../../cute_time.h"
 
 int main(void) {
-	const char* address_and_port = "192.168.1.3:5001";
+	const char* address_and_port = "127.0.0.1:5001";
 	cn_endpoint_t endpoint;
 	cn_endpoint_init(&endpoint, address_and_port);
 

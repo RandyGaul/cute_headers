@@ -86,6 +86,8 @@
 
 	Revision history:
 		1.00 (04/22/2022) initial release
+		1.01 (07/22/2022) fixed an old find + replace bug that caused packets to fail
+		                  decryption across different platforms/compilers
 */
 
 /*
@@ -5268,9 +5270,9 @@ struct cn_protocol_server_t
 
 #include <inttypes.h>
 
-#define CN_PROTOCOL_CONTEXT "CN_CTX"
+static uint8_t s_crypto_ctx[] = "CUTE_CTX";
 #define CN_CHECK(X) if (X) ret = -1;
-#define CN_CRYPTO_CONTEXT "CN_CTX"
+#define CN_CRYPTO_CONTEXT (const char*)s_crypto_ctx
 
 static bool s_cn_is_init = false;
 
@@ -6160,7 +6162,7 @@ static void* s_get_item(const cn_hashtable_t* table, int index)
 static uint64_t s_calc_hash(const cn_hashtable_t* table, const void* key)
 {
 	uint8_t hash_bytes[CN_HASHTABLE_HASH_BYTES];
-	if (hydro_hash_hash(hash_bytes, CN_HASHTABLE_HASH_BYTES, (const uint8_t*)key, table->key_size, CN_PROTOCOL_CONTEXT, table->secret_key) != 0) {
+	if (hydro_hash_hash(hash_bytes, CN_HASHTABLE_HASH_BYTES, (const uint8_t*)key, table->key_size, CN_CRYPTO_CONTEXT, table->secret_key) != 0) {
 		CN_ASSERT(0);
 		return -1;
 	}
@@ -9317,6 +9319,8 @@ void cn_static_asserts()
 	CN_STATIC_ASSERT(CN_SERVER_MAX_CLIENTS == CN_PROTOCOL_SERVER_MAX_CLIENTS, must_be_equal_for_a_simple_implementation);
 	CN_STATIC_ASSERT(CN_CONNECT_TOKEN_SIZE == CN_PROTOCOL_CONNECT_TOKEN_SIZE, must_be_equal);
 	CN_STATIC_ASSERT(CN_CONNECT_TOKEN_USER_DATA_SIZE == CN_PROTOCOL_CONNECT_TOKEN_USER_DATA_SIZE, must_be_equal);
+
+	CN_STATIC_ASSERT(sizeof(s_crypto_ctx) >= hydro_secretbox_CONTEXTBYTES, must_be_equal);
 }
 
 CN_TEST_CASE(cn_socket_init_send_recieve_shutdown, "Test sending one packet on an ipv4 socket, and then retrieve it.");
