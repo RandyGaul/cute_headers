@@ -139,8 +139,8 @@
 		Here is a full example of a client and server, where the client sends a string to the
 		server to print to the console.
 
-			Client example: https://gist.github.com/RandyGaul/e45def05353e244055dde11e7a04ac71
-			Server example: https://gist.github.com/RandyGaul/f3b3c0864d760c37de74be2a573c52e5
+			Client example: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_net/client
+			Server example: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_net/server
 
 
 	UNIT TESTS
