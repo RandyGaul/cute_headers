@@ -512,8 +512,10 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 	#include <mach/mach_time.h>
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
-
-	#include <SDL2/SDL.h>
+	
+	#ifndef SDL_h_
+		#include <SDL2/SDL.h>
+	#endif
 	#ifndef _WIN32
 		#include <alloca.h>
 	#endif
@@ -1684,7 +1686,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 
 	SDL_AudioSpec wanted, have;
 	int ret = SDL_InitSubSystem(SDL_INIT_AUDIO);
-	if (ret < 0) CUTE_SOUND_ERROR_CANT_INIT_SDL_AUDIO;
+	if (ret < 0) return CUTE_SOUND_ERROR_CANT_INIT_SDL_AUDIO;
 
 #endif
 
@@ -1705,7 +1707,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->music_next = NULL;
 	s_ctx->instance_id_gen = 1;
 	hashtable_init(&s_ctx->instance_map, sizeof(cs_audio_source_t*), 1024, user_allocator_context);
-	s_ctx->instance_map; // <uint64_t, cs_audio_source_t*>
+	// s_ctx->instance_map; // <uint64_t, cs_audio_source_t*>
 	s_ctx->pages = NULL;
 	cs_list_init(&s_ctx->playing_sounds);
 	cs_list_init(&s_ctx->free_sounds);
@@ -1761,7 +1763,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->samples_in_circular_buffer = 0;
 	s_ctx->sample_count = wide_count * 4;
 	s_ctx->dev = SDL_OpenAudioDevice(NULL, 0, &wanted, &have, 0);
-	if (s_ctx->dev < 0) CUTE_SOUND_ERROR_CANT_OPEN_AUDIO_DEVICE; // This leaks memory, oh well.
+	if (s_ctx->dev < 0) return CUTE_SOUND_ERROR_CANT_OPEN_AUDIO_DEVICE; // This leaks memory, oh well.
 	SDL_PauseAudioDevice(s_ctx->dev, 0);
 	s_ctx->mutex = SDL_CreateMutex();
 
