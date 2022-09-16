@@ -115,6 +115,22 @@
 			#define CUTE_SOUND_IMPLEMENTATION
 			#define CUTE_SOUND_SCALAR_MODE
 			#include <cute_sound.h>
+	
+	CUSTOMIZATION
+
+		A few different macros can be overriden to provide custom functionality. Simply define any of these
+		macros before including this file to override them.
+
+			CUTE_SOUND_MINIMUM_BUFFERED_SAMPLES
+			CUTE_SOUND_ASSERT
+			CUTE_SOUND_ALLOC
+			CUTE_SOUND_FREE
+			CUTE_SOUND_MEMCPY
+			CUTE_SOUND_MEMSET
+			CUTE_SOUND_MEMCMP
+			CUTE_SOUND_FOPEN
+			CUTE_SOUND_FCLOSE
+
 
 	KNOWN LIMITATIONS
 
