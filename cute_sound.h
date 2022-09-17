@@ -128,7 +128,13 @@
 			CUTE_SOUND_MEMCPY
 			CUTE_SOUND_MEMSET
 			CUTE_SOUND_MEMCMP
+			CUTE_SOUND_SEEK_SET
+			CUTE_SOUND_SEEK_END
+			CUTE_SOUND_FILE
 			CUTE_SOUND_FOPEN
+			CUTE_SOUND_FSEEK
+			CUTE_SOUND_FREAD
+			CUTE_SOUND_FTELL
 			CUTE_SOUND_FCLOSE
 
 
@@ -446,13 +452,43 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 #	define CUTE_SOUND_MEMCMP memcmp
 #endif
 
-#ifndef CUTE_SOUND_FOPEN
-#	include <stdio.h>
+#ifndef(CUTE_SOUND_SEEK_SET)
+#	include <stdio.h> // SEEK_SET
+#	define CUTE_SOUND_SEEK_SET SEEK_SET
+#endif
+
+#ifndef(CUTE_SOUND_SEEK_END)
+#	include <stdio.h> // SEEK_END
+#	define CUTE_SOUND_SEEK_END SEEK_END
+#endif
+
+#ifndef(CUTE_SOUND_FILE)
+#	include <stdio.h> // FILE
+#	define CUTE_SOUND_FILE FILE
+#endif
+
+#ifndef(CUTE_SOUND_FOPEN)
+#	include <stdio.h> // fopen
 #	define CUTE_SOUND_FOPEN fopen
 #endif
 
-#ifndef CUTE_SOUND_FCLOSE
-#	include <stdio.h>
+#ifndef(CUTE_SOUND_FSEEK)
+#	include <stdio.h> // fseek
+#	define CUTE_SOUND_FSEEK fseek
+#endif
+
+#ifndef(CUTE_SOUND_FREAD)
+#	include <stdio.h> // fread
+#	define CUTE_SOUND_FREAD fread
+#endif
+
+#ifndef(CUTE_SOUND_FTELL)
+#	include <stdio.h> // ftell
+#	define CUTE_SOUND_FTELL ftell
+#endif
+
+#ifndef(CUTE_SOUND_FCLOSE)
+#	include <stdio.h> // fclose
 #	define CUTE_SOUND_FCLOSE fclose
 #endif
 
@@ -2322,16 +2358,16 @@ static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 {
 	(void)mem_ctx;
 	void* data = 0;
-	FILE* fp = fopen(path, "rb");
+	CUTE_SOUND_FILE* fp = CUTE_SOUND_FOPEN(path, "rb");
 	int sizeNum = 0;
 
 	if (fp) {
-		fseek(fp, 0, SEEK_END);
-		sizeNum = (int)ftell(fp);
-		fseek(fp, 0, SEEK_SET);
+		CUTE_SOUND_FSEEK(fp, 0, CUTE_SOUND_SEEK_END);
+		sizeNum = (int)CUTE_SOUND_FTELL(fp);
+		CUTE_SOUND_FSEEK(fp, 0, CUTE_SOUND_SEEK_SET);
 		data = CUTE_SOUND_ALLOC(sizeNum, mem_ctx);
-		(void)(fread(data, sizeNum, 1, fp) + 1);
-		fclose(fp);
+		(void)(CUTE_SOUND_FREAD(data, sizeNum, 1, fp) + 1);
+		CUTE_SOUND_FCLOSE(fp);
 	}
 
 	if (size) *size = sizeNum;

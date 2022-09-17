@@ -211,17 +211,48 @@ struct cp_atlas_image_t
 	#define CUTE_PNG_ASSERT assert
 #endif
 
-#if !defined(CUTE_PNG_STDIO)
-	#include <stdio.h>  // fopen, fclose, etc.
-	#define CUTE_PNG_STDIO
+#if !defined(CUTE_PNG_SEEK_SET)
+	#include <stdio.h> // SEEK_SET
 	#define CUTE_PNG_SEEK_SET SEEK_SET
+#endif
+
+#if !defined(CUTE_PNG_SEEK_END)
+	#include <stdio.h> // SEEK_END
 	#define CUTE_PNG_SEEK_END SEEK_END
+#endif
+
+#if !defined(CUTE_PNG_FILE)
+	#include <stdio.h> // FILE
 	#define CUTE_PNG_FILE FILE
+#endif
+
+#if !defined(CUTE_PNG_FOPEN)
+	#include <stdio.h> // fopen
 	#define CUTE_PNG_FOPEN fopen
+#endif
+
+#if !defined(CUTE_PNG_FSEEK)
+	#include <stdio.h> // fseek
 	#define CUTE_PNG_FSEEK fseek
+#endif
+
+#if !defined(CUTE_PNG_FREAD)
+	#include <stdio.h> // fread
 	#define CUTE_PNG_FREAD fread
+#endif
+
+#if !defined(CUTE_PNG_FTELL)
+	#include <stdio.h> // ftell
 	#define CUTE_PNG_FTELL ftell
+#endif
+
+#if !defined(CUTE_PNG_FCLOSE)
+	#include <stdio.h> // fclose
 	#define CUTE_PNG_FCLOSE fclose
+#endif
+
+#if !defined(CUTE_PNG_FERROR)
+	#include <stdio.h> // ferror
 	#define CUTE_PNG_FERROR ferror
 #endif
 

@@ -347,16 +347,43 @@ struct ase_t
 	#define CUTE_ASEPRITE_ASSERT assert
 #endif
 
-#if !defined(CUTE_ASEPRITE_STDIO)
-	#include <stdio.h> // fopen
-	#define CUTE_ASEPRITE_STDIO
+#if !defined(CUTE_ASEPRITE_SEEK_SET)
+	#include <stdio.h> // SEEK_SET
 	#define CUTE_ASEPRITE_SEEK_SET SEEK_SET
+#endif
+
+#if !defined(CUTE_ASEPRITE_SEEK_END)
+	#include <stdio.h> // SEEK_END
 	#define CUTE_ASEPRITE_SEEK_END SEEK_END
+#endif
+
+#if !defined(CUTE_ASEPRITE_FILE)
+	#include <stdio.h> // FILE
 	#define CUTE_ASEPRITE_FILE FILE
+#endif
+
+#if !defined(CUTE_ASEPRITE_FOPEN)
+	#include <stdio.h> // fopen
 	#define CUTE_ASEPRITE_FOPEN fopen
+#endif
+
+#if !defined(CUTE_ASEPRITE_FSEEK)
+	#include <stdio.h> // fseek
 	#define CUTE_ASEPRITE_FSEEK fseek
+#endif
+
+#if !defined(CUTE_ASEPRITE_FREAD)
+	#include <stdio.h> // fread
 	#define CUTE_ASEPRITE_FREAD fread
+#endif
+
+#if !defined(CUTE_ASEPRITE_FTELL)
+	#include <stdio.h> // ftell
 	#define CUTE_ASEPRITE_FTELL ftell
+#endif
+
+#if !defined(CUTE_ASEPRITE_FCLOSE)
+	#include <stdio.h> // fclose
 	#define CUTE_ASEPRITE_FCLOSE fclose
 #endif
 

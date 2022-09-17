@@ -1228,22 +1228,48 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	#endif
 #endif
 
-#if defined(CUTE_TILED_SNPRINTF) || defined(CUTE_TILED_STDIO)
-	#include <stdio.h>  // snprintf, fopen, fclose, etc.
-#endif
-
 #if !defined(CUTE_TILED_SNPRINTF)
+	#include <stdio.h> // snprintf
 	#define CUTE_TILED_SNPRINTF snprintf
 #endif
 
-#if !defined(CUTE_TILED_STDIO)
+#if !defined(CUTE_TILED_SEEK_SET)
+	#include <stdio.h> // SEEK_SET
 	#define CUTE_TILED_SEEK_SET SEEK_SET
+#endif
+
+#if !defined(CUTE_TILED_SEEK_END)
+	#include <stdio.h> // SEEK_END
 	#define CUTE_TILED_SEEK_END SEEK_END
+#endif
+
+#if !defined(CUTE_TILED_FILE)
+	#include <stdio.h> // FILE
 	#define CUTE_TILED_FILE FILE
+#endif
+
+#if !defined(CUTE_TILED_FOPEN)
+	#include <stdio.h> // fopen
 	#define CUTE_TILED_FOPEN fopen
+#endif
+
+#if !defined(CUTE_TILED_FSEEK)
+	#include <stdio.h> // fseek
 	#define CUTE_TILED_FSEEK fseek
+#endif
+
+#if !defined(CUTE_TILED_FREAD)
+	#include <stdio.h> // fread
 	#define CUTE_TILED_FREAD fread
+#endif
+
+#if !defined(CUTE_TILED_FTELL)
+	#include <stdio.h> // ftell
 	#define CUTE_TILED_FTELL ftell
+#endif
+
+#if !defined(CUTE_TILED_FCLOSE)
+	#include <stdio.h> // fclose
 	#define CUTE_TILED_FCLOSE fclose
 #endif
 
