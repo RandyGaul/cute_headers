@@ -48,8 +48,8 @@
 #	define CUTE_MATH_RESTRICT __restrict
 #else
 // Just assume a g++-like compiler.
-#	define CUTE_MATH_INLINE __attribute__((always_inline))
-#	define CUTE_MATH_SELECTANY extern const __attribute__((selectany))
+#	define CUTE_MATH_INLINE __attribute__((always_inline)) inline
+#	define CUTE_MATH_SELECTANY extern const __attribute__((weak))
 #	define CUTE_MATH_RESTRICT __restrict__
 #endif
 
