@@ -254,6 +254,7 @@ struct cute_tiled_object_t
 	/* template */                       // Not currently supported.
 	/* text */                           // Not currently supported.
 	cute_tiled_string_t type;            // String assigned to type field in editor.
+	/* class */                          // Not currently supported.
 	int visible;                         // 0 or 1. Whether object is shown in editor.
 	float width;                         // Width in pixels. Ignored if using a gid.
 	float x;                             // x coordinate in pixels.
@@ -2037,9 +2038,9 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 7758770083360183834U: // text
-			CUTE_TILED_WARNING("Text field of Tiled objects is not yet supported.");
-			while (cute_tiled_peak(m) != '}') cute_tiled_next(m);
-			cute_tiled_expect(m, '}');
+			CUTE_TILED_WARNING("Text field of Tiled objects is not yet supported. Ignoring field.");
+			while (cute_tiled_peak(m) != ',' && cute_tiled_peak(m) != '}') cute_tiled_next(m);
+			if (cute_tiled_peak(m) == '}')	continue;
 			break;
 
 		case 13509284784451838071U: // type
@@ -2060,6 +2061,12 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 
 		case 643295699219922364U: // y
 			cute_tiled_read_float(m, &object->y);
+			break;
+
+		case 1485919047363370797U: // class
+			CUTE_TILED_WARNING("Class field of Tiled objects is not yet supported. Ignoring field.");
+			while (cute_tiled_peak(m) != ',' && cute_tiled_peak(m) != '}') cute_tiled_next(m);
+			if (cute_tiled_peak(m) == '}')	continue;
 			break;
 
 		default:
