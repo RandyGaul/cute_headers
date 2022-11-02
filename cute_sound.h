@@ -78,6 +78,8 @@
 		                  the pitch/plugin interface (to be fixed), CoreAudio is not
 		                  yet tested, but the SDL2 implementation is well tested,
 	                          ALSA support is dropped entirely
+		2.01 (11/02/2022) compilation fixes for clang/llvm, added #include <stddef.h>
+						  to have size_t defined.
 
 
 	CONTRIBUTORS
@@ -90,6 +92,7 @@
 		Matt Rosen        1.10 - Initial experiments with cute_dsp to figure out plugin
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
+		Daniel Guzman	  2.01 - compilation fixes for clang/llvm on MAC. 	
 
 
 	DOCUMENTATION (very quick intro)
@@ -200,6 +203,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 // -------------------------------------------------------------------------------------------------
 // Error handling.
@@ -452,42 +456,42 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 #	define CUTE_SOUND_MEMCMP memcmp
 #endif
 
-#ifndef(CUTE_SOUND_SEEK_SET)
+#ifndef CUTE_SOUND_SEEK_SET
 #	include <stdio.h> // SEEK_SET
 #	define CUTE_SOUND_SEEK_SET SEEK_SET
 #endif
 
-#ifndef(CUTE_SOUND_SEEK_END)
+#ifndef CUTE_SOUND_SEEK_END
 #	include <stdio.h> // SEEK_END
 #	define CUTE_SOUND_SEEK_END SEEK_END
 #endif
 
-#ifndef(CUTE_SOUND_FILE)
+#ifndef CUTE_SOUND_FILE
 #	include <stdio.h> // FILE
 #	define CUTE_SOUND_FILE FILE
 #endif
 
-#ifndef(CUTE_SOUND_FOPEN)
+#ifndef CUTE_SOUND_FOPEN
 #	include <stdio.h> // fopen
 #	define CUTE_SOUND_FOPEN fopen
 #endif
 
-#ifndef(CUTE_SOUND_FSEEK)
+#ifndef CUTE_SOUND_FSEEK
 #	include <stdio.h> // fseek
 #	define CUTE_SOUND_FSEEK fseek
 #endif
 
-#ifndef(CUTE_SOUND_FREAD)
+#ifndef CUTE_SOUND_FREAD
 #	include <stdio.h> // fread
 #	define CUTE_SOUND_FREAD fread
 #endif
 
-#ifndef(CUTE_SOUND_FTELL)
+#ifndef CUTE_SOUND_FTELL
 #	include <stdio.h> // ftell
 #	define CUTE_SOUND_FTELL ftell
 #endif
 
-#ifndef(CUTE_SOUND_FCLOSE)
+#ifndef CUTE_SOUND_FCLOSE
 #	include <stdio.h> // fclose
 #	define CUTE_SOUND_FCLOSE fclose
 #endif
