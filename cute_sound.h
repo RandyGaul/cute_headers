@@ -79,7 +79,9 @@
 		                  yet tested, but the SDL2 implementation is well tested,
 	                          ALSA support is dropped entirely
 		2.01 (11/02/2022) compilation fixes for clang/llvm, added #include <stddef.h>
-						  to have size_t defined.
+				  to have size_t defined. Correctly finalize the thread when
+                                  cs_shutdown is called for all platforms that spawned it
+				  (this fixes segmentation fault on cs_shutdown)
 
 
 	CONTRIBUTORS
@@ -1833,13 +1835,13 @@ void cs_unlock();
 
 void cs_shutdown()
 {
-#if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 	if (s_ctx->separate_thread) {
 		cs_lock();
 		s_ctx->running = false;
 		cs_unlock();
 		while (s_ctx->separate_thread) cs_sleep(1);
 	}
+#if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 	DeleteCriticalSection(&s_ctx->critical_section);
 	IDirectSoundBuffer_Release(s_ctx->secondary);
