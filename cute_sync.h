@@ -435,7 +435,7 @@ int cute_atomic_get(cute_atomic_int_t* atomic)
 
 int cute_atomic_cas(cute_atomic_int_t* atomic, int expected, int value)
 {
-	return (int)_InterlockedCompareExchange(&atomic->i, expected, value) == value;
+	return (int)_InterlockedCompareExchange(&atomic->i, value, expected) == value;
 }
 
 void* cute_atomic_ptr_set(void** atomic, void* value)
@@ -450,7 +450,7 @@ void* cute_atomic_ptr_get(void** atomic)
 
 int cute_atomic_ptr_cas(void** atomic, void* expected, void* value)
 {
-	return _InterlockedCompareExchangePointer(atomic, expected, value) == value;
+	return _InterlockedCompareExchangePointer(atomic, value, expected) == value;
 }
 
 #elif defined(CUTE_SYNC_POSIX)
