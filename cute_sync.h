@@ -740,7 +740,7 @@ int cute_semaphore_value(cute_semaphore_t* semaphore)
 
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
-	CloseHandle((HANDLE)&semaphore->id);
+	CloseHandle((HANDLE)semaphore->id);
 }
 
 cute_thread_t* cute_thread_create(cute_thread_fn fn, const char* name, void* udata)
