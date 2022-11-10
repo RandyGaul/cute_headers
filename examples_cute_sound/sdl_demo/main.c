@@ -11,7 +11,7 @@
 #include <Windows.h>
 
 #define CUTE_TIME_IMPLEMENTATION
-#include "../../cute_time.h"
+#include "cute_time.h"
 
 int main(int argc, char *args[])
 {

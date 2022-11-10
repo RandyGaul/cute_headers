@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.00
+	cute_sound.h - v2.02
 
 
 	To create implementation (the function definitions)
@@ -77,11 +77,15 @@
 		2.00 (05/21/2022) redesigned the entire API for v2.00, music support, broke
 		                  the pitch/plugin interface (to be fixed), CoreAudio is not
 		                  yet tested, but the SDL2 implementation is well tested,
-	                          ALSA support is dropped entirely
+		                      ALSA support is dropped entirely
 		2.01 (11/02/2022) compilation fixes for clang/llvm, added #include <stddef.h>
-				  to have size_t defined. Correctly finalize the thread when
-                                  cs_shutdown is called for all platforms that spawned it
-				  (this fixes segmentation fault on cs_shutdown)
+		                  to have size_t defined. Correctly finalize the thread when
+		                  cs_shutdown is called for all platforms that spawned it
+		                  (this fixes segmentation fault on cs_shutdown)
+		2.02 (11/10/2022) Removed plugin API -- It was clunky and just not worth the
+		                  maintenence effort. If you're reading this Matt, I haven't
+		                  forgotten all the cool work you did! And will use it in the
+		                  future for sure :) -- Unfortunately this removes pitch.
 
 
 	CONTRIBUTORS
@@ -94,7 +98,7 @@
 		Matt Rosen        1.10 - Initial experiments with cute_dsp to figure out plugin
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
-		Daniel Guzman	  2.01 - compilation fixes for clang/llvm on MAC. 	
+		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
 
 
 	DOCUMENTATION (very quick intro)
@@ -104,11 +108,6 @@
 			1. create context (call cs_init)
 			2. load sounds from disk into memory (call cs_load_wav, or cs_load_ogg with stb_vorbis.c)
 			3. play sounds (cs_play_sound), or music (cs_music_play)
-
-	PLUGINS
-
-		Cute sound can add plugins at run-time to modify audio before it gets mixed. Please
-		refer to all the documentation near `cs_plugin_interface_t`.
 
 	DISABLE SSE SIMD ACCELERATION
 
@@ -146,61 +145,58 @@
 	KNOWN LIMITATIONS
 
 		* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
-			guarantee it will work for all kinds of wav files, but it certainly does for the common
-			kind (and can be changed fairly easily if someone wanted to extend it).
+		  guarantee it will work for all kinds of wav files, but it certainly does for the common
+		  kind (and can be changed fairly easily if someone wanted to extend it).
 		* Only supports 16 bits per sample.
 		* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
-			to float, mix all samples, and write back to audio API as 16 bit integers. In
-			practice this works very well and clipping is not often a big problem.
+		  to float, mix all samples, and write back to audio API as 16 bit integers. In
+		  practice this works very well and clipping is not often a big problem.
 
 
 	FAQ
 
 		Q : I would like to use my own memory management, how can I achieve this?
 		A : This header makes a couple uses of malloc/free, and cs_malloc16/cs_free16. Simply find these bits
-		and replace them with your own memory allocation routines. They can be wrapped up into a macro,
-		or call your own functions directly -- it's up to you. Generally these functions allocate fairly
-		large chunks of memory, and not very often (if at all).
+		    and replace them with your own memory allocation routines. They can be wrapped up into a macro,
+		    or call your own functions directly -- it's up to you. Generally these functions allocate fairly
+		    large chunks of memory, and not very often (if at all).
 
 		Q : Does this library support audio streaming? Something like System::createStream in FMOD.
 		A : No. Typically music files aren't that large (in the megabytes). Compare this to a typical
-		DXT texture of 1024x1024, at 0.5MB of memory. Now say an average music file for a game is three
-		minutes long. Loading this file into memory and storing it as raw 16bit samples with two channels,
-		would be:
+		    DXT texture of 1024x1024, at 0.5MB of memory. Now say an average music file for a game is three
+		    minutes long. Loading this file into memory and storing it as raw 16bit samples with two channels,
+		    would be:
 
-			num_samples = 3 * 60 * 44100 * 2
-			num_bits = num_samples * 16
-			num_bytes = num_bits / 8
-			num_megabytes = num_bytes / (1024 * 1024)
-			or 30.3mb
+		        num_samples = 3 * 60 * 44100 * 2
+		        num_bits = num_samples * 16
+		        num_bytes = num_bits / 8
+		        num_megabytes = num_bytes / (1024 * 1024)
+		        or 30.3mb
 
-		So say the user has 2gb of spare RAM. That means we could fit 67 different three minute length
-		music files in there simultaneously. That is a ridiculous amount of spare memory. 30mb is nothing
-		nowadays. Just load your music file into memory all at once and then play it.
+		    So say the user has 2gb of spare RAM. That means we could fit 67 different three minute length
+		    music files in there simultaneously. That is a ridiculous amount of spare memory. 30mb is nothing
+		    nowadays. Just load your music file into memory all at once and then play it.
 
 		Q : But I really need streaming of audio files from disk to save memory! Also loading my audio
-		files (like .OGG) takes a long time (multiple seconds).
+		    files (like .OGG) takes a long time (multiple seconds).
 		A : It is recommended to either A) load up your music files before they are needed, perhaps during
-		a loading screen, or B) stream in the entire audio into memory on another thread. cs_read_mem_ogg is
-		a great candidate function to throw onto a job pool. Streaming is more a remnant of older machines
-		(like in the 90's or early 2000's) where decoding speed and RAM were real nasty bottlenecks. For
-		more modern machines, these aren't really concerns, even with mobile devices. If even after reading
-		this Q/A section you still want to stream your audio, you can try mini_al as an alternative:
-		https://github.com/dr-soft/mini_al
+		    a loading screen, or B) stream in the entire audio into memory on another thread. cs_read_mem_ogg is
+		    a great candidate function to throw onto a job pool. Streaming is more a remnant of older machines
+		    (like in the 90's or early 2000's) where decoding speed and RAM were real nasty bottlenecks. For
+		    more modern machines, these aren't really concerns, even with mobile devices. If even after reading
+		    this Q/A section you still want to stream your audio, you can try mini_al as an alternative:
+		    https://github.com/dr-soft/mini_al
 */
 
 #if !defined(CUTE_SOUND_H)
 
 #if defined(_WIN32)
-
 	#if !defined _CRT_SECURE_NO_WARNINGS
 		#define _CRT_SECURE_NO_WARNINGS
 	#endif
-
 	#if !defined _CRT_NONSTDC_NO_DEPRECATE
 		#define _CRT_NONSTDC_NO_DEPRECATE
 	#endif
-
 #endif
 
 #include <stdint.h>
@@ -213,7 +209,7 @@
 typedef enum cs_error_t
 {
 	CUTE_SOUND_ERROR_NONE,
-	CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB,
+	CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB, // https://github.com/RandyGaul/cute_headers/issues
 	CUTE_SOUND_ERROR_FILE_NOT_FOUND,
 	CUTE_SOUND_ERROR_INVALID_SOUND,
 	CUTE_SOUND_ERROR_HWND_IS_NULL,
@@ -249,8 +245,7 @@ const char* cs_error_as_string(cs_error_t error);
 // Cute sound context functions.
 
 /**
- * Pass in NULL for `os_handle`, except for the DirectSound backend this should
- * be hwnd.
+ * Pass in NULL for `os_handle`, except for the DirectSound backend this should be hwnd.
  * play_frequency_in_Hz depends on your audio file, 44100 seems to be fine.
  * buffered_samples is clamped to be at least 1024.
  */
@@ -264,8 +259,22 @@ void cs_update(float dt);
 void cs_set_global_volume(float volume_0_to_1);
 void cs_set_global_pan(float pan_0_to_1);
 void cs_set_global_pause(bool true_for_paused);
+
+/**
+ * Spawns a mixing thread dedicated to mixing audio in the background.
+ * If you don't call this function mixing will happen on the main-thread when you call `cs_update`.
+ */
 void cs_spawn_mix_thread();
+
+/**
+ * In cases where the mixing thread takes up extra CPU attention doing nothing, you can force
+ * it to sleep manually. You can tune this as necessary, but it's probably not necessary for you.
+ */
 void cs_mix_thread_sleep_delay(int milliseconds);
+
+/**
+ * Sometimes useful for dynamic library shenanigans.
+ */
 void* cs_get_context_ptr();
 void cs_set_context_ptr(void* ctx);
 
@@ -311,7 +320,6 @@ cs_error_t cs_music_stop(float fade_out_time /* = 0 */);
 void cs_music_pause();
 void cs_music_resume();
 void cs_music_set_volume(float volume_0_to_1);
-void cs_music_set_pitch(float pitch); // TODO
 void cs_music_set_loop(bool true_to_loop);
 cs_error_t cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 cs_error_t cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
@@ -326,7 +334,7 @@ typedef struct cs_sound_params_t
 	bool paused  /* = false */;
 	bool looped  /* = false */;
 	float volume /* = 1.0f */;
-	float pan    /* = 0.5f */;
+	float pan    /* = 0.5f */; // Can be from 0 to 1.
 	float delay  /* = 0 */;
 } cs_sound_params_t;
 
@@ -338,82 +346,14 @@ bool cs_sound_is_active(cs_playing_sound_t sound);
 bool cs_sound_get_is_paused(cs_playing_sound_t sound);
 bool cs_sound_get_is_looped(cs_playing_sound_t sound);
 float cs_sound_get_volume(cs_playing_sound_t sound);
-float cs_sound_get_pitch(cs_playing_sound_t sound); // TODO
 uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound);
 void cs_sound_set_is_paused(cs_playing_sound_t sound, bool true_for_paused);
 void cs_sound_set_is_looped(cs_playing_sound_t sound, bool true_for_looped);
 void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1);
-void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch_0_to_1); // TODO
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index);
 
 void cs_set_playing_sounds_volume(float volume_0_to_1);
 void cs_stop_all_playing_sounds();
-
-// -------------------------------------------------------------------------------------------------
-// Plugins.
-
-#define CUTE_SOUND_PLUGINS_MAX 32
-
-/**
- * Plugin interface.
- *
- * A plugin is anyone who implements one of these cs_plugin_interface_t structs
- * and then calls `cs_add_plugin(ctx, plugin_ptr)`. Plugins can be implemented to
- * perform custom operations on playing sounds before they mixed to the audio driver.
- */
-typedef struct cs_plugin_interface_t
-{
-	/**
-	 * This pointer is used to represent your plugin instance, and is pased to all callbacks as the
-	 * `plugin_instance` pointer. This pointer is not managed by cute sound in any way. You are
-	 * responsible for allocating and releasing all resources associated with the plugin instance.
-	 */
-	void* plugin_instance;
-
-	/**
-	 * Called whenever a new sound is starting to play. `playing_sound_udata` is optional, and should
-	 * point to whatever data you would like to associate with playing sounds, on a per-playing-sound
-	 * basis.
-	 *
-	 * This function is only called from user threads whenever `cs_play_sound` or `cs_insert_sound`
-	 * is called.
-	 */
-	void (*on_make_playing_sound_fn)(void* plugin_instance, void** playing_sound_udata, cs_playing_sound_t sound);
-
-	/**
-	 * Called once for each time `on_make_playing_sound_fn` is called. The pointer originally assigned
-	 * in `on_make_playing_sound_fn` will be passed back here as `playing_sound_udata`. The intent is
-	 * to let the user free up any resources associated with the playing sound instance before the sound
-	 * is released completely internally.
-	 *
-	 * This function can be called from the user thread, or from the mixer thread.
-	 */
-	void (*on_free_playing_sound_fn)(void* plugin_instance, void* playing_sound_udata, cs_playing_sound_t sound);
-
-	/**
-	 * Called when mixing each playing sound instance, once per channel on each playing sound instance.
-	 * This function gives the plugin a chance to alter any audio before being mixed by cute_sound to
-	 * the audio driver. The source audio is not alterable, however, the plugin can copy `samples_in`
-	 * and then output modified samples in `samples_out`.
-	 *
-	 * `channel_index`       This function is called once per source channel, so `channel_index` will be either
-	 *                       0 or 1, depending on the channel count.
-	 * `samples_in`          All audio from the playing sound's source.
-	 * `sample_count`        The number of samples in `samples_in` and expected in `samples_out`.
-	 * `samples_out`         Required to point to a valid samples buffer. The simplest case is to assign `samples_out`
-	 *                       directly as `samples_in`, performing no modifications. In most cases though the plugin
-	 *                       will make a copy of `(float*)samples_in`, alter the samples, and assign `samples_out` to
-	 *                       point to the modified samples. `samples_out` is expected to point to a valid buffer until
-	 *                       the next time `on_mix_fn` is called. Typically the plugin can hold a single buffer used
-	 *                       for altered samples, and simply reuse the same buffer each time `on_mix_fn` is called.
-	 * `playing_sound_udata` The user data `playing_sound_udata` assigned when `on_make_playing_sound_fn` was called.
-	 *
-	 * This function can be called from the user thread, or from the mixer thread.
-	 */
-	void (*on_mix_fn)(void* plugin_instance, int channel_index, const float* samples_in, int sample_count, float** samples_out, void* playing_sound_udata, cs_playing_sound_t sound);
-} cs_plugin_interface_t;
-
-cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 
 // -------------------------------------------------------------------------------------------------
 // C++ overloads.
@@ -440,6 +380,10 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 #if !defined(CUTE_SOUND_ALLOC)
 	#include <stdlib.h>
 	#define CUTE_SOUND_ALLOC(size, ctx) malloc(size)
+#endif
+
+#if !defined(CUTE_SOUND_FREE)
+	#include <stdlib.h>
 	#define CUTE_SOUND_FREE(mem, ctx) free(mem)
 #endif
 
@@ -459,42 +403,42 @@ cs_error_t cs_add_plugin(const cs_plugin_interface_t* plugin);
 #endif
 
 #ifndef CUTE_SOUND_SEEK_SET
-#	include <stdio.h> // SEEK_SET
+#	include <stdio.h>
 #	define CUTE_SOUND_SEEK_SET SEEK_SET
 #endif
 
 #ifndef CUTE_SOUND_SEEK_END
-#	include <stdio.h> // SEEK_END
+#	include <stdio.h>
 #	define CUTE_SOUND_SEEK_END SEEK_END
 #endif
 
 #ifndef CUTE_SOUND_FILE
-#	include <stdio.h> // FILE
+#	include <stdio.h>
 #	define CUTE_SOUND_FILE FILE
 #endif
 
 #ifndef CUTE_SOUND_FOPEN
-#	include <stdio.h> // fopen
+#	include <stdio.h>
 #	define CUTE_SOUND_FOPEN fopen
 #endif
 
 #ifndef CUTE_SOUND_FSEEK
-#	include <stdio.h> // fseek
+#	include <stdio.h>
 #	define CUTE_SOUND_FSEEK fseek
 #endif
 
 #ifndef CUTE_SOUND_FREAD
-#	include <stdio.h> // fread
+#	include <stdio.h>
 #	define CUTE_SOUND_FREAD fread
 #endif
 
 #ifndef CUTE_SOUND_FTELL
-#	include <stdio.h> // ftell
+#	include <stdio.h>
 #	define CUTE_SOUND_FTELL ftell
 #endif
 
 #ifndef CUTE_SOUND_FCLOSE
-#	include <stdio.h> // fclose
+#	include <stdio.h>
 #	define CUTE_SOUND_FCLOSE fclose
 #endif
 
@@ -1407,8 +1351,6 @@ typedef struct cs_context_t
 	bool separate_thread;
 	bool running;
 	int sleep_milliseconds;
-	int plugin_count;
-	cs_plugin_interface_t plugins[CUTE_SOUND_PLUGINS_MAX];
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
@@ -1781,7 +1723,6 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->running = true;
 	s_ctx->separate_thread = false;
 	s_ctx->sleep_milliseconds = 0;
-	s_ctx->plugin_count = 0;
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
@@ -1960,7 +1901,6 @@ void cs_update(float dt)
 void cs_set_global_volume(float volume_0_to_1)
 {
 	if (volume_0_to_1 < 0) volume_0_to_1 = 0;
-	if (volume_0_to_1 > 1) volume_0_to_1 = 1;
 	s_ctx->global_volume = volume_0_to_1;
 }
 
@@ -2193,23 +2133,6 @@ void cs_mix()
 				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
 				int sample_count = (mix_wide - 2 * delay_wide) * 4;
 				(void)sample_count;
-				// TODO
-				// Give all plugins a chance to inject altered samples into the mix streams.
-				//for (int i = 0; i < ctx->plugin_count; ++i) {
-				//	cs_plugin_interface_t* plugin = ctx->plugins + i;
-				//	float* plugin_samples_in_channel_a = (float*)(cA + delay_wide + offset_wide);
-				//	float* plugin_samples_in_channel_b = (float*)(cB + delay_wide + offset_wide);
-				//	float* samples_out_channel_a = NULL;
-				//	float* samples_out_channel_b = NULL;
-				//	//plugin->on_mix_fn(ctx, plugin->plugin_instance, 0, plugin_samples_in_channel_a, sample_count, &samples_out_channel_a, playing->plugin_udata[i], playing);
-				//	//if (audio->channel_count == 2) plugin->on_mix_fn(ctx, plugin->plugin_instance, 1, plugin_samples_in_channel_b, sample_count, &samples_out_channel_b, playing->plugin_udata[i], playing);
-				//	if (samples_out_channel_a) cA = (cs__m128*)samples_out_channel_a;
-				//	if (samples_out_channel_b) cB = (cs__m128*)samples_out_channel_b;
-				//
-				//	// Set offset_wide to cancel out delay_wide because cA and cB are now owned by the plugin,
-				//	// this elimineating the need for the delay offset.
-				//	if (!!samples_out_channel_a | !!samples_out_channel_b) offset_wide = -delay_wide;
-				//}
 
 				// apply volume, load samples into float buffers
 				switch (audio->channel_count) {
@@ -2264,13 +2187,6 @@ void cs_mix()
 				playing->audio->playing_count -= 1;
 				CUTE_SOUND_ASSERT(playing->audio->playing_count >= 0);
 			}
-
-			//// Notify plugins of this playing sound instance being released.
-			//for (int i = 0; i < ctx->plugin_count; ++i) {
-			//	cs_plugin_interface_t* plugin = ctx->plugins + i;
-			//	plugin->on_free_playing_sound_fn(ctx, plugin->plugin_instance, playing->plugin_udata[i], playing);
-			//	playing->plugin_udata[i] = NULL;
-			//}
 
 			cs_list_remove(playing_node);
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
@@ -2854,17 +2770,10 @@ cs_error_t cs_music_stop(float fade_out_time)
 
 void cs_music_set_volume(float volume_0_to_1)
 {
-	if (volume_0_to_1 > 1.0f) volume_0_to_1 = 1.0f;
 	if (volume_0_to_1 < 0) volume_0_to_1 = 0;
 	s_ctx->music_volume = volume_0_to_1;
 	if (s_ctx->music_playing) s_ctx->music_playing->volume = volume_0_to_1;
 	if (s_ctx->music_next) s_ctx->music_next->volume = volume_0_to_1;
-}
-
-void cs_music_set_pitch(float pitch)
-{
-	(void)pitch;
-	// TODO
 }
 
 void cs_music_set_loop(bool true_to_loop)
@@ -3087,14 +2996,6 @@ float cs_sound_get_volume(cs_playing_sound_t sound)
 	return inst->volume;
 }
 
-float cs_sound_get_pitch(cs_playing_sound_t sound)
-{
-	cs_sound_inst_t* inst = s_get_inst(sound);
-	if (!inst) return 0;
-	return 0; // TODO.
-	//return inst->pitch;
-}
-
 uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
@@ -3118,18 +3019,10 @@ void cs_sound_set_is_looped(cs_playing_sound_t sound, bool true_for_looped)
 
 void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1)
 {
-	if (volume_0_to_1 > 1.0f) volume_0_to_1 = 1.0f;
 	if (volume_0_to_1 < 0) volume_0_to_1 = 0;
 	cs_sound_inst_t* inst = s_get_inst(sound);
 	if (!inst) return;
 	inst->volume = volume_0_to_1;
-}
-
-void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch_0_to_1)
-{
-	(void)sound;
-	(void)pitch_0_to_1;
-	// TODO.
 }
 
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index)
@@ -3143,7 +3036,6 @@ cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_i
 
 void cs_set_playing_sounds_volume(float volume_0_to_1)
 {
-	if (volume_0_to_1 > 1.0f) volume_0_to_1 = 1.0f;
 	if (volume_0_to_1 < 0) volume_0_to_1 = 0;
 	s_ctx->sound_volume = volume_0_to_1;
 }
@@ -3168,10 +3060,6 @@ void cs_stop_all_playing_sounds()
 
 	cs_unlock();
 }
-
-// -------------------------------------------------------------------------------------------------
-// Plugins
-
 
 #endif // CUTE_SOUND_IMPLEMENTATION_ONCE
 #endif // CUTE_SOUND_IMPLEMENTATION
