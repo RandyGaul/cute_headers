@@ -1,8 +1,0 @@
-Controls:
-Press space to check out other fonts.
-Press z or x to adjust the clip rect.
-Press a or s to adjust the wrap line.
-
-Here is some sample text.
-Tässä on jotain paikkamerkkitekstiä.
-Här är några platshållare.
