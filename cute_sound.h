@@ -86,6 +86,7 @@
 		                  maintenence effort. If you're reading this Matt, I haven't
 		                  forgotten all the cool work you did! And will use it in the
 		                  future for sure :) -- Unfortunately this removes pitch.
+		                  Fixed a bug where dsound mixing could run too fast.
 
 
 	CONTRIBUTORS
@@ -445,8 +446,7 @@ void cs_stop_all_playing_sounds();
 // Platform detection.
 #define CUTE_SOUND_WINDOWS 1
 #define CUTE_SOUND_APPLE   2
-#define CUTE_SOUND_LINUX   3
-#define CUTE_SOUND_SDL     4
+#define CUTE_SOUND_SDL     3
 
 #if defined(_WIN32)
 
@@ -463,10 +463,6 @@ void cs_stop_all_playing_sounds();
 #elif defined(__APPLE__)
 
 	#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
-
-#elif defined(__linux__)
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_LINUX
 
 #else
 
@@ -513,7 +509,7 @@ void cs_stop_all_playing_sounds();
 	#include <pthread.h>
 	#include <mach/mach_time.h>
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
 		#include <SDL2/SDL.h>
@@ -524,7 +520,7 @@ void cs_stop_all_playing_sounds();
 
 #else
 
-	#error Unsupported platform - please choose one of CUTE_SOUND_WINDOWS, CUTE_SOUND_APPLE, CUTE_SOUND_LINUX or CUTE_SOUND_SDL.
+	#error Unsupported platform - please choose one of CUTE_SOUND_WINDOWS, CUTE_SOUND_APPLE, CUTE_SOUND_SDL.
 
 #endif
 
@@ -1354,6 +1350,7 @@ typedef struct cs_context_t
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
+	DWORD last_cursor;
 	unsigned running_index;
 	int buffer_size;
 	LPDIRECTSOUND dsound;
@@ -1377,7 +1374,7 @@ typedef struct cs_context_t
 	pthread_t thread;
 	pthread_mutex_t mutex;
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	unsigned index0; // read
 	unsigned index1; // write
@@ -1401,7 +1398,7 @@ void cs_sleep(int milliseconds)
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 	struct timespec ts = { 0, milliseconds * 1000000 };
 	nanosleep(&ts, NULL);
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	SDL_Delay(milliseconds);
 #endif
 }
@@ -1554,7 +1551,7 @@ static void cs_free16(void* p, void* mem_ctx)
 		return noErr;
 	}
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	int cs_ctx_thread(void* udata)
 	{
@@ -1625,7 +1622,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 		if (res != DS_OK) CUTE_SOUND_ERROR_SETFORMAT_FAILED;
 
 		bufdesc.dwSize = sizeof(bufdesc);
-		bufdesc.dwFlags = 0;
+		bufdesc.dwFlags = DSBCAPS_GETCURRENTPOSITION2;
 		bufdesc.dwBufferBytes = buffer_size;
 		bufdesc.lpwfxFormat = &format;
 		res = IDirectSound_CreateSoundBuffer(dsound, &bufdesc, &secondary_buffer, 0);
@@ -1682,7 +1679,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	ret = AudioOutputUnitStart(inst);
 	if (ret != noErr) return CUTE_SOUND_ERROR_AUDIOUNITSTART_FAILED;
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	SDL_AudioSpec wanted, have;
 	int ret = SDL_InitSubSystem(SDL_INIT_AUDIO);
@@ -1707,13 +1704,12 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->music_next = NULL;
 	s_ctx->instance_id_gen = 1;
 	hashtable_init(&s_ctx->instance_map, sizeof(cs_audio_source_t*), 1024, user_allocator_context);
-	// s_ctx->instance_map; // <uint64_t, cs_audio_source_t*>
 	s_ctx->pages = NULL;
 	cs_list_init(&s_ctx->playing_sounds);
 	cs_list_init(&s_ctx->free_sounds);
 	s_add_page();
 	s_ctx->mem_ctx = user_allocator_context;
-	s_ctx->latency_samples = 4096;
+	s_ctx->latency_samples = buffered_samples;
 	s_ctx->Hz = play_frequency_in_Hz;
 	s_ctx->bps = bps;
 	s_ctx->wide_count = wide_count;
@@ -1726,6 +1722,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
+	s_ctx->last_cursor = 0;
 	s_ctx->running_index = 0;
 	s_ctx->buffer_size = buffer_size;
 	s_ctx->dsound = dsound;
@@ -1747,7 +1744,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	ret = AudioUnitSetProperty(inst, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &input, sizeof(input));
 	if (ret != noErr) return CUTE_SOUND_ERROR_FAILED_TO_SET_RENDER_CALLBACK; // This leaks memory, oh well.
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	SDL_memset(&wanted, 0, sizeof(wanted));
 	SDL_memset(&have, 0, sizeof(have));
@@ -1790,7 +1787,7 @@ void cs_shutdown()
 	IDirectSoundBuffer_Release(s_ctx->dsound);
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	SDL_DestroyMutex(s_ctx->mutex);
 	SDL_CloseAudioDevice(s_ctx->dev);
@@ -1922,7 +1919,7 @@ void cs_lock()
 	EnterCriticalSection(&s_ctx->critical_section);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 	pthread_mutex_lock(&s_ctx->mutex);
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	SDL_LockMutex(s_ctx->mutex);
 #endif
 }
@@ -1933,31 +1930,36 @@ void cs_unlock()
 	LeaveCriticalSection(&s_ctx->critical_section);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 	pthread_mutex_unlock(&s_ctx->mutex);
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	SDL_UnlockMutex(s_ctx->mutex);
 #endif
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
-static void cs_position(int* byte_to_lock, int* bytes_to_write)
+static void cs_dsound_get_bytes_to_fill(int* byte_to_lock, int* bytes_to_write)
 {
-	// compute bytes to be written to direct sound
 	DWORD play_cursor;
 	DWORD write_cursor;
+	DWORD lock;
+	DWORD target_cursor;
+	DWORD write;
+	DWORD status;
+
 	HRESULT hr = IDirectSoundBuffer_GetCurrentPosition(s_ctx->secondary, &play_cursor, &write_cursor);
 	if (hr != DS_OK) {
 		if (hr == DSERR_BUFFERLOST) {
 			hr = IDirectSoundBuffer_Restore(s_ctx->secondary);
 		}
-		*byte_to_lock = play_cursor;
-		*bytes_to_write = write_cursor;
+		*byte_to_lock = write_cursor;
+		*bytes_to_write = s_ctx->latency_samples * s_ctx->bps;
 		if (!SUCCEEDED(hr)) {
 			return;
 		}
 	}
 
-	DWORD status;
+	s_ctx->last_cursor = write_cursor;
+
 	IDirectSoundBuffer_GetStatus(s_ctx->secondary, &status);
 	if (!(status & DSBSTATUS_PLAYING)) {
 		hr = IDirectSoundBuffer_Play(s_ctx->secondary, 0, 0, DSBPLAY_LOOPING);
@@ -1966,11 +1968,10 @@ static void cs_position(int* byte_to_lock, int* bytes_to_write)
 		}
 	}
 
-	DWORD lock = (s_ctx->running_index * s_ctx->bps) % s_ctx->buffer_size;
-	DWORD target_cursor = (write_cursor + s_ctx->latency_samples * s_ctx->bps);
+	lock = (s_ctx->running_index * s_ctx->bps) % s_ctx->buffer_size;
+	target_cursor = (write_cursor + s_ctx->latency_samples * s_ctx->bps);
 	if (target_cursor > (DWORD)s_ctx->buffer_size) target_cursor %= s_ctx->buffer_size;
 	target_cursor = (DWORD)CUTE_SOUND_TRUNC(target_cursor, 16);
-	DWORD write;
 
 	if (lock > target_cursor) {
 		write = (s_ctx->buffer_size - lock) + target_cursor;
@@ -1982,7 +1983,7 @@ static void cs_position(int* byte_to_lock, int* bytes_to_write)
 	*bytes_to_write = write;
 }
 
-static void cs_memcpy_to_directsound(int16_t* samples, int byte_to_lock, int bytes_to_write)
+static void cs_dsound_memcpy_to_driver(int16_t* samples, int byte_to_lock, int bytes_to_write)
 {
 	// copy mixer buffers to direct sound
 	void* region1;
@@ -2015,6 +2016,42 @@ static void cs_memcpy_to_directsound(int16_t* samples, int byte_to_lock, int byt
 	s_ctx->running_index = running_index;
 }
 
+void cs_dsound_dont_run_too_fast()
+{
+	DWORD status;
+	DWORD cursor;
+	DWORD junk;
+	HRESULT hr;
+
+	hr = IDirectSoundBuffer_GetCurrentPosition(s_ctx->secondary, &junk, &cursor);
+	if (hr != DS_OK) {
+		if (hr == DSERR_BUFFERLOST) {
+			IDirectSoundBuffer_Restore(s_ctx->secondary);
+		}
+		return;
+	}
+
+	// Prevent mixing thread from sending samples too quickly.
+	while (cursor == s_ctx->last_cursor) {
+		cs_sleep(1);
+
+		IDirectSoundBuffer_GetStatus(s_ctx->secondary, &status);
+		if ((status & DSBSTATUS_BUFFERLOST)) {
+			IDirectSoundBuffer_Restore(s_ctx->secondary);
+			IDirectSoundBuffer_GetStatus(s_ctx->secondary, &status);
+			if ((status & DSBSTATUS_BUFFERLOST)) {
+				break;
+			}
+		}
+
+		hr = IDirectSoundBuffer_GetCurrentPosition(s_ctx->secondary, &junk, &cursor);
+		if (hr != DS_OK) {
+			// Eek! Not much to do here I guess.
+			return;
+		}
+	}
+}
+
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 void cs_mix()
@@ -2032,9 +2069,9 @@ void cs_mix()
 
 	int byte_to_lock;
 	int bytes_to_write;
-	cs_position(&byte_to_lock, &bytes_to_write);
+	cs_dsound_get_bytes_to_fill(&byte_to_lock, &bytes_to_write);
 
-	if (!bytes_to_write) goto unlock;
+	if (bytes_to_write < (int)s_ctx->latency_samples) goto unlock;
 	samples_to_write = bytes_to_write / s_ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
@@ -2043,16 +2080,6 @@ void cs_mix()
 	samples_to_write = cs_samples_to_mix();
 	if (!samples_to_write) goto unlock;
 	bytes_to_write = samples_to_write * s_ctx->bps;
-
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
-
-	int ret;
-	snd_pcm_sframes_t frames = ctx->fns.snd_pcm_avail(ctx->pcm_handle);
-	if (frames == -EAGAIN) goto unlock; // No data yet.
-	else if (frames < 0) { /* Fatal error... How should this be handled? */ }
-	else if (frames == 0) goto unlock;
-	samples_to_write = (int)frames;
-	if (samples_to_write > (int)ctx->latency_samples) samples_to_write = ctx->latency_samples;
 
 #endif
 
@@ -2207,9 +2234,10 @@ void cs_mix()
 		cs__m128i a2b2a3b3 = cs_mm_unpackhi_epi32(a, b);
 		samples[i] = cs_mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
-	cs_memcpy_to_directsound((int16_t*)samples, byte_to_lock, bytes_to_write);
+	cs_dsound_memcpy_to_driver((int16_t*)samples, byte_to_lock, bytes_to_write);
+	cs_dsound_dont_run_too_fast();
 
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	// Since the ctx->samples array is already in use as a ring buffer
 	// reusing floatA to store output is a good way to temporarly store
@@ -2224,20 +2252,7 @@ void cs_mix()
 		samples[i] = cs_mm_packs_epi32(a0b0a1b1, a2b2a3b3);
 	}
 
-	// SDL/CoreAudio use a callback mechanism communicating with cute sound
-	// over a ring buffer (accessed by cs_push_bytes and cs_pull_bytes), but
-	// ALSA on Linux has their own memcpy-style function to use... So we don't
-	// need a local ring buffer at all, and can directly hand over the samples.
-	#if CUTE_SOUND_PLATFORM != CUTE_SOUND_LINUX
-		cs_push_bytes(samples, bytes_to_write);
-	#else
-		ret = ctx->fns.snd_pcm_writei(ctx->pcm_handle, samples, (snd_pcm_sframes_t)samples_to_write);
-		if (ret < 0) ret = ctx->fns.snd_pcm_recover(ctx->pcm_handle, ret, 0);
-		if (ret < 0) {
-			// A fatal error occured.
-			ctx->separate_thread = 0;
-		}
-	#endif
+	cs_push_bytes(samples, bytes_to_write);
 
 #endif
 
@@ -2253,7 +2268,7 @@ void cs_spawn_mix_thread()
 	CreateThread(0, 0, cs_ctx_thread, s_ctx, 0, 0);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
 	pthread_create(&s_ctx->thread, 0, cs_ctx_thread, s_ctx);
-#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_LINUX || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
+#elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	s_ctx->thread = SDL_CreateThread(&cs_ctx_thread, "CuteSoundThread", s_ctx);
 #endif
 }

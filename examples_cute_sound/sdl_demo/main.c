@@ -2,7 +2,7 @@
 #include <SDL2/SDL.h>
 
 #define STB_VORBIS_HEADER_ONLY
-#include "../demo/stb_vorbis.c"
+#include "../stb_vorbis.c"
 
 #define CUTE_SOUND_IMPLEMENTATION
 #define CUTE_SOUND_FORCE_SDL
@@ -95,4 +95,4 @@ int main(int argc, char *args[])
 }
 
 #undef STB_VORBIS_HEADER_ONLY
-#include "../demo/stb_vorbis.c"
+#include "../stb_vorbis.c"
