@@ -324,6 +324,7 @@ void cs_music_set_volume(float volume_0_to_1);
 void cs_music_set_loop(bool true_to_loop);
 cs_error_t cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 cs_error_t cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
+uint64_t cs_music_get_sample_index();
 cs_error_t cs_music_set_sample_index(uint64_t sample_index);
 
 // -------------------------------------------------------------------------------------------------
@@ -2987,6 +2988,12 @@ cs_error_t cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_
 	}
 
 	return CUTE_SOUND_ERROR_NONE;
+}
+
+uint64_t cs_music_get_sample_index()
+{
+	if (s_ctx->music_playing) return 0;
+	else return s_ctx->music_playing->sample_index;
 }
 
 cs_error_t cs_music_set_sample_index(uint64_t sample_index)
