@@ -324,7 +324,7 @@ void cs_music_set_volume(float volume_0_to_1);
 void cs_music_set_loop(bool true_to_loop);
 cs_error_t cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 cs_error_t cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
-cs_error_t cs_music_set_sample_index(uint64_t sampel_index);
+cs_error_t cs_music_set_sample_index(uint64_t sample_index);
 
 // -------------------------------------------------------------------------------------------------
 // Playing sounds.
@@ -513,7 +513,7 @@ void cs_stop_all_playing_sounds();
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
-		#include <SDL.h>
+		#include <SDL2/SDL.h>
 	#endif
 	#ifndef _WIN32
 		#include <alloca.h>
