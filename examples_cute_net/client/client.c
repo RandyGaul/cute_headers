@@ -66,7 +66,7 @@ uint64_t unix_timestamp()
 // one within the client, as we can hard-code the secret key data here locally,
 // where g_secret_key_data is usually hidden on the server in an actual
 // production environment.
-cn_error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer) {
+cn_result_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer) {
 	cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
 	cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 	uint64_t current_timestamp = unix_timestamp();
@@ -79,7 +79,7 @@ cn_error_t make_test_connect_token(uint64_t unique_client_id, const char* addres
 	uint8_t user_data[CN_CONNECT_TOKEN_USER_DATA_SIZE];
 	memset(user_data, 0, sizeof(user_data));
 
-	cn_error_t err = cn_generate_connect_token(
+	cn_result_t err = cn_generate_connect_token(
 		g_application_id,
 		current_timestamp,
 		&client_to_server_key,
@@ -97,7 +97,7 @@ cn_error_t make_test_connect_token(uint64_t unique_client_id, const char* addres
 	return err;
 }
 
-void panic(cn_error_t err)
+void panic(cn_result_t err)
 {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
@@ -118,11 +118,11 @@ int main(void)
 
 	uint8_t connect_token[CN_CONNECT_TOKEN_SIZE];
 	cn_client_t* client = cn_client_create(0, g_application_id, false, NULL);
-	cn_error_t err = make_test_connect_token(client_id, server_address_and_port, connect_token);
+	cn_result_t result = make_test_connect_token(client_id, server_address_and_port, connect_token);
 	print_embedded_symbol("connect_token", connect_token + (CN_CONNECT_TOKEN_SIZE - 1024), 1024);
-	if (cn_is_error(err)) panic(err);
-	err = cn_client_connect(client, connect_token);
-	if (cn_is_error(err)) panic(err);
+	if (cn_is_error(result)) panic(result);
+	result = cn_client_connect(client, connect_token);
+	if (cn_is_error(result)) panic(result);
 	printf("Attempting to connect to server on port %d.\n", (int)endpoint.port);
 
 	float elapsed = 0;

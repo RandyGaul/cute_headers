@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_net.h - v1.00
+	cute_net.h - v1.02
 
 	To create implementation (the function definitions)
 		#define CUTE_NET_IMPLEMENTATION
@@ -29,7 +29,16 @@
 		* Client and server abstractions.
 		* State of the art connect tokens for security.
 		* Support for large packets (fragmentation and reassembly).
-		* (TODO - finish this, low priority, buggy) Bandwidth stats + throttle.
+		* Bandwidth stats (incoming/outgoing kbps, packet loss).
+
+
+	TODO FEATURES
+
+		* Bandwidth throttling
+		* TCP-only mode (for web builds via emscripten)
+		* Channel support (for reliable packet stalling mitigation)
+		* Loopback clients for server
+		* Memory stats query for server
 
 
 	CROSS PLATFORM
@@ -85,9 +94,17 @@
 
 
 	Revision history:
-		1.00 (04/22/2022) initial release
-		1.01 (07/22/2022) fixed an old find + replace bug that caused packets to fail
-		                  decryption across different platforms/compilers
+		1.00 (04/22/2022) Initial release.
+		1.01 (07/22/2022) Fixed an old find + replace bug that caused packets to fail
+		                  decryption across different platforms/compilers.
+		1.02 (11/12/2022) Fixed a bug where sequence buffers would desync when sending
+		                  too many reliable packets all at once.
+		                  Implemented stats queries (packet loss, round-trip-time, etc.)
+		                  Return proper error if packets of size 0 are sent.
+		                  Renamed cn_error_t to cn_result_t.
+		                  Fixed a bug where reliable sequence numbers were incremented
+		                  at the wrong time, causing a desynchronization and connection
+		                  drop.
 */
 
 /*
@@ -174,6 +191,7 @@
 			CN_MEMCMP
 			CN_SNPRINTF
 			CN_FPRINTF
+			CN_PRINTF
 
 		You can disable IPv6 support by defining CUTE_NET_NO_IPV6 like so.
 
@@ -210,7 +228,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef struct cn_error_t cn_error_t;
+typedef struct cn_result_t cn_result_t;
 typedef struct cn_client_t cn_client_t;
 typedef struct cn_server_t cn_server_t;
 typedef struct cn_endpoint_t cn_endpoint_t;
@@ -290,7 +308,7 @@ void cn_crypto_sign_keygen(cn_crypto_sign_public_t* public_key, cn_crypto_sign_s
  * not leaked. In the event your secret key is accidentally leaked, you can always roll a
  * new one and distribute it to your webservice and game servers.
  */
-cn_error_t cn_generate_connect_token(
+cn_result_t cn_generate_connect_token(
 	uint64_t application_id,                          // A unique number to identify your game, can be whatever value you like.
 	                                                  // This must be the same number as in `cn_client_create` and `cn_server_create`.
 	uint64_t creation_timestamp,                      // A unix timestamp of the current time.
@@ -329,7 +347,7 @@ void cn_client_destroy(cn_client_t* client);
  * `cn_client_update` is expected, where `cn_client_update` will perform the connection handshake and make
  * connection attempts to your servers.
  */
-cn_error_t cn_client_connect(cn_client_t* client, const uint8_t* connect_token);
+cn_result_t cn_client_connect(cn_client_t* client, const uint8_t* connect_token);
 void cn_client_disconnect(cn_client_t* client);
 
 /**
@@ -357,8 +375,19 @@ void cn_client_free_packet(cn_client_t* client, void* packet);
  * that can be lost due to packet loss as an unreliable packet. Of course, some packets are required
  * to be sent, and so reliable is appropriate. As an optimization some kinds of data, such as frequent
  * transform updates, can be sent unreliably.
+ * 
+ * Will return an error result if the packet cannot be queued up for some reason. This typically means
+ * you are sending way too much data to the other end and need to slow down.
+ * 
+ * IMPORTANT NOTE -- If you send reliable packets you _MUST_ be sending packets both to the server
+ *                   and to the client. Two-way communication is required. If you only send reliable
+ *                   packets one-way, it will never hear back from the other end whether or not those
+ *                   packets safely arrived, and you will stall the connection. It's recommended to
+ *                   constantly send packets back and forth each game tick. Each packet can confirm
+ *                   32 other packets, so as a rule of thumb make sure you are sending at least one
+ *                   packet for every 16 received.
  */
-cn_error_t cn_client_send(cn_client_t* client, const void* packet, int size, bool send_reliably);
+cn_result_t cn_client_send(cn_client_t* client, const void* packet, int size, bool send_reliably);
 
 typedef enum cn_client_state_t
 {
@@ -376,8 +405,11 @@ typedef enum cn_client_state_t
 
 cn_client_state_t cn_client_state_get(const cn_client_t* client);
 const char* cn_client_state_string(cn_client_state_t state); 
-float cn_client_time_of_last_packet_recieved(const cn_client_t* client);
 void cn_client_enable_network_simulator(cn_client_t* client, double latency, double jitter, double drop_chance, double duplicate_chance);
+float cn_client_get_packet_loss_estimate(cn_client_t* client);
+float cn_client_get_rtt_estimate(cn_client_t* client);
+float cn_client_get_incoming_kbps_estimate(cn_client_t* client);
+float cn_client_get_outgoing_kbps_estimate(cn_client_t* client);
 
 //--------------------------------------------------------------------------------------------------
 // SERVER
@@ -391,8 +423,8 @@ typedef struct cn_server_config_t
 {
 	uint64_t application_id;            // A unique number to identify your game, can be whatever value you like.
 	                                    // This must be the same number as in `cn_client_make`.
-	int max_incoming_bytes_per_second;
-	int max_outgoing_bytes_per_second;
+	int max_incoming_bytes_per_second;  // Not implemented yet.
+	int max_outgoing_bytes_per_second;  // Not implemented yet.
 	int connection_timeout;             // The number of seconds before consider a connection as timed out when not
 	                                    // receiving any packets on the connection.
 	double resend_rate;                 // The number of seconds to wait before resending a packet that has not been
@@ -424,7 +456,7 @@ void cn_server_destroy(cn_server_t* server);
  * Please note that not all users will be able to access an ipv6 server address, so it might
  * be good to also provide a way to connect through ipv4.
  */
-cn_error_t cn_server_start(cn_server_t* server, const char* address_and_port);
+cn_result_t cn_server_start(cn_server_t* server, const char* address_and_port);
 void cn_server_stop(cn_server_t* server);
 
 typedef enum cn_server_event_type_t
@@ -469,12 +501,40 @@ void cn_server_free_packet(cn_server_t* server, int client_index, void* data);
 
 void cn_server_update(cn_server_t* server, double dt, uint64_t current_time);
 void cn_server_disconnect_client(cn_server_t* server, int client_index, bool notify_client /* = true */);
-void cn_server_send(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably);
-void cn_server_send_to_all_clients(cn_server_t* server, const void* packet, int size, bool send_reliably);
-void cn_server_send_to_all_but_one_client(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably);
 
+/**
+ * Sends a packet to the client. If the packet size is too large (over 1k bytes) it will be split up
+ * and sent in smaller chunks.
+ * 
+ * `send_reliably` as true means the packet will be sent reliably an in-order relative to other
+ * reliable packets. Under packet loss the packet will continually be sent until an acknowledgement
+ * from the client is received. False means to send a typical UDP packet, with no special mechanisms
+ * regarding packet loss.
+ * 
+ * Reliable packets are significantly more expensive than unreliable packets, so try to send any data
+ * that can be lost due to packet loss as an unreliable packet. Of course, some packets are required
+ * to be sent, and so reliable is appropriate. As an optimization some kinds of data, such as frequent
+ * transform updates, can be sent unreliably.
+ * 
+ * Will return an error result if the packet cannot be queued up for some reason. This typically means
+ * you are sending way too much data to the other end and need to slow down.
+ * 
+ * IMPORTANT NOTE -- If you send reliable packets you _MUST_ be sending packets both to the server
+ *                   and to the client. Two-way communication is required. If you only send reliable
+ *                   packets one-way, it will never hear back from the other end whether or not those
+ *                   packets safely arrived, and you will stall the connection. It's recommended to
+ *                   constantly send packets back and forth each game tick. Each packet can confirm
+ *                   32 other packets, so as a rule of thumb make sure you are sending at least one
+ *                   packet for every 16 received.
+ */
+cn_result_t cn_server_send(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably);
 bool cn_server_is_client_connected(cn_server_t* server, int client_index);
+
 void cn_server_enable_network_simulator(cn_server_t* server, double latency, double jitter, double drop_chance, double duplicate_chance);
+float cn_server_get_packet_loss_estimate(cn_server_t* server, int client_index);
+float cn_server_get_rtt_estimate(cn_server_t* server, int client_index);
+float cn_server_get_incoming_kbps_estimate(cn_server_t* server, int client_index);
+float cn_server_get_outgoing_kbps_estimate(cn_server_t* server, int client_index);
 
 //--------------------------------------------------------------------------------------------------
 // ERROR
@@ -482,16 +542,16 @@ void cn_server_enable_network_simulator(cn_server_t* server, double latency, dou
 #define CN_ERROR_SUCCESS (0)
 #define CN_ERROR_FAILURE (-1)
 
-struct cn_error_t
+struct cn_result_t
 {
 	int code;
 	const char* details;
 };
 
-CN_INLINE bool cn_is_error(cn_error_t err) { return err.code == CN_ERROR_FAILURE; }
-CN_INLINE cn_error_t cn_error_failure(const char* details) { cn_error_t error; error.code = CN_ERROR_FAILURE; error.details = details; return error; }
-CN_INLINE cn_error_t cn_error_success(void) { cn_error_t error; error.code = CN_ERROR_SUCCESS; error.details = NULL; return error; }
-#define CN_RETURN_IF_ERROR(x) do { cn_error_t err = (x); if (cn_is_error(err)) return err; } while (0)
+CN_INLINE bool cn_is_error(cn_result_t result) { return result.code == CN_ERROR_FAILURE; }
+CN_INLINE cn_result_t cn_error_failure(const char* details) { cn_result_t result; result.code = CN_ERROR_FAILURE; result.details = details; return result; }
+CN_INLINE cn_result_t cn_error_success(void) { cn_result_t result; result.code = CN_ERROR_SUCCESS; result.details = NULL; return result; }
+#define CN_RETURN_IF_ERROR(x) do { cn_result_t result = (x); if (cn_is_error(result)) return result; } while (0)
 
 #endif // CN_NET_H
 
@@ -528,7 +588,9 @@ CN_INLINE cn_error_t cn_error_success(void) { cn_error_t error; error.code = CN_
 #endif
 
 #if !defined(CN_ALLOC)
+	#define _CRTDBG_MAP_ALLOC
 	#include <stdlib.h>
+	#include <crtdbg.h>
 	#define CN_ALLOC(size, ctx) malloc(size)
 	#define CN_FREE(mem, ctx) free(mem)
 #endif
@@ -576,6 +638,10 @@ CN_INLINE cn_error_t cn_error_success(void) { cn_error_t error; error.code = CN_
 #ifndef CN_FPRINTF
 #	include <stdio.h>
 #	define CN_FPRINTF fprintf
+#endif
+
+#ifndef CN_PRINTF
+#	define CN_PRINTF(...)
 #endif
 
 //--------------------------------------------------------------------------------------------------
@@ -4270,8 +4336,7 @@ CN_INLINE uint64_t cn_read_uint64(uint8_t** p)
 
 CN_INLINE void cn_read_bytes(uint8_t** p, uint8_t* byte_array, int num_bytes)
 {
-	for (int i = 0; i < num_bytes; ++i)
-	{
+	for (int i = 0; i < num_bytes; ++i) {
 		byte_array[i] = cn_read_uint8(p);
 	}
 }
@@ -4695,8 +4760,7 @@ static char* s_parse_ipv6_for_port(cn_endpoint_t* endpoint, char* str, int len)
 {
 	if (*str == '[') {
 		int base_index = len - 1;
-		for (int i = 0; i < 6; ++i)
-		{
+		for (int i = 0; i < 6; ++i) {
 			int index = base_index - i;
 			if (index < 3) return NULL;
 			if (str[index] == ':') {
@@ -4715,8 +4779,7 @@ static int s_parse_ipv4_for_port(cn_endpoint_t* endpoint, char* str)
 {
 	int len = (int)CN_STRLEN(str);
 	int base_index = len - 1;
-	for (int i = 0; i < 6; ++i)
-	{
+	for (int i = 0; i < 6; ++i) {
 		int index = base_index - i;
 		if (index < 0) break;
 		if (str[index] == ':') {
@@ -4758,8 +4821,7 @@ int cn_endpoint_init(cn_endpoint_t* endpoint, const char* address_and_port_strin
 	len = s_parse_ipv4_for_port(endpoint, str);
 
 	struct sockaddr_in sockaddr4;
-	if (inet_pton(AF_INET, str, &sockaddr4.sin_addr) == 1)
-	{
+	if (inet_pton(AF_INET, str, &sockaddr4.sin_addr) == 1) {
 		endpoint->type = CN_ADDRESS_TYPE_IPV4;
 		endpoint->u.ipv4[3] = (uint8_t)((sockaddr4.sin_addr.s_addr & 0xFF000000) >> 24);
 		endpoint->u.ipv4[2] = (uint8_t)((sockaddr4.sin_addr.s_addr & 0x00FF0000) >> 16);
@@ -4851,8 +4913,7 @@ void cn_socket_cleanup(cn_socket_t* socket)
 {
 	CN_ASSERT(socket);
 
-	if (socket->handle != 0)
-	{
+	if (socket->handle != 0) {
 #if CN_WINDOWS
 		closesocket(socket->handle);
 #else
@@ -4884,11 +4945,9 @@ static int s_socket_init(cn_socket_t* the_socket, cn_address_type_t address_type
 #ifndef CUTE_NET_NO_IPV6
 	// Allow users to enforce ipv6 only.
 	// See: https://msdn.microsoft.com/en-us/library/windows/desktop/ms738574(v=vs.85).aspx
-	if (address_type == CN_ADDRESS_TYPE_IPV6)
-	{
+	if (address_type == CN_ADDRESS_TYPE_IPV6) {
 		int enable = 1;
-		if (setsockopt(the_socket->handle, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&enable, sizeof(enable)) != 0)
-		{
+		if (setsockopt(the_socket->handle, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&enable, sizeof(enable)) != 0) {
 			//error_set("Failed to strictly set socket only ipv6.");
 			cn_socket_cleanup(the_socket);
 			return -1;
@@ -4897,16 +4956,14 @@ static int s_socket_init(cn_socket_t* the_socket, cn_address_type_t address_type
 #endif
 
 	// Increase socket send buffer size.
-	if (setsockopt(the_socket->handle, SOL_SOCKET, SO_SNDBUF, (char*)&send_buffer_size, sizeof(int)) != 0)
-	{
+	if (setsockopt(the_socket->handle, SOL_SOCKET, SO_SNDBUF, (char*)&send_buffer_size, sizeof(int)) != 0) {
 		//error_set("Failed to set socket send buffer size.");
 		cn_socket_cleanup(the_socket);
 		return -1;
 	}
 
 	// Increase socket receive buffer size.
-	if (setsockopt(the_socket->handle, SOL_SOCKET, SO_RCVBUF, (char*)&receive_buffer_size, sizeof(int)) != 0)
-	{
+	if (setsockopt(the_socket->handle, SOL_SOCKET, SO_RCVBUF, (char*)&receive_buffer_size, sizeof(int)) != 0) {
 		//error_set("Failed to set socket receive buffer size.");
 		cn_socket_cleanup(the_socket);
 		return -1;
@@ -4921,12 +4978,10 @@ static int s_socket_bind_port_and_set_non_blocking(cn_socket_t* the_socket, cn_a
 	if (port == 0)
 	{
 #ifndef CUTE_NET_NO_IPV6
-		if (address_type == CN_ADDRESS_TYPE_IPV6)
-		{
+		if (address_type == CN_ADDRESS_TYPE_IPV6) {
 			struct sockaddr_in6 sin;
 			socklen_t len = sizeof(sin);
-			if (getsockname(the_socket->handle, (struct sockaddr*)&sin, &len) == -1)
-			{
+			if (getsockname(the_socket->handle, (struct sockaddr*)&sin, &len) == -1) {
 				//error_set("Failed to get ipv6 socket's assigned port number when binding to port 0.");
 				cn_socket_cleanup(the_socket);
 				return -1;
@@ -4938,8 +4993,7 @@ static int s_socket_bind_port_and_set_non_blocking(cn_socket_t* the_socket, cn_a
 		{
 			struct sockaddr_in sin;
 			socklen_t len = sizeof(sin);
-			if (getsockname(the_socket->handle, (struct sockaddr*)&sin, &len) == -1)
-			{
+			if (getsockname(the_socket->handle, (struct sockaddr*)&sin, &len) == -1) {
 				//error_set("Failed to get ipv4 socket's assigned port number when binding to port 0.");
 				cn_socket_cleanup(the_socket);
 				return -1;
@@ -4952,8 +5006,7 @@ static int s_socket_bind_port_and_set_non_blocking(cn_socket_t* the_socket, cn_a
 #ifdef CN_WINDOWS
 
 	DWORD non_blocking = 1;
-	if (ioctlsocket(the_socket->handle, FIONBIO, &non_blocking) != 0)
-	{
+	if (ioctlsocket(the_socket->handle, FIONBIO, &non_blocking) != 0) {
 		//error_set("Failed to set socket to non blocking io.");
 		cn_socket_cleanup(the_socket);
 		return -1;
@@ -4986,16 +5039,14 @@ int cn_socket_init1(cn_socket_t* the_socket, cn_address_type_t address_type, uin
 
 	// Bind port.
 #ifndef CUTE_NET_NO_IPV6
-	if (address_type == CN_ADDRESS_TYPE_IPV6)
-	{
+	if (address_type == CN_ADDRESS_TYPE_IPV6) {
 		struct sockaddr_in6 socket_endpoint;
 		CN_MEMSET(&socket_endpoint, 0, sizeof(struct sockaddr_in6));
 		socket_endpoint.sin6_family = AF_INET6;
 		socket_endpoint.sin6_addr = in6addr_any;
 		socket_endpoint.sin6_port = htons(port);
 
-		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0)
-		{
+		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0) {
 			//error_set("Failed to bind ipv6 socket.");
 			cn_socket_cleanup(the_socket);
 			return -1;
@@ -5010,8 +5061,7 @@ int cn_socket_init1(cn_socket_t* the_socket, cn_address_type_t address_type, uin
 		socket_endpoint.sin_addr.s_addr = INADDR_ANY;
 		socket_endpoint.sin_port = htons(port);
 
-		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0)
-		{
+		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0) {
 			//error_set("Failed to bind ipv4 socket.");
 			cn_socket_cleanup(the_socket);
 			return -1;
@@ -5040,8 +5090,7 @@ int cn_socket_init2(cn_socket_t* the_socket, const char* address_and_port, int s
 
 	// Bind port.
 #ifndef CUTE_NET_NO_IPV6
-	if (endpoint.type == CN_ADDRESS_TYPE_IPV6)
-	{
+	if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
 		struct sockaddr_in6 socket_endpoint;
 		CN_MEMSET(&socket_endpoint, 0, sizeof(struct sockaddr_in6));
 		socket_endpoint.sin6_family = AF_INET6;
@@ -5067,8 +5116,7 @@ int cn_socket_init2(cn_socket_t* the_socket, const char* address_and_port, int s
 		                                  (((uint32_t) endpoint.u.ipv4[3]) << 24);
 		socket_endpoint.sin_port = htons(endpoint.port);
 
-		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0)
-		{
+		if (bind(the_socket->handle, (struct sockaddr*)&socket_endpoint, sizeof(socket_endpoint)) < 0) {
 			//error_set("Failed to bind ipv4 socket.");
 			cn_socket_cleanup(the_socket);
 			return -1;
@@ -5091,8 +5139,7 @@ int cn_socket_send_internal(cn_socket_t* socket, cn_endpoint_t send_to, const vo
 	CN_ASSERT(endpoint.type != CN_ADDRESS_TYPE_NONE);
 
 #ifndef CUTE_NET_NO_IPV6
-	if (endpoint.type == CN_ADDRESS_TYPE_IPV6)
-	{
+	if (endpoint.type == CN_ADDRESS_TYPE_IPV6) {
 		struct sockaddr_in6 socket_address;
 		CN_MEMSET(&socket_address, 0, sizeof(socket_address));
 		socket_address.sin6_family = AF_INET6;
@@ -5107,8 +5154,7 @@ int cn_socket_send_internal(cn_socket_t* socket, cn_endpoint_t send_to, const vo
 	}
 	else 
 #endif
-	if (endpoint.type == CN_ADDRESS_TYPE_IPV4)
-	{
+	if (endpoint.type == CN_ADDRESS_TYPE_IPV4) {
 		struct sockaddr_in socket_address;
 		CN_MEMSET(&socket_address, 0, sizeof(socket_address));
 		socket_address.sin_family = AF_INET;
@@ -5143,16 +5189,14 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 	int result = recvfrom(the_socket->handle, (char*)data, byte_count, 0, (struct sockaddr*)&sockaddr_from, &from_length);
 
 #ifdef CN_WINDOWS
-	if (result == SOCKET_ERROR)
-	{
+	if (result == SOCKET_ERROR) {
 		int error = WSAGetLastError();
 		if (error == WSAEWOULDBLOCK || error == WSAECONNRESET) return 0;
 		//error_set("The function recvfrom failed.");
 		return -1;
 	}
 #else
-	if (result <= 0)
-	{
+	if (result <= 0) {
 		if (errno == EAGAIN) return 0;
 		//error_set("The function recvfrom failed.");
 		return -1;
@@ -5160,21 +5204,18 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 #endif
 
 #ifndef CUTE_NET_NO_IPV6
-	if (sockaddr_from.ss_family == AF_INET6)
-	{
+	if (sockaddr_from.ss_family == AF_INET6) {
 		struct sockaddr_in6* addr_ipv6 = (struct sockaddr_in6*) &sockaddr_from;
 		from->type = CN_ADDRESS_TYPE_IPV6;
 		int i;
-		for (i = 0; i < 8; ++i)
-		{
+		for (i = 0; i < 8; ++i) {
 			from->u.ipv6[i] = ntohs(((uint16_t*) &addr_ipv6->sin6_addr) [i]);
 		}
 		from->port = ntohs(addr_ipv6->sin6_port);
 	}
 	else
 #endif
-	if (sockaddr_from.ss_family == AF_INET)
-	{
+	if (sockaddr_from.ss_family == AF_INET) {
 		struct sockaddr_in* addr_ipv4 = (struct sockaddr_in*) &sockaddr_from;
 		from->type = CN_ADDRESS_TYPE_IPV4;
 		from->u.ipv4[0] = (uint8_t)((addr_ipv4->sin_addr.s_addr & 0x000000FF));
@@ -5182,9 +5223,7 @@ int cn_socket_receive(cn_socket_t* the_socket, cn_endpoint_t* from, void* data, 
 		from->u.ipv4[2] = (uint8_t)((addr_ipv4->sin_addr.s_addr & 0x00FF0000) >> 16);
 		from->u.ipv4[3] = (uint8_t)((addr_ipv4->sin_addr.s_addr & 0xFF000000) >> 24);
 		from->port = ntohs(addr_ipv4->sin_port);
-	}
-	else
-	{
+	} else {
 		CN_ASSERT(0);
 		//error_set("The function recvfrom returned an invalid ip format.");
 		return -1;
@@ -5276,7 +5315,7 @@ static uint8_t s_crypto_ctx[] = "CUTE_CTX";
 
 static bool s_cn_is_init = false;
 
-cn_error_t cn_crypto_init()
+cn_result_t cn_crypto_init()
 {
 	if (hydro_init() != 0) {
 		return cn_error_failure("Unable to initialize crypto library. It is *not safe* to connect to the net.");
@@ -5284,7 +5323,7 @@ cn_error_t cn_crypto_init()
 	return cn_error_success();
 }
 
-cn_error_t cn_init()
+cn_result_t cn_init()
 {
 #ifdef CN_WINDOWS
 	WSADATA wsa_data;
@@ -5296,7 +5335,7 @@ cn_error_t cn_init()
 	return cn_crypto_init();
 }
 
-static CN_INLINE cn_error_t s_cn_init_check()
+static CN_INLINE cn_result_t s_cn_init_check()
 {
 	if (!s_cn_is_init) {
 		if (cn_is_error(cn_init())) {
@@ -5313,7 +5352,7 @@ void cn_crypto_encrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size,
 	hydro_secretbox_encrypt(data, data, (uint64_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key);
 }
 
-cn_error_t cn_crypto_decrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
+cn_result_t cn_crypto_decrypt(const cn_crypto_key_t* key, uint8_t* data, int data_size, uint64_t msg_id)
 {
 	if (hydro_secretbox_decrypt(data, data, (size_t)data_size, msg_id, CN_CRYPTO_CONTEXT, key->key) != 0) {
 		return cn_error_failure("Message forged.");
@@ -5350,7 +5389,7 @@ void cn_crypto_sign_create(const cn_crypto_sign_secret_t* secret_key, cn_crypto_
 	hydro_sign_create(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, secret_key->key);
 }
 
-cn_error_t cn_crypto_sign_verify(const cn_crypto_sign_public_t* public_key, const cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
+cn_result_t cn_crypto_sign_verify(const cn_crypto_sign_public_t* public_key, const cn_crypto_signature_t* signature, const uint8_t* data, int data_size)
 {
 	if (hydro_sign_verify(signature->bytes, data, (size_t)data_size, CN_CRYPTO_CONTEXT, public_key->key) != 0) {
 		return cn_error_failure("Message forged.");
@@ -5504,7 +5543,7 @@ int cn_socket_send(cn_socket_t* socket, cn_simulator_t* sim, cn_endpoint_t to, c
 
 // -------------------------------------------------------------------------------------------------
 
-cn_error_t cn_generate_connect_token(
+cn_result_t cn_generate_connect_token(
 	uint64_t application_id,
 	uint64_t creation_timestamp,
 	const cn_crypto_key_t* client_to_server_key,
@@ -5519,8 +5558,8 @@ cn_error_t cn_generate_connect_token(
 	uint8_t* token_ptr_out
 )
 {
-	cn_error_t err = s_cn_init_check();
-	if (cn_is_error(err)) return err;
+	cn_result_t result = s_cn_init_check();
+	if (cn_is_error(result)) return result;
 
 	CN_ASSERT(address_count >= 1 && address_count <= 32);
 	CN_ASSERT(creation_timestamp < expiration_timestamp);
@@ -5542,8 +5581,7 @@ cn_error_t cn_generate_connect_token(
 	cn_write_uint64(p, expiration_timestamp);
 	cn_write_uint32(p, handshake_timeout);
 	cn_write_uint32(p, (uint32_t)address_count);
-	for (int i = 0; i < address_count; ++i)
-	{
+	for (int i = 0; i < address_count; ++i) {
 		cn_endpoint_t endpoint;
 		if (cn_endpoint_init(&endpoint, address_list[i])) return cn_error_failure("Unable to initialize endpoint.");
 		cn_write_endpoint(p, endpoint);
@@ -5812,7 +5850,7 @@ void cn_protocol_packet_allocator_free(cn_protocol_packet_allocator_t* packet_al
 
 // -------------------------------------------------------------------------------------------------
 
-cn_error_t cn_protocol_read_connect_token_packet_public_section(uint8_t* buffer, uint64_t application_id, uint64_t current_time, cn_protocol_packet_connect_token_t* packet)
+cn_result_t cn_protocol_read_connect_token_packet_public_section(uint8_t* buffer, uint64_t application_id, uint64_t current_time, cn_protocol_packet_connect_token_t* packet)
 {
 	uint8_t* buffer_start = buffer;
 
@@ -6045,13 +6083,12 @@ uint8_t* cn_protocol_client_read_connect_token_from_web_service(uint8_t* buffer,
 	return ret ? NULL : connect_token_packet;
 }
 
-cn_error_t cn_protocol_server_decrypt_connect_token_packet(uint8_t* packet_buffer, const cn_crypto_sign_public_t* pk, const cn_crypto_sign_secret_t* sk, uint64_t application_id, uint64_t current_time, cn_protocol_connect_token_decrypted_t* token)
+cn_result_t cn_protocol_server_decrypt_connect_token_packet(uint8_t* packet_buffer, const cn_crypto_sign_public_t* pk, const cn_crypto_sign_secret_t* sk, uint64_t application_id, uint64_t current_time, cn_protocol_connect_token_decrypted_t* token)
 {
 	// Read public section.
 	cn_protocol_packet_connect_token_t packet;
-	cn_error_t err;
-	err = cn_protocol_read_connect_token_packet_public_section(packet_buffer, application_id, current_time, &packet);
-	if (cn_is_error(err)) return err;
+	cn_result_t result = cn_protocol_read_connect_token_packet_public_section(packet_buffer, application_id, current_time, &packet);
+	if (cn_is_error(result)) return result;
 	if (packet.expiration_timestamp <= current_time) return cn_error_failure("Invalid timestamp.");
 	token->expiration_timestamp = packet.expiration_timestamp;
 	token->handshake_timeout = packet.handshake_timeout;
@@ -6092,8 +6129,7 @@ static uint32_t s_is_prime(uint32_t x)
 	if ((x % 2 == 0) | (x % 3 == 0)) return 0;
 
 	uint32_t divisor = 6;
-	while (divisor * divisor - 2 * divisor + 1 <= x)
-	{
+	while (divisor * divisor - 2 * divisor + 1 <= x) {
 		if (x % (divisor - 1) == 0) return 0;
 		if (x % (divisor + 1) == 0) return 0;
 		divisor += 6;
@@ -6104,8 +6140,7 @@ static uint32_t s_is_prime(uint32_t x)
 
 static uint32_t s_next_prime(uint32_t a)
 {
-	while (1)
-	{
+	while (1) {
 		if (s_is_prime(a)) return a;
 		else ++a;
 	}
@@ -6178,8 +6213,7 @@ static int cn_hashtable_internal_find_slot(const cn_hashtable_t* table, const vo
 	int base_count = table->slots[base_slot].base_count;
 	int slot = base_slot;
 
-	while (base_count > 0)
-	{
+	while (base_count > 0) {
 		uint64_t slot_hash = table->slots[slot].key_hash;
 
 		if (slot_hash) {
@@ -6210,8 +6244,7 @@ void* cn_hashtable_insert(cn_hashtable_t* table, const void* key, const void* it
 	int base_count = table->slots[base_slot].base_count;
 	int slot = base_slot;
 	int first_free = slot;
-	while (base_count)
-	{
+	while (base_count) {
 		uint64_t slot_hash = table->slots[slot].key_hash;
 		if (slot_hash == 0 && table->slots[first_free].key_hash != 0) first_free = slot;
 		int slot_base = (int)(slot_hash % (uint64_t)table->slot_capacity);
@@ -6335,8 +6368,7 @@ void cn_protocol_connect_token_cache_init(cn_protocol_connect_token_cache_t* cac
 	cn_list_init(&cache->free_list);
 	cache->node_memory = (cn_protocol_connect_token_cache_node_t*)CN_ALLOC(sizeof(cn_protocol_connect_token_cache_node_t) * capacity, mem_ctx);
 
-	for (int i = 0; i < capacity; ++i)
-	{
+	for (int i = 0; i < capacity; ++i) {
 		cn_list_node_t* node = &cache->node_memory[i].node;
 		cn_list_init_node(node);
 		cn_list_push_front(&cache->free_list, node);
@@ -6453,8 +6485,7 @@ void cn_protocol_encryption_map_look_for_timeouts_or_expirations(cn_protocol_enc
 	cn_endpoint_t* endpoints = cn_protocol_encryption_map_get_endpoints(map);
 	cn_protocol_encryption_state_t* states = cn_protocol_encryption_map_get_states(map);
 
-	while (index < count)
-	{
+	while (index < count) {
 		cn_protocol_encryption_state_t* state = states + index;
 		state->last_packet_recieved_time += dt;
 		int timed_out = state->last_packet_recieved_time >= state->handshake_timeout;
@@ -6523,7 +6554,7 @@ typedef struct cn_protocol_payload_t
 	void* data;
 } cn_protocol_payload_t;
 
-cn_error_t cn_protocol_client_connect(cn_protocol_client_t* client, const uint8_t* connect_token)
+cn_result_t cn_protocol_client_connect(cn_protocol_client_t* client, const uint8_t* connect_token)
 {
 	uint8_t* connect_token_packet = cn_protocol_client_read_connect_token_from_web_service(
 		(uint8_t*)connect_token,
@@ -6855,7 +6886,7 @@ void cn_protocol_client_update(cn_protocol_client_t* client, double dt, uint64_t
 	}
 }
 
-cn_error_t cn_protocol_client_send(cn_protocol_client_t* client, const void* data, int size)
+cn_result_t cn_protocol_client_send(cn_protocol_client_t* client, const void* data, int size)
 {
 	if (size < 0) return cn_error_failure("`size` can not be negative.");
 	if (size > CN_PROTOCOL_PACKET_PAYLOAD_MAX) return cn_error_failure("`size` exceeded `CN_PROTOCOL_PACKET_PAYLOAD_MAX`.");
@@ -7084,7 +7115,7 @@ void cn_protocol_server_destroy(cn_protocol_server_t* server)
 	CN_FREE(server, server->mem_ctx);
 }
 
-cn_error_t cn_protocol_server_start(cn_protocol_server_t* server, const char* address, uint32_t connection_timeout)
+cn_result_t cn_protocol_server_start(cn_protocol_server_t* server, const char* address, uint32_t connection_timeout)
 {
 	int cleanup_map = 0;
 	int cleanup_cache = 0;
@@ -7139,8 +7170,7 @@ static CN_INLINE int s_protocol_server_event_push(cn_protocol_server_t* server, 
 
 static void s_protocol_server_disconnect_sequence(cn_protocol_server_t* server, uint32_t index)
 {
-	for (int i = 0; i < CN_PROTOCOL_DISCONNECT_REDUNDANT_PACKET_COUNT; ++i)
-	{
+	for (int i = 0; i < CN_PROTOCOL_DISCONNECT_REDUNDANT_PACKET_COUNT; ++i) {
 		cn_protocol_packet_disconnect_t packet;
 		packet.packet_type = CN_PROTOCOL_PACKET_TYPE_DISCONNECT;
 		if (cn_protocol_packet_write(&packet, server->buffer, server->client_sequence[index]++, server->client_server_to_client_key + index) == 73) {
@@ -7193,8 +7223,7 @@ void cn_protocol_server_stop(cn_protocol_server_t* server)
 	}
 
 	// Free any lingering payload packets.
-	while (1)
-	{
+	while (1) {
 		cn_protocol_server_event_t event;
 		if (s_protocol_server_event_pull(server, &event) < 0) break;
 		if (event.type == CN_PROTOCOL_SERVER_EVENT_PAYLOAD_PACKET) {
@@ -7460,8 +7489,7 @@ static void s_protocol_server_send_packets(cn_protocol_server_t* server, double 
 	uint8_t* buffer = server->buffer;
 	cn_socket_t* the_socket = &server->socket;
 	cn_simulator_t* sim = server->sim;
-	for (int i = 0; i < state_count; ++i)
-	{
+	for (int i = 0; i < state_count; ++i) {
 		cn_protocol_encryption_state_t* state = states + i;
 		state->last_packet_sent_time += dt;
 
@@ -7532,7 +7560,7 @@ void cn_protocol_server_disconnect_client(cn_protocol_server_t* server, int clie
 	s_protocol_server_disconnect_client(server, client_index, notify_client);
 }
 
-cn_error_t cn_protocol_server_send_to_client(cn_protocol_server_t* server, const void* packet, int size, int client_index)
+cn_result_t cn_protocol_server_send_to_client(cn_protocol_server_t* server, const void* packet, int size, int client_index)
 {
 	if (size < 0) return cn_error_failure("`size` is negative.");
 	if (size > CN_PROTOCOL_PACKET_PAYLOAD_MAX) return cn_error_failure("`size` exceeds `CN_PROTOCOL_PACKET_PAYLOAD_MAX`.");
@@ -7650,7 +7678,7 @@ typedef struct cn_ack_system_config_t
 	int received_packets_sequence_buffer_size;
 
 	int index;
-	cn_error_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
+	cn_result_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
 
 	void* udata;
 	void* user_allocator_context;
@@ -7660,9 +7688,9 @@ cn_ack_system_config_t cn_ack_system_config_defaults()
 {
 	cn_ack_system_config_t config;
 	config.max_packet_size = CN_ACK_SYSTEM_MAX_PACKET_SIZE;
-	config.initial_ack_capacity = 256;
-	config.sent_packets_sequence_buffer_size = 256;
-	config.received_packets_sequence_buffer_size = 256;
+	config.initial_ack_capacity = 1024;
+	config.sent_packets_sequence_buffer_size = 1024;
+	config.received_packets_sequence_buffer_size = 1024;
 	config.index = -1;
 	config.send_packet_fn = NULL;
 	config.udata = NULL;
@@ -7704,7 +7732,7 @@ typedef struct cn_ack_system_t
 	double incoming_bandwidth_kbps;
 
 	int index;
-	cn_error_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
+	cn_result_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
 
 	uint64_t counters[CN_ACK_SYSTEM_COUNTERS_MAX];
 } cn_ack_system_t;
@@ -7718,27 +7746,27 @@ typedef struct cn_ack_system_t
 
 #define CN_CHECK(X) if (X) ret = -1;
 
+#define CN_SEQUENCE_BUFFER_EMPTY (~0UL)
+
 typedef void (cn_sequence_buffer_cleanup_entry_fn)(void* data, uint16_t sequence, void* udata, void* mem_ctx);
 
 void cn_sequence_buffer_remove(cn_sequence_buffer_t* buffer, uint16_t sequence, cn_sequence_buffer_cleanup_entry_fn* cleanup_fn)
 {
 	int index = sequence % buffer->capacity;
-	if (buffer->entry_sequence[index] != 0xFFFFFFFF)
-	{
-		buffer->entry_sequence[index] = 0xFFFFFFFF;
+	if (buffer->entry_sequence[index] != CN_SEQUENCE_BUFFER_EMPTY) {
+		buffer->entry_sequence[index] = CN_SEQUENCE_BUFFER_EMPTY;
 		if (cleanup_fn) cleanup_fn(buffer->entry_data + buffer->stride * index, buffer->entry_sequence[index], buffer->udata, buffer->mem_ctx);
 	}
 }
 
 void cn_sequence_buffer_reset(cn_sequence_buffer_t* buffer, cn_sequence_buffer_cleanup_entry_fn* cleanup_fn)
 {
-	for (int i = 0; i < buffer->capacity; ++i)
-	{
+	for (int i = 0; i < buffer->capacity; ++i) {
 		cn_sequence_buffer_remove(buffer, i, cleanup_fn);
 	}
 
 	buffer->sequence = 0;
-	CN_MEMSET(buffer->entry_sequence, ~0, sizeof(uint32_t) * buffer->capacity);
+	CN_MEMSET(buffer->entry_sequence, CN_SEQUENCE_BUFFER_EMPTY, sizeof(uint32_t) * buffer->capacity);
 }
 
 int cn_sequence_buffer_init(cn_sequence_buffer_t* buffer, int capacity, int stride, void* udata, void* mem_ctx)
@@ -7750,15 +7778,14 @@ int cn_sequence_buffer_init(cn_sequence_buffer_t* buffer, int capacity, int stri
 	buffer->entry_data = (uint8_t*)CN_ALLOC(stride * capacity, mem_ctx);
 	buffer->udata = udata;
 	buffer->mem_ctx = mem_ctx;
-	CN_MEMSET(buffer->entry_sequence, ~0, sizeof(uint32_t) * buffer->capacity);
+	CN_MEMSET(buffer->entry_sequence, CN_SEQUENCE_BUFFER_EMPTY, sizeof(uint32_t) * buffer->capacity);
 	cn_sequence_buffer_reset(buffer, NULL);
 	return 0;
 }
 
 void cn_sequence_buffer_cleanup(cn_sequence_buffer_t* buffer, cn_sequence_buffer_cleanup_entry_fn* cleanup_fn)
 {
-	for (int i = 0; i < buffer->capacity; ++i)
-	{
+	for (int i = 0; i < buffer->capacity; ++i) {
 		cn_sequence_buffer_remove(buffer, i, cleanup_fn);
 	}
 
@@ -7771,21 +7798,19 @@ static void s_sequence_buffer_remove_entries(cn_sequence_buffer_t* buffer, int s
 {
 	if (sequence_b < sequence_a) sequence_b += 65536;
 	if (sequence_b - sequence_a < buffer->capacity) {
-		for (int sequence = sequence_a; sequence <= sequence_b; ++sequence)
-		{
+		for (int sequence = sequence_a; sequence <= sequence_b; ++sequence) {
 			int index = sequence % buffer->capacity;
-			if (cleanup_fn && buffer->entry_sequence[index] != 0xFFFFFFFF) {
+			if (cleanup_fn && buffer->entry_sequence[index] != CN_SEQUENCE_BUFFER_EMPTY) {
 				cleanup_fn(buffer->entry_data + buffer->stride * index, buffer->entry_sequence[index], buffer->udata, buffer->mem_ctx);
 			}
-			buffer->entry_sequence[index] = 0xFFFFFFFF;
+			buffer->entry_sequence[index] = CN_SEQUENCE_BUFFER_EMPTY;
 		}
 	} else {
-		for (int i = 0; i < buffer->capacity; ++i)
-		{
-			if (cleanup_fn && buffer->entry_sequence[i] != 0xFFFFFFFF) {
+		for (int i = 0; i < buffer->capacity; ++i) {
+			if (cleanup_fn && buffer->entry_sequence[i] != CN_SEQUENCE_BUFFER_EMPTY) {
 				cleanup_fn(buffer->entry_data + buffer->stride * i, buffer->entry_sequence[i], buffer->udata, buffer->mem_ctx);
 			}
-			buffer->entry_sequence[i] = 0xFFFFFFFF;
+			buffer->entry_sequence[i] = CN_SEQUENCE_BUFFER_EMPTY;
 		}
 	}
 }
@@ -7815,7 +7840,7 @@ void* cn_sequence_buffer_insert(cn_sequence_buffer_t* buffer, uint16_t sequence,
 		return NULL;
 	}
 	int index = sequence % buffer->capacity;
-	if (cleanup_fn && buffer->entry_sequence[index] != 0xFFFFFFFF) {
+	if (cleanup_fn && buffer->entry_sequence[index] != CN_SEQUENCE_BUFFER_EMPTY) {
 		cleanup_fn(buffer->entry_data + buffer->stride * (sequence % buffer->capacity), buffer->entry_sequence[index], buffer->udata, buffer->mem_ctx);
 	}
 	buffer->entry_sequence[index] = sequence;
@@ -7824,7 +7849,7 @@ void* cn_sequence_buffer_insert(cn_sequence_buffer_t* buffer, uint16_t sequence,
 
 int cn_sequence_buffer_is_empty(cn_sequence_buffer_t* sequence_buffer, uint16_t sequence)
 {
-	return sequence_buffer->entry_sequence[sequence % sequence_buffer->capacity] == 0xFFFFFFFF;
+	return sequence_buffer->entry_sequence[sequence % sequence_buffer->capacity] == CN_SEQUENCE_BUFFER_EMPTY;
 }
 
 void* cn_sequence_buffer_find(cn_sequence_buffer_t* sequence_buffer, uint16_t sequence)
@@ -7833,20 +7858,12 @@ void* cn_sequence_buffer_find(cn_sequence_buffer_t* sequence_buffer, uint16_t se
 	return ((sequence_buffer->entry_sequence[index] == (uint32_t)sequence)) ? (sequence_buffer->entry_data + index * sequence_buffer->stride) : NULL;
 }
 
-void* cn_sequence_buffer_at_index(cn_sequence_buffer_t* sequence_buffer, int index)
-{
-	CN_ASSERT(index >= 0);
-	CN_ASSERT(index < sequence_buffer->capacity);
-	return sequence_buffer->entry_sequence[index] != 0xFFFFFFFF ? (sequence_buffer->entry_data + index * sequence_buffer->stride) : NULL;
-}
-
 void cn_sequence_buffer_generate_ack_bits(cn_sequence_buffer_t* sequence_buffer, uint16_t* ack, uint32_t* ack_bits)
 {
 	*ack = sequence_buffer->sequence - 1;
 	*ack_bits = 0;
 	uint32_t mask = 1;
-	for (int i = 0; i < 32; ++i)
-	{
+	for (int i = 0; i < 32; ++i) {
 		uint16_t sequence = *ack - ((uint16_t)i);
 		if (cn_sequence_buffer_find(sequence_buffer, sequence)) {
 			*ack_bits |= mask;
@@ -7905,6 +7922,7 @@ int cn_packet_queue_pop(cn_packet_queue_t* q, void** packet, int* size)
 
 typedef struct cn_socket_send_queue_item_t
 {
+	uint16_t fragment_sequence;
 	int fragment_index;
 	int fragment_count;
 	int final_fragment_size;
@@ -7947,7 +7965,7 @@ static int s_send_queue_push(cn_socket_send_queue_t* q, const cn_socket_send_que
 
 static void s_send_queue_pop(cn_socket_send_queue_t* q)
 {
-	CN_ASSERT(q->count >= 0 && q->count < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
+	CN_ASSERT(q->count >= 0 && q->count <= CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 	CN_ASSERT(q->index0 >= 0 && q->index0 < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 	CN_ASSERT(q->index1 >= 0 && q->index1 < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 
@@ -7958,7 +7976,7 @@ static void s_send_queue_pop(cn_socket_send_queue_t* q)
 
 static int s_send_queue_peek(cn_socket_send_queue_t* q, cn_socket_send_queue_item_t** item)
 {
-	CN_ASSERT(q->count >= 0 && q->count < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
+	CN_ASSERT(q->count >= 0 && q->count <= CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 	CN_ASSERT(q->index0 >= 0 && q->index0 < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 	CN_ASSERT(q->index1 >= 0 && q->index1 < CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES);
 
@@ -7971,13 +7989,23 @@ static int s_send_queue_peek(cn_socket_send_queue_t* q, cn_socket_send_queue_ite
 	}
 }
 
+static void s_send_queue_shutdown(cn_socket_send_queue_t* q, void* mem_ctx)
+{
+	while (q->count--) {
+		int next_index = (q->index0 + 1) % CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES;
+		cn_socket_send_queue_item_t* item = q->items + next_index;
+		CN_FREE(item->packet, mem_ctx);
+		q->index0 = next_index;
+	}
+}
+
 // -------------------------------------------------------------------------------------------------
 
 typedef struct cn_fragment_t
 {
+	uint64_t id;
 	int index;
 	double timestamp;
-	cn_handle_t handle;
 	uint8_t* data;
 	int size;
 } cn_fragment_t;
@@ -7995,14 +8023,16 @@ typedef struct cn_fragment_reassembly_entry_t
 
 typedef struct cn_packet_assembly_t
 {
-	uint16_t reassembly_sequence;
-	cn_sequence_buffer_t fragment_reassembly;
-	cn_packet_queue_t assembled_packets;
+	uint16_t send_sequence;
+	uint16_t receive_sequence;
+	cn_sequence_buffer_t fragments_received;
+	cn_packet_queue_t packets_received;
 } cn_packet_assembly_t;
 
 static void s_fragment_reassembly_entry_cleanup(void* data, uint16_t sequence, void* udata, void* mem_ctx)
 {
 	cn_fragment_reassembly_entry_t* reassembly = (cn_fragment_reassembly_entry_t*)data;
+	if (reassembly->packet && *reassembly->packet == 0xDD) __debugbreak();
 	CN_FREE(reassembly->packet, mem_ctx);
 	CN_FREE(reassembly->fragment_received, mem_ctx);
 }
@@ -8012,14 +8042,15 @@ static int s_packet_assembly_init(cn_packet_assembly_t* assembly, int max_fragme
 	int ret = 0;
 	int reassembly_init = 0;
 
-	assembly->reassembly_sequence = 0;
+	assembly->send_sequence = 0;
+	assembly->receive_sequence = 0;
 
-	CN_CHECK(cn_sequence_buffer_init(&assembly->fragment_reassembly, max_fragments_in_flight, sizeof(cn_fragment_reassembly_entry_t), NULL, mem_ctx));
+	CN_CHECK(cn_sequence_buffer_init(&assembly->fragments_received, max_fragments_in_flight, sizeof(cn_fragment_reassembly_entry_t), NULL, mem_ctx));
 	reassembly_init = 1;
-	cn_packet_queue_init(&assembly->assembled_packets);
+	cn_packet_queue_init(&assembly->packets_received);
 
 	if (ret) {
-		if (reassembly_init) cn_sequence_buffer_cleanup(&assembly->fragment_reassembly, NULL);
+		if (reassembly_init) cn_sequence_buffer_cleanup(&assembly->fragments_received, NULL);
 	}
 
 	return ret;
@@ -8027,13 +8058,14 @@ static int s_packet_assembly_init(cn_packet_assembly_t* assembly, int max_fragme
 
 static void s_packet_assembly_cleanup(cn_packet_assembly_t* assembly)
 {
-	cn_sequence_buffer_cleanup(&assembly->fragment_reassembly, s_fragment_reassembly_entry_cleanup);
+	cn_sequence_buffer_cleanup(&assembly->fragments_received, s_fragment_reassembly_entry_cleanup);
 }
 
 // -------------------------------------------------------------------------------------------------
 
 typedef struct cn_transport_t
 {
+	float resend_rate;
 	int fragment_size;
 	int max_packet_size;
 	int max_fragments_in_flight;
@@ -8044,10 +8076,10 @@ typedef struct cn_transport_t
 	int fragments_count;
 	int fragments_capacity;
 	cn_fragment_t* fragments;
-	cn_handle_allocator_t* fragment_handle_table;
-	cn_sequence_buffer_t sent_fragments;
-
 	cn_ack_system_t* ack_system;
+	cn_sequence_buffer_t sent_fragments;
+	uint64_t fragment_id_gen;
+	uint16_t oldest_received_sequence;
 	cn_packet_assembly_t reliable_and_in_order_assembly;
 	cn_packet_assembly_t fire_and_forget_assembly;
 
@@ -8065,12 +8097,6 @@ typedef struct cn_sent_packet_t
 	int acked;
 	int size;
 } cn_sent_packet_t;
-
-static void s_sent_packet_cleanup(void* data, uint16_t sequence, void* udata, void* mem_ctx)
-{
-	cn_sent_packet_t* packet = (cn_sent_packet_t*)data;
-	packet->acked = 0;
-}
 
 typedef struct cn_received_packet_t
 {
@@ -8117,8 +8143,7 @@ cn_ack_system_t* cn_ack_system_create(cn_ack_system_config_t config)
 	}
 
 	if (ret) {
-		if (ack_system)
-		{
+		if (ack_system) {
 			if (sent_packets_init) cn_sequence_buffer_cleanup(&ack_system->sent_packets, NULL);
 			if (received_packets_init) cn_sequence_buffer_cleanup(&ack_system->received_packets, NULL);
 		}
@@ -8165,7 +8190,7 @@ static int s_write_ack_system_header(uint8_t* buffer, uint16_t sequence, uint16_
 	return (int)(buffer - buffer_start);
 }
 
-cn_error_t cn_ack_system_send_packet(cn_ack_system_t* ack_system, void* data, int size, uint16_t* sequence_out)
+cn_result_t cn_ack_system_send_packet(cn_ack_system_t* ack_system, void* data, int size, uint16_t* sequence_out)
 {
 	if (size > ack_system->max_packet_size || size > CN_ACK_SYSTEM_MAX_PACKET_SIZE) {
 		ack_system->counters[CN_ACK_SYSTEM_COUNTERS_PACKETS_TOO_LARGE_TO_SEND]++;
@@ -8177,7 +8202,7 @@ cn_error_t cn_ack_system_send_packet(cn_ack_system_t* ack_system, void* data, in
 	uint32_t ack_bits;
 
 	cn_sequence_buffer_generate_ack_bits(&ack_system->received_packets, &ack, &ack_bits);
-	cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_insert(&ack_system->sent_packets, sequence, s_sent_packet_cleanup);
+	cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_insert(&ack_system->sent_packets, sequence, NULL);
 	CN_ASSERT(packet);
 
 	packet->timestamp = ack_system->time;
@@ -8190,10 +8215,10 @@ cn_error_t cn_ack_system_send_packet(cn_ack_system_t* ack_system, void* data, in
 	CN_ASSERT(size + header_size < CN_TRANSPORT_PACKET_PAYLOAD_MAX);
 	CN_MEMCPY(buffer + header_size, data, size);
 	if (sequence_out) *sequence_out = sequence;
-	cn_error_t err = ack_system->send_packet_fn(ack_system->index, buffer, size + header_size, ack_system->udata);
-	if (cn_is_error(err)) {
+	cn_result_t result = ack_system->send_packet_fn(ack_system->index, buffer, size + header_size, ack_system->udata);
+	if (cn_is_error(result)) {
 		ack_system->counters[CN_ACK_SYSTEM_COUNTERS_PACKETS_INVALID]++;
-		return err;
+		return result;
 	}
 
 	ack_system->counters[CN_ACK_SYSTEM_COUNTERS_PACKETS_SENT]++;
@@ -8216,7 +8241,7 @@ static int s_read_ack_system_header(uint8_t* buffer, int size, uint16_t* sequenc
 	return (int)(buffer - buffer_start);
 }
 
-cn_error_t cn_ack_system_receive_packet(cn_ack_system_t* ack_system, void* data, int size)
+cn_result_t cn_ack_system_receive_packet(cn_ack_system_t* ack_system, void* data, int size)
 {
 	if (size > ack_system->max_packet_size || size > CN_ACK_SYSTEM_MAX_PACKET_SIZE) {
 		ack_system->counters[CN_ACK_SYSTEM_COUNTERS_PACKETS_TOO_LARGE_TO_RECEIVE]++;
@@ -8247,8 +8272,7 @@ cn_error_t cn_ack_system_receive_packet(cn_ack_system_t* ack_system, void* data,
 	packet->timestamp = ack_system->time;
 	packet->size = size;
 
-	for (int i = 0; i < 32; ++i)
-	{
+	for (int i = 0; i < 32; ++i) {
 		int bit_was_set = ack_bits & 1;
 		ack_bits >>= 1;
 
@@ -8262,9 +8286,10 @@ cn_error_t cn_ack_system_receive_packet(cn_ack_system_t* ack_system, void* data,
 				ack_system->counters[CN_ACK_SYSTEM_COUNTERS_PACKETS_ACKED]++;
 				sent_packet->acked = 1;
 
-				float rtt = (float)(ack_system->time - sent_packet->timestamp);
-				ack_system->rtt += (rtt - ack_system->rtt) * 0.001f;
-				if (ack_system->rtt < 0) ack_system->rtt = 0;
+				float rtt = (float)(ack_system->time - sent_packet->timestamp) * 1000.0f;
+				if (ack_system->rtt == 0.0f && rtt > 0.0f) ack_system->rtt = rtt;
+				else ack_system->rtt += (rtt - ack_system->rtt) * 0.001f;
+				CN_ASSERT(ack_system->rtt >= 0);
 			}
 		}
 	}
@@ -8289,35 +8314,39 @@ void cn_ack_system_clear_acks(cn_ack_system_t* ack_system)
 
 static CN_INLINE double s_calc_packet_loss(double packet_loss, cn_sequence_buffer_t* sent_packets)
 {
-	int packet_count = 0;
 	int packet_drop_count = 0;
+	uint32_t base_sequence = (sent_packets->sequence - sent_packets->capacity + 1) + 0xFFFF;
+	int num_dropped = 0;
+	int num_samples = sent_packets->capacity / 2;
 
-	for (int i = 0; i < sent_packets->capacity; ++i)
-	{
-		cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_at_index(sent_packets, i);
+	for (int i = 0; i < num_samples; ++i) {
+		uint16_t sequence = (uint16_t)(base_sequence + i);
+		cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_find(sent_packets, sequence);
 		if (packet) {
-			packet_count++;
 			if (!packet->acked) packet_drop_count++;
 		}
 	}
 
-	double loss = (double)packet_drop_count / (double)packet_count;
-	packet_loss += (loss - packet_loss) * 0.1;
-	if (packet_loss < 0) packet_loss = 0;
+	double loss = (double)packet_drop_count / (double)num_samples;
+	if (packet_loss == 0) packet_loss = loss;
+	else packet_loss += (loss - packet_loss) * 0.1;
+	CN_ASSERT(packet_loss >= 0);
 	return packet_loss;
 }
 
 #include <float.h>
 
-static CN_INLINE double s_calc_bandwidth(double bandwidth, cn_sequence_buffer_t* sent_packets)
+static CN_INLINE double s_calc_bandwidth(double bandwidth, cn_sequence_buffer_t* packets)
 {
 	int bytes_sent = 0;
+	uint32_t base_sequence = (packets->sequence - packets->capacity + 1) + 0xFFFF;
+	int num_samples = packets->capacity / 2;
 	double start_timestamp = DBL_MAX;
 	double end_timestamp = 0;
 
-	for (int i = 0; i < sent_packets->capacity; ++i)
-	{
-		cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_at_index(sent_packets, i);
+	for (int i = 0; i < num_samples; ++i) {
+		uint16_t sequence = (uint16_t)(base_sequence + i);
+		cn_sent_packet_t* packet = (cn_sent_packet_t*)cn_sequence_buffer_find(packets, sequence);
 		if (packet) {
 			bytes_sent += packet->size;
 			if (packet->timestamp < start_timestamp) start_timestamp = packet->timestamp;
@@ -8326,9 +8355,12 @@ static CN_INLINE double s_calc_bandwidth(double bandwidth, cn_sequence_buffer_t*
 	}
 
 	if (start_timestamp != DBL_MAX) {
-		double sent_bandwidth = (((double)bytes_sent / 1024.0) / (end_timestamp - start_timestamp));
-		bandwidth += (sent_bandwidth - bandwidth) * 0.1f;
-		if (bandwidth < 0) bandwidth = 0;
+		double divisor = end_timestamp - start_timestamp;
+		if (divisor > 1.0e-6) {
+			double sent_bandwidth = (((double)bytes_sent * 8.0) / 1000.0) / divisor;
+			bandwidth += (sent_bandwidth - bandwidth) * 0.1f;
+			if (bandwidth < 0) bandwidth = 0;
+		}
 	}
 
 	return bandwidth;
@@ -8369,14 +8401,10 @@ uint64_t cn_ack_system_get_counter(cn_ack_system_t* ack_system, cn_ack_system_co
 
 // -------------------------------------------------------------------------------------------------
 
-typedef struct cn_fragment_entry_t
-{
-	cn_handle_t fragment_handle;
-} cn_fragment_entry_t;
-
 typedef struct cn_transport_config_t
 {
 	void* mem_ctx;
+	float resend_rate;
 	int fragment_size;
 	int max_packet_size;
 	int max_fragments_in_flight;
@@ -8386,16 +8414,17 @@ typedef struct cn_transport_config_t
 	void* udata;
 
 	int index;
-	cn_error_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
+	cn_result_t (*send_packet_fn)(int client_index, void* packet, int size, void* udata);
 } cn_transport_config_t;
 
 CN_INLINE cn_transport_config_t cn_transport_config_defaults()
 {
 	cn_transport_config_t config;
 	config.mem_ctx = 0;
+	config.resend_rate = 0.1f;
 	config.fragment_size = CN_TRANSPORT_MAX_FRAGMENT_SIZE;
 	config.max_packet_size = CN_TRANSPORT_MAX_FRAGMENT_SIZE * 4;
-	config.max_fragments_in_flight = 8;
+	config.max_fragments_in_flight = 32;
 	config.max_size_single_send = (CN_MB) * 20;
 	config.send_receive_queue_size = 1024;
 	config.udata = NULL;
@@ -8416,6 +8445,7 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 
 	cn_transport_t* transport = (cn_transport_t*)CN_ALLOC(sizeof(cn_transport_t), config.user_allocator_context);
 	if (!transport) return NULL;
+	transport->resend_rate = config.resend_rate;
 	transport->fragment_size = config.fragment_size;
 	transport->max_packet_size = config.max_packet_size;
 	transport->max_fragments_in_flight = config.max_fragments_in_flight;
@@ -8433,11 +8463,11 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 	transport->ack_system = cn_ack_system_create(ack_config);
 	transport->mem_ctx = config.user_allocator_context;
 
-	transport->fragment_handle_table = cn_handle_allocator_create(config.send_receive_queue_size, transport->mem_ctx);
-	table_init = 1;
-	CN_CHECK(cn_sequence_buffer_init(&transport->sent_fragments, config.send_receive_queue_size, sizeof(cn_fragment_entry_t), transport, transport->mem_ctx));
+	CN_CHECK(cn_sequence_buffer_init(&transport->sent_fragments, config.send_receive_queue_size, sizeof(uint64_t), transport, transport->mem_ctx));
 	sequence_sent_fragments_init = 1;
 
+	transport->fragment_id_gen = 0;
+	transport->oldest_received_sequence = 0;
 	CN_CHECK(s_packet_assembly_init(&transport->reliable_and_in_order_assembly, config.send_receive_queue_size, transport->mem_ctx));
 	assembly_reliable_init = 1;
 	CN_CHECK(s_packet_assembly_init(&transport->fire_and_forget_assembly, config.send_receive_queue_size, transport->mem_ctx));
@@ -8446,7 +8476,6 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 	s_send_queue_init(&transport->send_queue);
 
 	if (ret) {
-		if (table_init) cn_handle_allocator_destroy(transport->fragment_handle_table);
 		if (sequence_sent_fragments_init) cn_sequence_buffer_cleanup(&transport->sent_fragments, NULL);
 		if (assembly_reliable_init) s_packet_assembly_cleanup(&transport->reliable_and_in_order_assembly);
 		if (assembly_unreliable_init) s_packet_assembly_cleanup(&transport->fire_and_forget_assembly);
@@ -8459,8 +8488,7 @@ cn_transport_t* cn_transport_create(cn_transport_config_t config)
 static void s_transport_cleanup_packet_queue(cn_transport_t* transport, cn_packet_queue_t* q)
 {
 	int index = q->index0;
-	while (q->count--)
-	{
+	while (q->count--) {
 		int next_index = index + 1 % CN_PACKET_QUEUE_MAX_ENTRIES;
 		CN_FREE(q->packets[index], transport->mem_ctx);
 		index = next_index;
@@ -8472,19 +8500,18 @@ void cn_transport_destroy(cn_transport_t* transport)
 	if (!transport) return;
 	void* mem_ctx = transport->mem_ctx;
 
-	s_transport_cleanup_packet_queue(transport, &transport->reliable_and_in_order_assembly.assembled_packets);
-	s_transport_cleanup_packet_queue(transport, &transport->fire_and_forget_assembly.assembled_packets);
+	s_transport_cleanup_packet_queue(transport, &transport->reliable_and_in_order_assembly.packets_received);
+	s_transport_cleanup_packet_queue(transport, &transport->fire_and_forget_assembly.packets_received);
 
 	cn_sequence_buffer_cleanup(&transport->sent_fragments, NULL);
-	cn_handle_allocator_destroy(transport->fragment_handle_table);
 	s_packet_assembly_cleanup(&transport->reliable_and_in_order_assembly);
 	s_packet_assembly_cleanup(&transport->fire_and_forget_assembly);
-	for (int i = 0; i < transport->fragments_count; ++i)
-	{
+	for (int i = 0; i < transport->fragments_count; ++i) {
 		cn_fragment_t* fragment = transport->fragments + i;
 		CN_FREE(fragment->data, mem_ctx);
 	}
 	CN_FREE(transport->fragments, mem_ctx);
+	s_send_queue_shutdown(&transport->send_queue, transport->mem_ctx);
 	cn_ack_system_destroy(transport->ack_system);
 	CN_FREE(transport, mem_ctx);
 }
@@ -8501,7 +8528,7 @@ static CN_INLINE int s_transport_write_header(uint8_t* buffer, int size, uint8_t
 	return (int)(buffer - buffer_start);
 }
 
-static cn_error_t s_transport_send_fragments(cn_transport_t* transport)
+static cn_result_t s_transport_send_fragments(cn_transport_t* transport)
 {
 	CN_ASSERT(transport->fragments_count <= transport->max_fragments_in_flight);
 	if (transport->fragments_count == transport->max_fragments_in_flight) {
@@ -8509,12 +8536,10 @@ static cn_error_t s_transport_send_fragments(cn_transport_t* transport)
 	}
 
 	double timestamp = transport->ack_system->time;
-	uint16_t reassembly_sequence = transport->reliable_and_in_order_assembly.reassembly_sequence;
 	int fragments_space_available_send = transport->max_fragments_in_flight - transport->fragments_count;
 	int fragment_size = transport->fragment_size;
 
-	while (fragments_space_available_send)
-	{
+	while (fragments_space_available_send) {
 		cn_socket_send_queue_item_t* item;
 		if (s_send_queue_peek(&transport->send_queue, &item) < 0) {
 			break;
@@ -8523,31 +8548,29 @@ static cn_error_t s_transport_send_fragments(cn_transport_t* transport)
 		uint8_t* data_ptr = item->packet + item->fragment_index * fragment_size;
 		int fragment_count_left = item->fragment_count - item->fragment_index;
 		int fragment_count_to_send = fragments_space_available_send < fragment_count_left ? fragments_space_available_send : fragment_count_left;
-		//if (item->fragment_index + fragment_count_to_send > item->fragment_count) __debugbreak();
 		CN_ASSERT(item->fragment_index + fragment_count_to_send <= item->fragment_count);
 
-		for (int i = 0; i < fragment_count_to_send; ++i)
-		{
+		for (int i = 0; i < fragment_count_to_send; ++i) {
 			// Allocate fragment.
 			uint16_t fragment_header_index = (uint16_t)(item->fragment_index + i);
 			int this_fragment_size = fragment_header_index != item->fragment_count - 1 ? fragment_size : item->final_fragment_size;
 			uint8_t* fragment_src = data_ptr + fragment_size * i;
 			CN_ASSERT(this_fragment_size <= CN_ACK_SYSTEM_MAX_PACKET_SIZE);
+			CN_ASSERT(this_fragment_size > 0);
 
 			int fragment_index = transport->fragments_count;
 			CN_CHECK_BUFFER_GROW(transport, fragments_count, fragments_capacity, fragments, cn_fragment_t);
 			cn_fragment_t* fragment = transport->fragments + transport->fragments_count++;
-			cn_handle_t fragment_handle = cn_handle_allocator_alloc(transport->fragment_handle_table, fragment_index);
 
+			fragment->id = transport->fragment_id_gen++;
 			fragment->index = fragment_header_index;
 			fragment->timestamp = timestamp;
-			fragment->handle = fragment_handle;
 			fragment->data = (uint8_t*)CN_ALLOC(fragment_size + CN_TRANSPORT_HEADER_SIZE, transport->mem_ctx);
 			fragment->size = this_fragment_size;
 			// TODO: Memory pool on sent fragments.
 
 			// Write the transport header.
-			int header_size = s_transport_write_header(fragment->data, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, 1, reassembly_sequence, item->fragment_count, fragment_header_index, (uint16_t)this_fragment_size);
+			int header_size = s_transport_write_header(fragment->data, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, 1, item->fragment_sequence, item->fragment_count, fragment_header_index, (uint16_t)this_fragment_size);
 			if (header_size != CN_TRANSPORT_HEADER_SIZE) {
 				CN_FREE(fragment->data, transport->mem_ctx);
 				transport->fragments_count--;
@@ -8558,24 +8581,25 @@ static cn_error_t s_transport_send_fragments(cn_transport_t* transport)
 			CN_MEMCPY(fragment->data + header_size, fragment_src, this_fragment_size);
 
 			// Send to ack system.
-			uint16_t sequence;
-			cn_error_t err = cn_ack_system_send_packet(transport->ack_system, fragment->data, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, &sequence);
-			if (cn_is_error(err)) {
+			uint16_t ack_sequence;
+			CN_PRINTF("Sent reliable sequence %d.\n", item->fragment_sequence);
+			cn_result_t result = cn_ack_system_send_packet(transport->ack_system, fragment->data, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, &ack_sequence);
+			if (cn_is_error(result)) {
 				CN_FREE(fragment->data, transport->mem_ctx);
 				transport->fragments_count--;
-				return err;
+				return result;
 			}
 
 			// If all succeeds, record fragment entry. Hopefully it will be acked later.
-			cn_fragment_entry_t* fragment_entry = (cn_fragment_entry_t*)cn_sequence_buffer_insert(&transport->sent_fragments, sequence, NULL);
-			CN_ASSERT(fragment_entry);
-			fragment_entry->fragment_handle = fragment_handle;
+			// If ack'd it will be remove from the transport->fragments array.
+			uint64_t* fragment_id_ptr = (uint64_t*)cn_sequence_buffer_insert(&transport->sent_fragments, ack_sequence, NULL);
+			CN_ASSERT(fragment_id_ptr);
+			*fragment_id_ptr = fragment->id;
 		}
 
 		if (item->fragment_index + fragment_count_to_send == item->fragment_count) {
 			s_send_queue_pop(&transport->send_queue);
 			CN_FREE(item->packet, transport->mem_ctx);
-			transport->reliable_and_in_order_assembly.reassembly_sequence++;
 		} else {
 			item->fragment_index += fragment_count_to_send;
 		}
@@ -8586,35 +8610,34 @@ static cn_error_t s_transport_send_fragments(cn_transport_t* transport)
 	return cn_error_success();
 }
 
-cn_error_t s_transport_send_reliably(cn_transport_t* transport, const void* data, int size)
+cn_result_t s_transport_send_reliably(cn_transport_t* transport, const void* data, int size)
 {
 	if (size < 0) return cn_error_failure("Negative `size` not allowed.");
 	if (size > transport->max_size_single_send) return cn_error_failure("`size` exceeded `max_size_single_send` from `transport->config`.");
+	if (transport->send_queue.count == CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES) {
+		return cn_error_failure("Send queue for reliable packets is full. Increase `CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES` or send packets less frequently.");
+	}
 
 	int fragment_size = transport->fragment_size;
 	int fragment_count = size / fragment_size;
 	int final_fragment_size = size - (fragment_count * fragment_size);
 	if (final_fragment_size > 0) fragment_count++;
+	else final_fragment_size = fragment_size;
 
 	cn_socket_send_queue_item_t send_item;
+	send_item.fragment_sequence = transport->reliable_and_in_order_assembly.send_sequence++;
 	send_item.fragment_index = 0;
 	send_item.fragment_count = fragment_count;
 	send_item.final_fragment_size = final_fragment_size;
 	send_item.size = size;
 	send_item.packet = (uint8_t*)CN_ALLOC(size, transport->mem_ctx);
-	if (!send_item.packet) return cn_error_failure("Failed allocation.");
 	CN_MEMCPY(send_item.packet, data, size);
-
-	if (s_send_queue_push(&transport->send_queue, &send_item) < 0) {
-		return cn_error_failure("Send queue for reliable-and-in-order packets is full. Increase `CN_TRANSPORT_SEND_QUEUE_MAX_ENTRIES` or send packets less frequently.");
-	}
-
-	s_transport_send_fragments(transport);
+	s_send_queue_push(&transport->send_queue, &send_item);
 
 	return cn_error_success();
 }
 
-cn_error_t s_transport_send(cn_transport_t* transport, const void* data, int size)
+cn_result_t s_transport_send(cn_transport_t* transport, const void* data, int size)
 {
 	if (size < 0) return cn_error_failure("Negative `size` is not valid.");
 	if (size > transport->max_size_single_send) return cn_error_failure("`size` exceeded `max_size_single_send` config param.");
@@ -8624,19 +8647,20 @@ cn_error_t s_transport_send(cn_transport_t* transport, const void* data, int siz
 	int final_fragment_size = size - (fragment_count * fragment_size);
 	if (final_fragment_size > 0) fragment_count++;
 
-	uint16_t reassembly_sequence = transport->fire_and_forget_assembly.reassembly_sequence++;
+	uint16_t fragment_sequence = transport->fire_and_forget_assembly.send_sequence++;
 	uint8_t* buffer = transport->fire_and_forget_buffer;
 
 	uint8_t* data_ptr = (uint8_t*)data;
-	for (int i = 0; i < fragment_count; ++i)
-	{
+	for (int i = 0; i < fragment_count; ++i) {
 		int this_fragment_size = i != fragment_count - 1 ? fragment_size : final_fragment_size;
 		uint8_t* fragment_src = data_ptr + fragment_size * i;
 		CN_ASSERT(this_fragment_size <= CN_ACK_SYSTEM_MAX_PACKET_SIZE);
 
 		// Write the transport header.
-		int header_size = s_transport_write_header(buffer, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, 0, reassembly_sequence, fragment_count, (uint16_t)i, (uint16_t)this_fragment_size);
+		//CN_PRINTF("Sending fragment sequence %d.\n", fragment_sequence);
+		int header_size = s_transport_write_header(buffer, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, 0, fragment_sequence, fragment_count, (uint16_t)i, (uint16_t)this_fragment_size);
 		if (header_size != CN_TRANSPORT_HEADER_SIZE) {
+			CN_ASSERT(false);
 			return cn_error_failure("Failed writing transport header -- incorrect size of bytes written (this is probably a bug).");
 		}
 
@@ -8644,15 +8668,17 @@ cn_error_t s_transport_send(cn_transport_t* transport, const void* data, int siz
 		CN_MEMCPY(buffer + CN_TRANSPORT_HEADER_SIZE, fragment_src, this_fragment_size);
 
 		// Send to ack system.
-		uint16_t sequence;
-		cn_error_t err = cn_ack_system_send_packet(transport->ack_system, buffer, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, &sequence);
-		if (cn_is_error(err)) return err;
+		cn_result_t result = cn_ack_system_send_packet(transport->ack_system, buffer, this_fragment_size + CN_TRANSPORT_HEADER_SIZE, NULL);
+		if (cn_is_error(result)) {
+			CN_ASSERT(false);
+			return result;
+		}
 	}
 
 	return cn_error_success();
 }
 
-cn_error_t cn_transport_send(cn_transport_t* transport, const void* data, int size, bool send_reliably)
+cn_result_t cn_transport_send(cn_transport_t* transport, const void* data, int size, bool send_reliably)
 {
 	if (send_reliably) {
 		return s_transport_send_reliably(transport, data, size);
@@ -8661,10 +8687,10 @@ cn_error_t cn_transport_send(cn_transport_t* transport, const void* data, int si
 	}
 }
 
-cn_error_t cn_transport_receive_reliably_and_in_order(cn_transport_t* transport, void** data, int* size)
+cn_result_t cn_transport_receive_reliably_and_in_order(cn_transport_t* transport, void** data, int* size)
 {
 	cn_packet_assembly_t* assembly = &transport->reliable_and_in_order_assembly;
-	if (cn_packet_queue_pop(&assembly->assembled_packets, data, size) < 0) {
+	if (cn_packet_queue_pop(&assembly->packets_received, data, size) < 0) {
 		*data = NULL;
 		*size = 0;
 		return cn_error_failure("No data.");
@@ -8673,10 +8699,10 @@ cn_error_t cn_transport_receive_reliably_and_in_order(cn_transport_t* transport,
 	}
 }
 
-cn_error_t cn_transport_receive_fire_and_forget(cn_transport_t* transport, void** data, int* size)
+cn_result_t cn_transport_receive_fire_and_forget(cn_transport_t* transport, void** data, int* size)
 {
 	cn_packet_assembly_t* assembly = &transport->fire_and_forget_assembly;
-	if (cn_packet_queue_pop(&assembly->assembled_packets, data, size) < 0) {
+	if (cn_packet_queue_pop(&assembly->packets_received, data, size) < 0) {
 		*data = NULL;
 		*size = 0;
 		return cn_error_failure("No data.");
@@ -8690,20 +8716,21 @@ void cn_transport_free_packet(cn_transport_t* transport, void* data)
 	CN_FREE(data, transport->mem_ctx);
 }
 
-cn_error_t cn_transport_process_packet(cn_transport_t* transport, void* data, int size)
+cn_result_t cn_transport_process_packet(cn_transport_t* transport, void* data, int size)
 {
 	if (size < CN_TRANSPORT_HEADER_SIZE) return cn_error_failure("`size` is too small to fit `CN_TRANSPORT_HEADER_SIZE`.");
-	cn_error_t err = cn_ack_system_receive_packet(transport->ack_system, data, size);
-	if (cn_is_error(err)) return err;
+	cn_result_t result = cn_ack_system_receive_packet(transport->ack_system, data, size);
+	if (cn_is_error(result)) return result;
 
 	// Read transport header.
 	uint8_t* buffer = (uint8_t*)data + CN_ACK_SYSTEM_HEADER_SIZE;
 	uint8_t prefix = cn_read_uint8(&buffer);
-	uint16_t reassembly_sequence = cn_read_uint16(&buffer);
+	uint16_t fragment_sequence = cn_read_uint16(&buffer);
 	uint16_t fragment_count = cn_read_uint16(&buffer);
 	uint16_t fragment_index = cn_read_uint16(&buffer);
 	uint16_t fragment_size = cn_read_uint16(&buffer);
 	int total_packet_size = fragment_count * transport->fragment_size;
+	if (prefix) CN_PRINTF("Arrived: fragment sequence %d.\n", fragment_sequence);
 
 	if (total_packet_size > transport->max_size_single_send) {
 		return cn_error_failure("Packet exceeded `max_size_single_send` limit.");
@@ -8720,32 +8747,30 @@ cn_error_t cn_transport_process_packet(cn_transport_t* transport, void* data, in
 	cn_packet_assembly_t* assembly;
 	if (prefix) {
 		assembly = &transport->reliable_and_in_order_assembly;
+		if (s_sequence_less_than(fragment_sequence, assembly->receive_sequence)) {
+			return cn_error_failure("Sequence is too old.");
+		}
 	} else {
 		assembly = &transport->fire_and_forget_assembly;
 	}
 
 	// Build reassembly if it doesn't exist yet.
-	cn_fragment_reassembly_entry_t* reassembly = (cn_fragment_reassembly_entry_t*)cn_sequence_buffer_find(&assembly->fragment_reassembly, reassembly_sequence);
+	cn_fragment_reassembly_entry_t* reassembly = (cn_fragment_reassembly_entry_t*)cn_sequence_buffer_find(&assembly->fragments_received, fragment_sequence);
 	if (!reassembly) {
-		if (s_sequence_less_than(reassembly_sequence, assembly->fragment_reassembly.sequence)) {
-			return cn_error_failure("Old sequence encountered (this packet was already reassembled fully).");
-		}
-		reassembly = (cn_fragment_reassembly_entry_t*)cn_sequence_buffer_insert(&assembly->fragment_reassembly, reassembly_sequence, s_fragment_reassembly_entry_cleanup);
+		reassembly = (cn_fragment_reassembly_entry_t*)cn_sequence_buffer_insert(&assembly->fragments_received, fragment_sequence, s_fragment_reassembly_entry_cleanup);
 		if (!reassembly) {
+			CN_PRINTF("Sequence for this reassembly is stale.\n");
 			return cn_error_failure("Sequence for this reassembly is stale.");
+		} else {
+			if (prefix) CN_PRINTF("Found fragment sequence %d.\n", fragment_sequence);
 		}
 		reassembly->received_final_fragment = 0;
 		reassembly->packet_size = total_packet_size;
 		reassembly->packet = (uint8_t*)CN_ALLOC(total_packet_size, transport->mem_ctx);
-		if (!reassembly->packet) return cn_error_failure("Failed allocation.");
-		reassembly->fragment_received = (uint8_t*)CN_ALLOC(fragment_count, transport->mem_ctx);
-		if (!reassembly->fragment_received) {
-			CN_FREE(reassembly->packet, transport->mem_ctx);
-			return cn_error_failure("Full packet not yet received.");
-		}
-		CN_MEMSET(reassembly->fragment_received, 0, fragment_count);
 		reassembly->fragment_count_so_far = 0;
 		reassembly->fragments_total = fragment_count;
+		reassembly->fragment_received = (uint8_t*)CN_ALLOC(fragment_count, transport->mem_ctx);
+		CN_MEMSET(reassembly->fragment_received, 0, fragment_count);
 	}
 
 	if (fragment_count != reassembly->fragments_total) {
@@ -8770,17 +8795,56 @@ cn_error_t cn_transport_process_packet(cn_transport_t* transport, void* data, in
 	}
 
 	// Store completed packet for retrieval by user.
+	result = cn_error_success();
 	if (reassembly->fragment_count_so_far == fragment_count) {
-		if (cn_packet_queue_push(&assembly->assembled_packets, reassembly->packet, reassembly->packet_size) < 0) {
-			//TODO: Log. Dropped packet since reassembly buffer was too small.
-			CN_FREE(reassembly->packet, transport->mem_ctx);
-			CN_ASSERT(false); // ??? Is this allowed ???
+		// Fire and forget packets can be immediately pushed onto the receive queue.
+		if (!prefix) {
+			if (cn_packet_queue_push(&assembly->packets_received, reassembly->packet, reassembly->packet_size) < 0) {
+				result = cn_error_failure("Packet dropped. The other end is sending too many packets.");
+			} else {
+				//CN_PRINTF("Remove unreliable fragment sequence %d.\n", fragment_sequence);
+				reassembly->packet = NULL;
+				cn_sequence_buffer_remove(&assembly->fragments_received, fragment_sequence, s_fragment_reassembly_entry_cleanup);
+			}
 		}
-		reassembly->packet = NULL;
-		cn_sequence_buffer_remove(&assembly->fragment_reassembly, reassembly_sequence, s_fragment_reassembly_entry_cleanup);
+
+		// We just assembled a new reliable packet. We could have received more packets out of order ahead of this sequence.
+		// Look for more finished packets and push them into the receive queue.
+		if (fragment_sequence == assembly->receive_sequence) {
+			while (prefix) {
+				cn_fragment_reassembly_entry_t* next = (cn_fragment_reassembly_entry_t*)cn_sequence_buffer_find(&assembly->fragments_received, assembly->receive_sequence);
+				if (next) {
+					if (next->fragment_count_so_far == next->fragments_total) {
+						if (cn_packet_queue_push(&assembly->packets_received, next->packet, next->packet_size) < 0) {
+							result =  cn_error_failure("Packet dropped. The other end is sending too many packets.");
+						} else {
+							next->packet = NULL;
+							CN_PRINTF("Remove reliable fragment sequence %d.\n", assembly->receive_sequence);
+							cn_sequence_buffer_remove(&assembly->fragments_received, assembly->receive_sequence, s_fragment_reassembly_entry_cleanup);
+							assembly->receive_sequence++;
+							CN_ASSERT(assembly->receive_sequence <= assembly->fragments_received.sequence);
+						}
+					} else {
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+		}
 	}
 
-	return cn_error_success();
+	return result;
+}
+
+void cn_transport_remove_flight_fragment(cn_transport_t* transport, uint64_t fragment_id)
+{
+	for (int j = 0; j < transport->fragments_count; ++j) {
+		if (transport->fragments[j].id == fragment_id) {
+			CN_FREE(transport->fragments[j].data, transport->mem_ctx);
+			transport->fragments[j] = transport->fragments[--transport->fragments_count];
+		}
+	}
 }
 
 void cn_transport_process_acks(cn_transport_t* transport)
@@ -8788,64 +8852,48 @@ void cn_transport_process_acks(cn_transport_t* transport)
 	uint16_t* acks = cn_ack_system_get_acks(transport->ack_system);
 	int acks_count = cn_ack_system_get_acks_count(transport->ack_system);
 
-	for (int i = 0; i < acks_count; ++i)
-	{
+	for (int i = 0; i < acks_count; ++i) {
 		uint16_t sequence = acks[i];
-		cn_fragment_entry_t* fragment_entry = (cn_fragment_entry_t*)cn_sequence_buffer_find(&transport->sent_fragments, sequence);
-		if (fragment_entry) {
-			cn_handle_t h = fragment_entry->fragment_handle;
-			if (cn_handle_allocator_is_handle_valid(transport->fragment_handle_table, h)) {
-				uint32_t index = cn_handle_allocator_get_index(transport->fragment_handle_table, h);
-				CN_ASSERT((int)index < transport->fragments_count);
-				cn_handle_allocator_free(transport->fragment_handle_table, h);
-				cn_fragment_t* fragment = transport->fragments + index;
-				CN_FREE(fragment->data, transport->mem_ctx);
-				cn_handle_t last_handle = transport->fragments[transport->fragments_count - 1].handle;
-				if (cn_handle_allocator_is_handle_valid(transport->fragment_handle_table, last_handle)) {
-					cn_handle_allocator_update_index(transport->fragment_handle_table, last_handle, index);
-				}
-				transport->fragments[index] = transport->fragments[--(transport->fragments_count)];
-				cn_sequence_buffer_remove(&transport->sent_fragments, sequence, NULL);
-			}
+		uint64_t* fragment_id_ptr = (uint64_t*)cn_sequence_buffer_find(&transport->sent_fragments, sequence);
+		if (fragment_id_ptr) {
+			cn_transport_remove_flight_fragment(transport, *fragment_id_ptr);
+			cn_sequence_buffer_remove(&transport->sent_fragments, sequence, NULL);
 		}
 	}
 
 	cn_ack_system_clear_acks(transport->ack_system);
 }
 
-void cn_transport_resend_unacked_fragments(cn_transport_t* transport)
+void cn_transport_send_fragments(cn_transport_t* transport)
 {
 	// Resend unacked fragments which were previously sent.
 	double timestamp = transport->ack_system->time;
-	int count = transport->fragments_count;
 	cn_fragment_t* fragments = transport->fragments;
 
-	for (int i = 0; i < count;)
-	{
+	for (int i = 0; i < transport->fragments_count;) {
 		cn_fragment_t* fragment = fragments + i;
-		if (fragment->timestamp + 0.01f >= timestamp) {
+		if (fragment->timestamp + transport->resend_rate >= timestamp) {
 			++i;
 			continue;
 		}
 
 		// Send to ack system.
 		uint16_t sequence;
-		cn_error_t err = cn_ack_system_send_packet(transport->ack_system, fragment->data, fragment->size + CN_TRANSPORT_HEADER_SIZE, &sequence);
-		if (cn_is_error(err)) {
+		cn_result_t result = cn_ack_system_send_packet(transport->ack_system, fragment->data, fragment->size + CN_TRANSPORT_HEADER_SIZE, &sequence);
+		if (cn_is_error(result)) {
 			// Remove failed fragments (this should never happen, and is only here for safety).
-			cn_handle_allocator_free(transport->fragment_handle_table, fragment->handle);
 			CN_FREE(fragment->data, transport->mem_ctx);
-			transport->fragments[i] = transport->fragments[--(transport->fragments_count)];
-			--count;
+			transport->fragments[i] = transport->fragments[--transport->fragments_count];
+			CN_ASSERT(false);
 			continue;
 		} else {
 			 ++i;
 		}
 
+		uint64_t* fragment_id_ptr = (uint64_t*)cn_sequence_buffer_insert(&transport->sent_fragments, sequence, NULL);
+		CN_ASSERT(fragment_id_ptr);
+		*fragment_id_ptr = fragment->id;
 		fragment->timestamp = timestamp;
-		cn_fragment_entry_t* fragment_entry = (cn_fragment_entry_t*)cn_sequence_buffer_insert(&transport->sent_fragments, sequence, NULL);
-		CN_ASSERT(fragment_entry);
-		fragment_entry->fragment_handle = fragment->handle;
 	}
 
 	// Send off any available fragments from the send queue.
@@ -8861,7 +8909,7 @@ void cn_transport_update(cn_transport_t* transport, double dt)
 {
 	cn_ack_system_update(transport->ack_system, dt);
 	cn_transport_process_acks(transport);
-	cn_transport_resend_unacked_fragments(transport);
+	cn_transport_send_fragments(transport);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -8874,7 +8922,7 @@ struct cn_client_t
 	void* mem_ctx;
 };
 
-static cn_error_t s_send(int client_index, void* packet, int size, void* udata)
+static cn_result_t s_send(int client_index, void* packet, int size, void* udata)
 {
 	cn_client_t* client = (cn_client_t*)udata;
 	return cn_protocol_client_send(client->p_client, packet, size);
@@ -8882,8 +8930,8 @@ static cn_error_t s_send(int client_index, void* packet, int size, void* udata)
 
 cn_client_t* cn_client_create(uint16_t port, uint64_t application_id, bool use_ipv6, void* user_allocator_context)
 {
-	cn_error_t err = s_cn_init_check();
-	if (cn_is_error(err)) return NULL;
+	cn_result_t result = s_cn_init_check();
+	if (cn_is_error(result)) return NULL;
 
 	cn_protocol_client_t* p_client = cn_protocol_client_create(port, application_id, use_ipv6, user_allocator_context);
 	if (!p_client) return NULL;
@@ -8911,7 +8959,7 @@ void cn_client_destroy(cn_client_t* client)
 	CN_FREE(client, mem_ctx);
 }
 
-cn_error_t cn_client_connect(cn_client_t* client, const uint8_t* connect_token)
+cn_result_t cn_client_connect(cn_client_t* client, const uint8_t* connect_token)
 {
 	return cn_protocol_client_connect(client->p_client, connect_token);
 }
@@ -8958,12 +9006,14 @@ void cn_client_free_packet(cn_client_t* client, void* packet)
 	cn_transport_free_packet(client->transport, packet);
 }
 
-cn_error_t cn_client_send(cn_client_t* client, const void* packet, int size, bool send_reliably)
+cn_result_t cn_client_send(cn_client_t* client, const void* packet, int size, bool send_reliably)
 {
+	if (size <= 0) {
+		return cn_error_failure("Empty packets are now allowed.");
+	}
 	if (cn_protocol_client_get_state(client->p_client) != CN_PROTOCOL_CLIENT_STATE_CONNECTED) {
 		return cn_error_failure("Client is not connected.");
 	}
-
 	return cn_transport_send(client->transport, packet, size, send_reliably);
 }
 
@@ -8990,14 +9040,29 @@ const char* cn_client_state_string(cn_client_state_t state)
 	return NULL;
 }
 
-float cn_client_time_of_last_packet_recieved(const cn_client_t* client)
-{
-	return 0;
-}
-
 void cn_client_enable_network_simulator(cn_client_t* client, double latency, double jitter, double drop_chance, double duplicate_chance)
 {
 	cn_protocol_client_enable_network_simulator(client->p_client, latency, jitter, drop_chance, duplicate_chance);
+}
+
+float cn_client_get_packet_loss_estimate(cn_client_t* client)
+{
+	return client->transport->ack_system->packet_loss;
+}
+
+float cn_client_get_rtt_estimate(cn_client_t* client)
+{
+	return client->transport->ack_system->rtt;
+}
+
+float cn_client_get_incoming_kbps_estimate(cn_client_t* client)
+{
+	return client->transport->ack_system->incoming_bandwidth_kbps;
+}
+
+float cn_client_get_outgoing_kbps_estimate(cn_client_t* client)
+{
+	return client->transport->ack_system->outgoing_bandwidth_kbps;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -9018,7 +9083,7 @@ struct cn_server_t
 	void* mem_ctx;
 };
 
-static cn_error_t s_send_packet_fn(int client_index, void* packet, int size, void* udata)
+static cn_result_t s_send_packet_fn(int client_index, void* packet, int size, void* udata)
 {
 	cn_server_t* server = (cn_server_t*)udata;
 	return cn_protocol_server_send_to_client(server->p_server, packet, size, client_index);
@@ -9026,8 +9091,8 @@ static cn_error_t s_send_packet_fn(int client_index, void* packet, int size, voi
 
 cn_server_t* cn_server_create(cn_server_config_t config)
 {
-	cn_error_t err = s_cn_init_check();
-	if (cn_is_error(err)) return NULL;
+	cn_result_t result = s_cn_init_check();
+	if (cn_is_error(result)) return NULL;
 
 	cn_server_t* server = (cn_server_t*)CN_ALLOC(sizeof(cn_server_t), config.user_allocator_context);
 	CN_MEMSET(server, 0, sizeof(*server));
@@ -9049,10 +9114,10 @@ void cn_server_destroy(cn_server_t* server)
 	CN_FREE(server, mem_ctx);
 }
 
-cn_error_t cn_server_start(cn_server_t* server, const char* address_and_port)
+cn_result_t cn_server_start(cn_server_t* server, const char* address_and_port)
 {
-	cn_error_t err = cn_protocol_server_start(server->p_server, address_and_port, (uint32_t)server->config.connection_timeout);
-	if (cn_is_error(err)) return err;
+	cn_result_t result = cn_protocol_server_start(server->p_server, address_and_port, (uint32_t)server->config.connection_timeout);
+	if (cn_is_error(result)) return result;
 
 	for (int i = 0; i < CN_SERVER_MAX_CLIENTS; ++i) {
 		cn_transport_config_t transport_config = cn_transport_config_defaults();
@@ -9101,6 +9166,7 @@ void cn_server_update(cn_server_t* server, double dt, uint64_t current_time)
 
 	// Capture any events from the protocol server and process them.
 	cn_protocol_server_event_t p_event;
+	bool packet_queue_full = false;
 	while (cn_protocol_server_pop_event(server->p_server, &p_event)) {
 		switch (p_event.type) {
 		case CN_PROTOCOL_SERVER_EVENT_NEW_CONNECTION:
@@ -9121,6 +9187,7 @@ void cn_server_update(cn_server_t* server, double dt, uint64_t current_time)
 			s_server_event_push(server, &e);
 			cn_transport_destroy(server->client_transports[e.u.disconnected.client_index]);
 			cn_transport_config_t transport_config = cn_transport_config_defaults();
+			transport_config.resend_rate = server->config.resend_rate;
 			transport_config.index = e.u.disconnected.client_index;
 			transport_config.send_packet_fn = s_send_packet_fn;
 			transport_config.udata = server;
@@ -9135,14 +9202,15 @@ void cn_server_update(cn_server_t* server, double dt, uint64_t current_time)
 			int index = p_event.u.payload_packet.client_index;
 			void* data = p_event.u.payload_packet.data;
 			int size = p_event.u.payload_packet.size;
-			cn_transport_process_packet(server->client_transports[index], data, size);
+			cn_result_t result = cn_transport_process_packet(server->client_transports[index], data, size);
 			cn_protocol_server_free_packet(server->p_server, data);
+			packet_queue_full = cn_is_error(result);
 		}	break;
 		}
 	}
 
 	// Update all client reliability transports.
-	for (int i = 0; i < CN_SERVER_MAX_CLIENTS; ++i) {
+ 	for (int i = 0; i < CN_SERVER_MAX_CLIENTS; ++i) {
 		if (cn_protocol_server_is_client_connected(server->p_server, i)) {
 			cn_transport_update(server->client_transports[i], dt);
 		}
@@ -9193,11 +9261,14 @@ void cn_server_disconnect_client(cn_server_t* server, int client_index, bool not
 	cn_protocol_server_disconnect_client(server->p_server, client_index, notify_client);
 }
 
-void cn_server_send(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably)
+cn_result_t cn_server_send(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably)
 {
+	if (size <= 0) {
+		return cn_error_failure("Empty packets are not allowed.");
+	}
 	CN_ASSERT(client_index >= 0 && client_index < CN_SERVER_MAX_CLIENTS);
 	CN_ASSERT(cn_protocol_server_is_client_connected(server->p_server, client_index));
-	cn_transport_send(server->client_transports[client_index], packet, size, send_reliably);
+	return cn_transport_send(server->client_transports[client_index], packet, size, send_reliably);
 }
 
 bool cn_server_is_client_connected(cn_server_t* server, int client_index)
@@ -9205,31 +9276,33 @@ bool cn_server_is_client_connected(cn_server_t* server, int client_index)
 	return cn_protocol_server_is_client_connected(server->p_server, client_index);
 }
 
-void cn_server_send_to_all_clients(cn_server_t* server, const void* packet, int size, bool send_reliably)
-{
-	for (int i = 0; i < CN_SERVER_MAX_CLIENTS; ++i) {
-		if (cn_server_is_client_connected(server, i)) {
-			cn_server_send(server, packet, size, i, send_reliably);
-		}
-	}
-}
-
-void cn_server_send_to_all_but_one_client(cn_server_t* server, const void* packet, int size, int client_index, bool send_reliably)
-{
-	CN_ASSERT(client_index >= 0 && client_index < CN_SERVER_MAX_CLIENTS);
-	CN_ASSERT(cn_protocol_server_is_client_connected(server->p_server, client_index));
-
-	for (int i = 0; i < CN_SERVER_MAX_CLIENTS; ++i) {
-		if (i == client_index) continue;
-		if (cn_server_is_client_connected(server, i)) {
-			cn_server_send(server, packet, size, i, send_reliably);
-		}
-	}
-}
-
 void cn_server_enable_network_simulator(cn_server_t* server, double latency, double jitter, double drop_chance, double duplicate_chance)
 {
 	cn_protocol_server_enable_network_simulator(server->p_server, latency, jitter, drop_chance, duplicate_chance);
+}
+
+float cn_server_get_packet_loss_estimate(cn_server_t* server, int client_index)
+{
+	CN_ASSERT(cn_server_is_client_connected(server, client_index));
+	return server->client_transports[client_index]->ack_system->packet_loss;
+}
+
+float cn_server_get_rtt_estimate(cn_server_t* server, int client_index)
+{
+	CN_ASSERT(cn_server_is_client_connected(server, client_index));
+	return server->client_transports[client_index]->ack_system->rtt;
+}
+
+float cn_server_get_incoming_kbps_estimate(cn_server_t* server, int client_index)
+{
+	CN_ASSERT(cn_server_is_client_connected(server, client_index));
+	return server->client_transports[client_index]->ack_system->outgoing_bandwidth_kbps;
+}
+
+float cn_server_get_outgoing_kbps_estimate(cn_server_t* server, int client_index)
+{
+	CN_ASSERT(cn_server_is_client_connected(server, client_index));
+	return server->client_transports[client_index]->ack_system->incoming_bandwidth_kbps;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -9362,22 +9435,19 @@ int cn_sequence_buffer_basic()
 
 	int entries[3];
 	int count = sizeof(entries) / sizeof(entries[0]);
-	for (int i = 0; i < count; ++i)
-	{
+	for (int i = 0; i < count; ++i) {
 		int* entry = (int*)cn_sequence_buffer_insert(buffer, i, NULL);
 		CN_TEST_CHECK_POINTER(entry);
 		*entry = entries[i] = i;
 	}
 
-	for (int i = 0; i < count; ++i)
-	{
+	for (int i = 0; i < count; ++i) {
 		int* entry = (int*)cn_sequence_buffer_find(buffer, i);
 		CN_TEST_CHECK_POINTER(entry);
 		CN_TEST_ASSERT(*entry == entries[i]);
 	}
 
-	for (int i = 0; i < count; ++i)
-	{
+	for (int i = 0; i < count; ++i) {
 		cn_sequence_buffer_remove(buffer, i, NULL);
 		int* entry = (int*)cn_sequence_buffer_find(buffer, i);
 		CN_TEST_ASSERT(entry == NULL);
@@ -9396,14 +9466,12 @@ int cn_replay_buffer_valid_packets()
 
 	CN_TEST_ASSERT(buffer.max == 0);
 
-	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i)
-	{
+	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i) {
 		uint64_t sequence = buffer.entries[i];
 		CN_TEST_ASSERT(sequence == ~0ULL);
 	}
 
-	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i)
-	{
+	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i) {
 		CN_TEST_CHECK(cn_protocol_replay_buffer_cull_duplicate(&buffer, (uint64_t)i));
 		cn_protocol_replay_buffer_update(&buffer, (uint64_t)i);
 	}
@@ -9417,8 +9485,7 @@ int cn_replay_buffer_old_packet_out_of_range()
 	cn_protocol_replay_buffer_t buffer;
 	cn_protocol_replay_buffer_init(&buffer);
 
-	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE * 2; ++i)
-	{
+	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE * 2; ++i) {
 		CN_TEST_CHECK(cn_protocol_replay_buffer_cull_duplicate(&buffer, (uint64_t)i));
 		cn_protocol_replay_buffer_update(&buffer, (uint64_t)i);
 	}
@@ -9434,8 +9501,7 @@ int cn_replay_buffer_duplicate()
 	cn_protocol_replay_buffer_t buffer;
 	cn_protocol_replay_buffer_init(&buffer);
 
-	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i)
-	{
+	for (int i = 0; i < CN_PROTOCOL_REPLAY_BUFFER_SIZE; ++i) {
 		CN_TEST_CHECK(cn_protocol_replay_buffer_cull_duplicate(&buffer, (uint64_t)i));
 		cn_protocol_replay_buffer_update(&buffer, (uint64_t)i);
 	}
@@ -9492,26 +9558,25 @@ int cn_hash_table_hammer()
 	uint64_t keys[128];
 	uint64_t items[128];
 
-	for (int i = 0; i < 128; ++i)
-	{
+	for (int i = 0; i < 128; ++i) {
 		keys[i] = i;
 		items[i] = i * 2;
 	}
 
-	for (int iters = 0; iters < 10; ++iters)
-	{
-		for (int i = 0; i < 128; ++i)
+	for (int iters = 0; iters < 10; ++iters) {
+		for (int i = 0; i < 128; ++i) {
 			cn_hashtable_insert(&table, keys + i, items + i);
+		}
 
-		for (int i = 0; i < 128; ++i)
-		{
+		for (int i = 0; i < 128; ++i) {
 			void* item_ptr = cn_hashtable_find(&table, keys + i);
 			CN_TEST_CHECK_POINTER(item_ptr);
 			CN_TEST_ASSERT(*(uint64_t*)item_ptr == items[i]);
 		}
 
-		for (int i = 0; i < 128; ++i)
+		for (int i = 0; i < 128; ++i) {
 			cn_hashtable_remove(&table, keys + i);
+		}
 	}
 
 	cn_hashtable_cleanup(&table);
@@ -9562,8 +9627,7 @@ int cn_handle_large_loop()
 	cn_handle_allocator_t* table = cn_handle_allocator_create(1024, NULL);
 	CN_TEST_CHECK_POINTER(table);
 
-	for (int i = 0; i < 1024; ++i)
-	{
+	for (int i = 0; i < 1024; ++i) {
 		cn_handle_t h = cn_handle_allocator_alloc(table, i);
 		CN_TEST_ASSERT(h != CN_INVALID_HANDLE);
 		CN_ASSERT(cn_handle_allocator_get_index(table, h) == (uint32_t)i);
@@ -9581,18 +9645,15 @@ int cn_handle_large_loop_and_free()
 	CN_TEST_CHECK_POINTER(table);
 	cn_handle_t* handles = (cn_handle_t*)malloc(sizeof(cn_handle_t) * 2014);
 
-	for (int iters = 0; iters < 5; ++iters)
-	{
-		for (int i = 0; i < 1024; ++i)
-		{
+	for (int iters = 0; iters < 5; ++iters) {
+		for (int i = 0; i < 1024; ++i) {
 			cn_handle_t h = cn_handle_allocator_alloc(table, i);
 			CN_TEST_ASSERT(h != CN_INVALID_HANDLE);
 			CN_ASSERT(cn_handle_allocator_get_index(table, h) == (uint32_t)i);
 			handles[i] = h;
 		}
 
-		for (int i = 0; i < 1024; ++i)
-		{
+		for (int i = 0; i < 1024; ++i) {
 			cn_handle_t h = handles[i];
 			cn_handle_allocator_free(table, h);
 		}
@@ -9610,8 +9671,7 @@ int cn_handle_alloc_too_many()
 	cn_handle_allocator_t* table = cn_handle_allocator_create(1024, NULL);
 	CN_TEST_CHECK_POINTER(table);
 
-	for (int i = 0; i < 1024; ++i)
-	{
+	for (int i = 0; i < 1024; ++i) {
 		cn_handle_t h = cn_handle_allocator_alloc(table, i);
 		CN_TEST_ASSERT(h != CN_INVALID_HANDLE);
 		CN_ASSERT(cn_handle_allocator_get_index(table, h) == (uint32_t)i);
@@ -9765,8 +9825,7 @@ int cn_doubly_list()
 
 	cn_list_node_t* nodes[3] = { &b, &a, &c };
 	int index = 0;
-	for (cn_list_node_t* n = cn_list_begin(&list); n != cn_list_end(&list); n = n->next)
-	{
+	for (cn_list_node_t* n = cn_list_begin(&list); n != cn_list_end(&list); n = n->next) {
 		CN_TEST_ASSERT(n == nodes[index++]);
 	}
 
@@ -9899,8 +9958,7 @@ int cn_test_generate_connect_token()
 	CN_TEST_ASSERT(token.expiration_timestamp == expiration_timestamp);
 	CN_TEST_ASSERT(token.handshake_timeout == handshake_timeout);
 	CN_TEST_ASSERT(token.endpoint_count == 3);
-	for (int i = 0; i < token.endpoint_count; ++i)
-	{
+	for (int i = 0; i < token.endpoint_count; ++i) {
 		cn_endpoint_t endpoint;
 		CN_TEST_CHECK(cn_endpoint_init(&endpoint, endpoints[i]));
 		CN_TEST_ASSERT(cn_endpoint_equals(token.endpoints[i], endpoint));
@@ -9912,8 +9970,7 @@ int cn_test_generate_connect_token()
 	CN_TEST_ASSERT(decrypted_token.expiration_timestamp == expiration_timestamp);
 	CN_TEST_ASSERT(decrypted_token.handshake_timeout == handshake_timeout);
 	CN_TEST_ASSERT(decrypted_token.endpoint_count == 3);
-	for (int i = 0; i < token.endpoint_count; ++i)
-	{
+	for (int i = 0; i < token.endpoint_count; ++i) {
 		cn_endpoint_t endpoint;
 		CN_TEST_CHECK(cn_endpoint_init(&endpoint, endpoints[i]));
 		CN_TEST_ASSERT(cn_endpoint_equals(decrypted_token.endpoints[i], endpoint));
@@ -10183,8 +10240,8 @@ int cn_client_server_sim()
 	while (1) {
 		if (do_send) {
 			cn_crypto_random_bytes(packet, packet_size);
-			cn_error_t err = cn_client_send(client, packet, packet_size, true);
-			CN_TEST_ASSERT(!cn_is_error(err));
+			cn_result_t result = cn_client_send(client, packet, packet_size, true);
+			CN_TEST_ASSERT(!cn_is_error(result));
 			do_send = false;
 		}
 
@@ -10246,7 +10303,7 @@ cn_test_transport_data_t cn_test_transport_data_defaults()
 	return data;
 }
 
-cn_error_t cn_test_send_packet_fn(int index, void* packet, int size, void* udata)
+cn_result_t cn_test_send_packet_fn(int index, void* packet, int size, void* udata)
 {
 	cn_test_transport_data_t* data = (cn_test_transport_data_t*)udata;
 	if (data->drop_packet) {
@@ -10254,10 +10311,12 @@ cn_error_t cn_test_send_packet_fn(int index, void* packet, int size, void* udata
 	}
 
 	if (data->id) {
-		return cn_ack_system_receive_packet(data->ack_system_a, packet, size);
+		cn_ack_system_receive_packet(data->ack_system_a, packet, size);
 	} else {
-		return cn_ack_system_receive_packet(data->ack_system_b, packet, size);
+		cn_ack_system_receive_packet(data->ack_system_b, packet, size);
 	}
+
+	return cn_error_success();
 }
 
 CN_TEST_CASE(cn_ack_system_basic, "Create ack system, send a few packets, and receive them. Make sure some drop. Assert acks.");
@@ -10284,8 +10343,7 @@ int cn_ack_system_basic()
 
 	uint64_t packet_data = 100;
 
-	for (int i = 0; i < 10; ++i)
-	{
+	for (int i = 0; i < 10; ++i) {
 		if ((i % 3) == 0) {
 			data_a.drop_packet = 1;
 			data_b.drop_packet = 1;
@@ -10314,8 +10372,7 @@ int cn_ack_system_basic()
 	int count_a = cn_ack_system_get_acks_count(ack_system_a);
 	int count_b = cn_ack_system_get_acks_count(ack_system_b);
 	CN_TEST_ASSERT(count_a - 1 == count_b);
-	for (int i = 0; i < count_b; ++i)
-	{
+	for (int i = 0; i < count_b; ++i) {
 		CN_TEST_ASSERT(acks_a[i] == acks_b[i]);
 		CN_TEST_ASSERT(acks_a[i] != 0);
 		CN_TEST_ASSERT(acks_a[i] != 3);
@@ -10329,7 +10386,7 @@ int cn_ack_system_basic()
 	return 0;
 }
 
-cn_error_t cn_test_transport_send_packet_fn(int index, void* packet, int size, void* udata)
+cn_result_t cn_test_transport_send_packet_fn(int index, void* packet, int size, void* udata)
 {
 	cn_test_transport_data_t* data = (cn_test_transport_data_t*)udata;
 	if (data->drop_packet) {
@@ -10337,13 +10394,15 @@ cn_error_t cn_test_transport_send_packet_fn(int index, void* packet, int size, v
 	}
 	
 	if (data->id) {
-		return cn_transport_process_packet(data->transport_a, packet, size);
+		cn_transport_process_packet(data->transport_a, packet, size);
 	} else {
-		return cn_transport_process_packet(data->transport_b, packet, size);
+		cn_transport_process_packet(data->transport_b, packet, size);
 	}
+
+	return cn_error_success();
 }
 
-cn_error_t cn_test_transport_open_packet_fn(int index, void* packet, int size, void* udata)
+cn_result_t cn_test_transport_open_packet_fn(int index, void* packet, int size, void* udata)
 {
 	cn_test_transport_data_t* data = (cn_test_transport_data_t*)udata;
 	return cn_error_success();
@@ -10461,7 +10520,7 @@ int cn_transport_drop_fragments()
 	cn_transport_free_packet(transport_b, packet_received);
 
 	data_b.drop_packet = 0;
-	cn_transport_update(transport_b, dt);
+	cn_transport_update(transport_b, 1);
 
 	CN_TEST_CHECK(cn_is_error(cn_transport_receive_reliably_and_in_order(transport_a, &packet_received, &packet_received_size)));
 	CN_TEST_ASSERT(packet_size == packet_received_size);
@@ -10540,8 +10599,7 @@ int cn_transport_drop_fragments_reliable_hammer()
 	int iters = 0;
 	int received = 0;
 
-	while (1)
-	{
+	while (1) {
 		CN_TEST_CHECK(cn_is_error(cn_transport_send(transport_a, fire_and_forget_packet, fire_and_forget_packet_size, false)));
 		CN_TEST_CHECK(cn_is_error(cn_transport_send(transport_b, fire_and_forget_packet, fire_and_forget_packet_size, false)));
 
@@ -10554,12 +10612,21 @@ int cn_transport_drop_fragments_reliable_hammer()
 			received = 1;
 			cn_transport_free_packet(transport_b, packet_received);
 		}
+
+		void* data;
+		int size;
+		if (!cn_is_error(cn_transport_receive_fire_and_forget(transport_a, &data, &size))) {
+			cn_transport_free_packet(transport_a, data);
+		}
+		if (!cn_is_error(cn_transport_receive_fire_and_forget(transport_b, &data, &size))) {
+			cn_transport_free_packet(transport_b, data);
+		}
 	
 		if (received && cn_transport_unacked_fragment_count(transport_a) == 0) {
 			break;
 		}
 
-		if (iters++ == 100) {
+		if (++iters == 100) {
 			CN_TEST_ASSERT(false);
 			break;
 		}
@@ -10567,6 +10634,85 @@ int cn_transport_drop_fragments_reliable_hammer()
 
 	CN_TEST_ASSERT(received);
 	CN_FREE(packet, NULL);
+
+	cn_transport_destroy(transport_a);
+	cn_transport_destroy(transport_b);
+
+	return 0;
+}
+
+CN_TEST_CASE(cn_transport_send_many_reliables_at_once, "Send over 8 reliable packets all at once.");
+int cn_transport_send_many_reliables_at_once()
+{
+	srand(0);
+
+	cn_test_transport_data_t data_a = cn_test_transport_data_defaults();
+	cn_test_transport_data_t data_b = cn_test_transport_data_defaults();
+	data_a.id = 0;
+	data_b.id = 1;
+	double dt = 1.0/60.0;
+
+	cn_transport_config_t config = cn_transport_config_defaults();
+	config.send_packet_fn = cn_test_transport_send_packet_fn;
+	config.udata = &data_a;
+	cn_transport_t* transport_a = cn_transport_create(config);
+	config.udata = &data_b;
+	cn_transport_t* transport_b = cn_transport_create(config);
+	data_a.transport_a = transport_a;
+	data_a.transport_b = transport_b;
+	data_b.transport_a = transport_a;
+	data_b.transport_b = transport_b;
+
+	uint8_t packet = 5;
+
+	void* packet_received;
+	int packet_received_size;
+	int iters = 0;
+	bool done = false;
+	int bigger_packet = 0;
+	int expected_bigger_packet = 0;
+
+	while (!done) {
+		CN_TEST_CHECK(cn_is_error(cn_transport_send(transport_a, &packet, 1, false)));
+		CN_TEST_CHECK(cn_is_error(cn_transport_send(transport_b, &packet, 1, false)));
+
+		for (int i = 0; i < 16; ++i) {
+			cn_result_t result = cn_transport_send(transport_a, &bigger_packet, sizeof(int), true);
+			if (!cn_is_error(result)) {
+				++bigger_packet;
+			}
+		}
+
+		cn_transport_update(transport_a, dt);
+		cn_transport_update(transport_b, dt);
+
+ 		while (!cn_is_error(cn_transport_receive_reliably_and_in_order(transport_b, &packet_received, &packet_received_size))) {
+ 			if (packet_received_size == 1) {
+				CN_TEST_ASSERT(!CN_MEMCMP(&packet, packet_received, 1));
+				cn_transport_free_packet(transport_b, packet_received);
+			} else if (packet_received_size == sizeof(int)) {
+				CN_TEST_ASSERT(!CN_MEMCMP(&expected_bigger_packet, packet_received, sizeof(int)));
+				expected_bigger_packet++;
+				cn_transport_free_packet(transport_b, packet_received);
+				if (expected_bigger_packet == 5000) {
+					done = true;
+				}
+			} else {
+				CN_TEST_ASSERT(false);
+			}
+		}
+	
+		if (done && cn_transport_unacked_fragment_count(transport_a) == 0) {
+			break;
+		}
+
+		if (iters++ == 10000) {
+			CN_TEST_ASSERT(false);
+			break;
+		}
+	}
+
+	CN_TEST_ASSERT(done);
 
 	cn_transport_destroy(transport_a);
 	cn_transport_destroy(transport_b);
@@ -10786,8 +10932,7 @@ int cn_protocol_client_server()
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 0, 0);
 		cn_protocol_server_update(server, 0, 0);
 
@@ -10852,8 +10997,7 @@ int cn_protocol_client_no_server_responses()
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 10, 0);
 
 		if (cn_protocol_client_get_state(client) <= 0) break;
@@ -10917,8 +11061,7 @@ int cn_protocol_client_server_list()
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 1, 0);
 		cn_protocol_server_update(server, 0, 0);
 
@@ -10986,8 +11129,7 @@ int cn_protocol_server_challenge_response_timeout()
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 0.1, 0);
 
 		if (cn_protocol_client_get_state(client) != CN_PROTOCOL_CLIENT_STATE_SENDING_CHALLENGE_RESPONSE) {
@@ -11109,8 +11251,7 @@ int cn_protocol_client_connect_expired_token()
 
 	int iters = 0;
 	uint64_t time = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 0, time++);
 		cn_protocol_server_update(server, 0, 0);
 
@@ -11179,8 +11320,7 @@ int cn_protocol_server_connect_expired_token()
 
 	int iters = 0;
 	uint64_t time = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		++time;
 		cn_protocol_client_update(client, 0, time - 1);
 		cn_protocol_server_update(server, 0, time);
@@ -11253,8 +11393,7 @@ int cn_protocol_client_bad_keys()
 	client->connect_token.server_to_client_key = cn_crypto_generate_key();
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 1, 0);
 		cn_protocol_server_update(server, 1, 0);
 
@@ -11325,8 +11464,7 @@ int cn_protocol_server_not_in_list_but_gets_request()
 	CN_TEST_CHECK(cn_endpoint_init(client->connect_token.endpoints, "[::1]:5000"));
 
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 1, 0);
 		cn_protocol_server_update(server, 1, 0);
 
@@ -11436,8 +11574,7 @@ int cn_protocol_connect_a_few_clients()
 
 	int iters = 0;
 	float dt = 1.0f / 60.0f;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client0, dt, 0);
 		cn_protocol_client_update(client1, dt, 0);
 		cn_protocol_client_update(client2, dt, 0);
@@ -11517,8 +11654,7 @@ int cn_protocol_keepalive()
 
 	int iters = 0;
 	float dt = 1.0f / 60.0f;
-	while (iters++ < 1000)
-	{
+	while (iters++ < 1000) {
 		cn_protocol_client_update(client, dt, 0);
 		cn_protocol_server_update(server, dt, 0);
 
@@ -11585,8 +11721,7 @@ int cn_protocol_client_initiated_disconnect()
 
 	int iters = 0;
 	float dt = 1.0f / 60.0f;
-	while (iters++ < 1000)
-	{
+	while (iters++ < 1000) {
 		if (cn_protocol_client_get_state(client) > 0) {
 			cn_protocol_client_update(client, dt, 0);
 		}
@@ -11663,8 +11798,7 @@ int cn_protocol_server_initiated_disconnect()
 
 	int iters = 0;
 	float dt = 1.0f / 60.0f;
-	while (iters++ < 1000)
-	{
+	while (iters++ < 1000) {
 		cn_protocol_client_update(client, dt, 0);
 		cn_protocol_server_update(server, dt, 0);
 
@@ -11752,8 +11886,7 @@ int cn_protocol_client_server_payloads()
 	float dt = 1.0f / 60.0f;
 	int payloads_received_by_server = 0;
 	int payloads_received_by_client = 0;
-	while (iters++ < 1000)
-	{
+	while (iters++ < 1000) {
 		cn_protocol_client_update(client, dt, 0);
 		cn_protocol_server_update(server, dt, 0);
 
@@ -11832,8 +11965,7 @@ int cn_protocol_multiple_connections_and_payloads()
 
 	cn_protocol_client_t** clients = (cn_protocol_client_t**)CN_ALLOC(sizeof(cn_protocol_client_t*) * max_clients, NULL);
 
-	for (int i = 0; i < max_clients; ++i)
-	{
+	for (int i = 0; i < max_clients; ++i) {
 		cn_crypto_key_t client_to_server_key = cn_crypto_generate_key();
 		cn_crypto_key_t server_to_client_key = cn_crypto_generate_key();
 		uint64_t client_id = (uint64_t)i;
@@ -11916,12 +12048,10 @@ int cn_protocol_multiple_connections_and_payloads()
 			}
 		}
 	}
-	for (int i = 0; i < client_count; ++i)
-	{
+	for (int i = 0; i < client_count; ++i) {
 		CN_TEST_ASSERT(payloads_received_by_client[i] >= 1);
 	}
-	for (int i = 0; i < max_clients; ++i)
-	{
+	for (int i = 0; i < max_clients; ++i) {
 		cn_protocol_client_update(clients[i], 0, 0);
 		if (i >= client_count) {
 			CN_TEST_ASSERT(cn_protocol_client_get_state(clients[i]) == CN_PROTOCOL_CLIENT_STATE_DISCONNECTED);
@@ -11991,8 +12121,7 @@ int cn_protocol_client_reconnect()
 
 	// Connect client.
 	int iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 0, 0);
 		cn_protocol_server_update(server, 0, 0);
 
@@ -12008,8 +12137,7 @@ int cn_protocol_client_reconnect()
 	CN_TEST_ASSERT(cn_protocol_client_get_state(client) == CN_PROTOCOL_CLIENT_STATE_DISCONNECTED);
 
 	iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_server_update(server, 0, 0);
 		if (cn_protocol_server_client_count(server) == 0) break;
 	}
@@ -12034,8 +12162,7 @@ int cn_protocol_client_reconnect()
 	// Reconnect client.
 	CN_TEST_CHECK(cn_is_error(cn_protocol_client_connect(client, connect_token)));
 	iters = 0;
-	while (iters++ < 100)
-	{
+	while (iters++ < 100) {
 		cn_protocol_client_update(client, 0, 0);
 		cn_protocol_server_update(server, 0, 0);
 
@@ -12102,6 +12229,7 @@ int cn_run_tests(int which_test, bool soak)
 		CN_TEST_CASE_ENTRY(cn_replay_buffer_duplicate),
 		CN_TEST_CASE_ENTRY(cn_transport_drop_fragments),
 		CN_TEST_CASE_ENTRY(cn_transport_drop_fragments_reliable_hammer),
+		CN_TEST_CASE_ENTRY(cn_transport_send_many_reliables_at_once),
 		CN_TEST_CASE_ENTRY(cn_packet_connection_accepted),
 		CN_TEST_CASE_ENTRY(cn_packet_connection_denied),
 		CN_TEST_CASE_ENTRY(cn_packet_keepalive),

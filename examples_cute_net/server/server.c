@@ -33,7 +33,7 @@ uint64_t unix_timestamp() {
 	return (uint64_t)mktime(timeinfo);
 }
 
-void panic(cn_error_t err) {
+void panic(cn_result_t err) {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
 }
@@ -53,8 +53,8 @@ int main(void) {
 	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
 
 	cn_server_t* server = cn_server_create(server_config);
-	cn_error_t err = cn_server_start(server, address_and_port);
-	if (cn_is_error(err)) panic(err);
+	cn_result_t result = cn_server_start(server, address_and_port);
+	if (cn_is_error(result)) panic(result);
 	printf("Server started, listening on port %d.\n", (int)endpoint.port);
 
 	while (1) {
