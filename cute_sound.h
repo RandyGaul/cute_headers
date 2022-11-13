@@ -2508,7 +2508,7 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 	} else {
 		if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
 			int new_capacity = s_ctx->audio_sources_to_free_capacity * 2;
-			cs_audio_source_t** new_sources = CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
+			cs_audio_source_t** new_sources = (cs_audio_source_t**)CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
 			CUTE_SOUND_MEMCPY(new_sources, s_ctx->audio_sources_to_free, sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_size);
 			CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
 			s_ctx->audio_sources_to_free = new_sources;
