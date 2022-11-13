@@ -99,9 +99,9 @@
 		                  decryption across different platforms/compilers.
 		1.02 (11/12/2022) Fixed a bug where sequence buffers would desync when sending
 		                  too many reliable packets all at once.
-		                  Implemented stats queries (packet loss, round-trip-time, etc.)
-		                  Return proper error if packets of size 0 are sent.
-		                  Renamed cn_error_t to cn_result_t.
+		                * Implemented stats queries (packet loss, round-trip-time, etc.)
+		                * Return proper error if packets of size 0 are sent.
+		                * Renamed cn_error_t to cn_result_t.
 		                  Fixed a bug where reliable sequence numbers were incremented
 		                  at the wrong time, causing a desynchronization and connection
 		                  drop.
