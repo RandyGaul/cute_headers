@@ -1780,6 +1780,7 @@ void cs_unlock();
 
 void cs_shutdown()
 {
+	if (!s_ctx) return;
 	if (s_ctx->separate_thread) {
 		cs_lock();
 		s_ctx->running = false;
@@ -1822,6 +1823,7 @@ void cs_shutdown()
 	void* mem_ctx = s_ctx->mem_ctx;
 	(void)mem_ctx;
 	CUTE_SOUND_FREE(s_ctx, mem_ctx);
+	s_ctx = NULL;
 }
 
 static float s_smoothstep(float x) { return x * x * (3.0f - 2.0f * x); }
