@@ -324,6 +324,7 @@ void cs_music_set_volume(float volume_0_to_1);
 void cs_music_set_loop(bool true_to_loop);
 cs_error_t cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 cs_error_t cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
+cs_error_t cs_music_set_sample_index(uint64_t sampel_index);
 
 // -------------------------------------------------------------------------------------------------
 // Playing sounds.
@@ -512,7 +513,7 @@ void cs_stop_all_playing_sounds();
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
-		#include <SDL2/SDL.h>
+		#include <SDL.h>
 	#endif
 	#ifndef _WIN32
 		#include <alloca.h>
@@ -2508,7 +2509,7 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 	} else {
 		if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
 			int new_capacity = s_ctx->audio_sources_to_free_capacity * 2;
-			cs_audio_source_t** new_sources = CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
+			cs_audio_source_t** new_sources = (cs_audio_source_t**)CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
 			CUTE_SOUND_MEMCPY(new_sources, s_ctx->audio_sources_to_free, sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_size);
 			CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
 			s_ctx->audio_sources_to_free = new_sources;
@@ -2985,6 +2986,14 @@ cs_error_t cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_
 		return CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED;
 	}
 
+	return CUTE_SOUND_ERROR_NONE;
+}
+
+cs_error_t cs_music_set_sample_index(uint64_t sample_index)
+{
+	if (s_ctx->music_playing) return CUTE_SOUND_ERROR_INVALID_SOUND;
+	if (sample_index > s_ctx->music_playing->audio->sample_count) return CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT;
+	s_ctx->music_playing->sample_index = sample_index;
 	return CUTE_SOUND_ERROR_NONE;
 }
 
