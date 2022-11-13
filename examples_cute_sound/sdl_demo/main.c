@@ -35,8 +35,6 @@ int main(int argc, char *args[])
 		printf("Jump!\n");
 	}
 
-	cs_free_audio_source(jump);
-
 	printf("Loading some music...\n");
 	cs_audio_source_t* song1 = cs_load_ogg("song1.ogg", NULL);
 	cs_audio_source_t* song2 = cs_load_ogg("song2.ogg", NULL);

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.02
+	cute_sound.h - v2.03
 
 
 	To create implementation (the function definitions)
@@ -42,29 +42,29 @@
 
 	REVISION HISTORY
 
-		1.0  (06/04/2016) initial release
-		1.01 (06/06/2016) load WAV from memory
-		                  separate portable and OS-specific code in cs_mix
-		                  fixed bug causing audio glitches when sounds ended
-		                  added stb_vorbis loaders + demo example
+		1.0  (06/04/2016) Initial release.
+		1.01 (06/06/2016) Load WAV from memory.
+		                * Separate portable and OS-specific code in cs_mix.
+		                * Fixed bug causing audio glitches when sounds ended.
+		                * Added stb_vorbis loaders + demo example.
 		1.02 (06/08/2016) error checking + strings in vorbis loaders
-		                  SSE2 implementation of mixer
-		                  fix typos on docs/comments
-		                  corrected volume bug introduced in 1.01
+		                * SSE2 implementation of mixer.
+		                * Fix typos on docs/comments.
+		                * Corrected volume bug introduced in 1.01.
 		1.03 (07/05/2016) size calculation helper (to know size of sound in
 		                  bytes on the heap) cs_sound_size
-		1.04 (12/06/2016) merged in Aaron Balint's contributions
-		                  SFFT and pitch functions from Stephan M. Bernsee
-		                  cs_mix can run on its own thread with cs_spawn_mix_thread
-		                  updated documentation, typo fixes
-		                  fixed typo in cs_malloc16 that caused heap corruption
+		1.04 (12/06/2016) Merged in Aaron Balint's contributions.
+		                * SFFT and pitch functions from Stephan M. Bernsee
+		                * cs_mix can run on its own thread with cs_spawn_mix_thread
+		                * Updated documentation, typo fixes.
+		                * Fixed typo in cs_malloc16 that caused heap corruption.
 		1.05 (12/08/2016) cs_stop_all_sounds, suggested by Aaron Balint
-		1.06 (02/17/2017) port to CoreAudio for Apple machines
+		1.06 (02/17/2017) Port to CoreAudio for Apple machines.
 		1.07 (06/18/2017) SIMD the pitch shift code; swapped out old Bernsee
 		                  code for a new re-write, updated docs as necessary,
 		                  support for compiling as .c and .cpp on Windows,
 		                  port for SDL (for Linux, or any other platform).
-		                  Special thanks to DeXP (Dmitry Hrabrov) for 90% of
+		                * Special thanks to DeXP (Dmitry Hrabrov) for 90% of
 		                  the work on the SDL port!
 		1.08 (09/06/2017) SDL_RWops support by RobLoach
 		1.09 (05/20/2018) Load wav funcs can skip all irrelevant chunks
@@ -77,16 +77,18 @@
 		2.00 (05/21/2022) redesigned the entire API for v2.00, music support, broke
 		                  the pitch/plugin interface (to be fixed), CoreAudio is not
 		                  yet tested, but the SDL2 implementation is well tested,
-		                      ALSA support is dropped entirely
-		2.01 (11/02/2022) compilation fixes for clang/llvm, added #include <stddef.h>
+		                * ALSA support is dropped entirely
+		2.01 (11/02/2022) Compilation fixes for clang/llvm, added #include <stddef.h>
 		                  to have size_t defined. Correctly finalize the thread when
 		                  cs_shutdown is called for all platforms that spawned it
-		                  (this fixes segmentation fault on cs_shutdown)
+		                  (this fixes segmentation fault on cs_shutdown).
 		2.02 (11/10/2022) Removed plugin API -- It was clunky and just not worth the
 		                  maintenence effort. If you're reading this Matt, I haven't
 		                  forgotten all the cool work you did! And will use it in the
 		                  future for sure :) -- Unfortunately this removes pitch.
-		                  Fixed a bug where dsound mixing could run too fast.
+		                * Fixed a bug where dsound mixing could run too fast.
+		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
+		                  need for refcount polling.
 
 
 	CONTRIBUTORS
@@ -231,7 +233,6 @@ typedef enum cs_error_t
 	CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED,
 	CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED,
 	CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED,
-	CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE,
 	CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED,
 	CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED,
 	CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED,
@@ -286,8 +287,7 @@ typedef struct cs_audio_source_t cs_audio_source_t;
 
 cs_audio_source_t* cs_load_wav(const char* path, cs_error_t* err /* = NULL */);
 cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* err /* = NULL */);
-int cs_ref_count(cs_audio_source_t* audio);
-cs_error_t cs_free_audio_source(cs_audio_source_t* audio);
+void cs_free_audio_source(cs_audio_source_t* audio);
 
 // If stb_vorbis was included *before* cute_sound go ahead and create
 // some functions for dealing with OGG files.
@@ -1247,7 +1247,6 @@ const char* cs_error_as_string(cs_error_t error) {
 	case CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED: return "CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED";
 	case CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED";
 	case CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED";
-	case CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE: return "CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE";
 	case CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED";
 	case CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED";
 	case CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED";
@@ -1330,6 +1329,9 @@ typedef struct cs_context_t
 	cs_sound_inst_t* music_playing /* = NULL */;
 	cs_sound_inst_t* music_next /* = NULL */;
 
+	int audio_sources_to_free_capacity /* = 0 */;
+	int audio_sources_to_free_size /* = 0 */;
+	cs_audio_source_t** audio_sources_to_free /* = NULL */;
 	uint64_t instance_id_gen /* = 1 */;
 	hashtable_t instance_map; // <uint64_t, cs_audio_source_t*>
 	cs_inst_page_t* pages /* = NULL */;
@@ -1702,6 +1704,9 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->music_state_to_resume_from_paused = CUTE_SOUND_MUSIC_STATE_NONE;
 	s_ctx->music_playing = NULL;
 	s_ctx->music_next = NULL;
+	s_ctx->audio_sources_to_free_capacity = 32;
+	s_ctx->audio_sources_to_free_size = 0;
+	s_ctx->audio_sources_to_free = (cs_audio_source_t**)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_capacity, s_ctx->mem_ctx);
 	s_ctx->instance_id_gen = 1;
 	hashtable_init(&s_ctx->instance_map, sizeof(cs_audio_source_t*), 1024, user_allocator_context);
 	s_ctx->pages = NULL;
@@ -1800,6 +1805,13 @@ void cs_shutdown()
 		CUTE_SOUND_FREE(page, s_ctx->mem_ctx);
 		page = next;
 	}
+
+	for (int i = 0; i < s_ctx->audio_sources_to_free_size; ++i) {
+		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
+		cs_free16(audio->channels[0], s_ctx->mem_ctx);
+		CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
+	}
+	CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
 
 	cs_free16(s_ctx->floatA, s_ctx->mem_ctx);
 	cs_free16(s_ctx->floatB, s_ctx->mem_ctx);
@@ -2256,6 +2268,18 @@ void cs_mix()
 
 #endif
 
+	// Free up any queue'd free's for audio sources at zero refcount.
+	for (int i = 0; i < s_ctx->audio_sources_to_free_size;) {
+		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
+		if (audio->playing_count == 0) {
+			cs_free16(audio->channels[0], s_ctx->mem_ctx);
+			CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
+			s_ctx->audio_sources_to_free[i] = s_ctx->audio_sources_to_free[--s_ctx->audio_sources_to_free_size];
+		} else {
+			++i;
+		}
+	}
+
 	unlock:
 	cs_unlock();
 }
@@ -2475,17 +2499,24 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	return audio;
 }
 
-int cs_ref_count(cs_audio_source_t* audio)
+void cs_free_audio_source(cs_audio_source_t* audio)
 {
-	return audio->playing_count;
-}
-
-cs_error_t cs_free_audio_source(cs_audio_source_t* audio)
-{
-	if (audio->playing_count) return CUTE_SOUND_ERROR_CANNOT_FREE_AUDIO_SOURCE_WHILE_STILL_IN_USE;
-	cs_free16(audio->channels[0], s_ctx->mem_ctx);
-	CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
-	return CUTE_SOUND_ERROR_NONE;
+	cs_lock();
+	if (audio->playing_count == 0) {
+		cs_free16(audio->channels[0], s_ctx->mem_ctx);
+		CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
+	} else {
+		if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
+			int new_capacity = s_ctx->audio_sources_to_free_capacity * 2;
+			cs_audio_source_t** new_sources = CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
+			CUTE_SOUND_MEMCPY(new_sources, s_ctx->audio_sources_to_free, sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_size);
+			CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
+			s_ctx->audio_sources_to_free = new_sources;
+			s_ctx->audio_sources_to_free_capacity = new_capacity;
+		}
+		s_ctx->audio_sources_to_free[s_ctx->audio_sources_to_free_size++] = audio;
+	}
+	cs_unlock();
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
@@ -3084,7 +3115,7 @@ void cs_stop_all_playing_sounds()
 	This software is available under 2 licenses - you may choose the one you like.
 	------------------------------------------------------------------------------
 	ALTERNATIVE A - zlib license
-	Copyright (c) 2017 Randy Gaul http://www.randygaul.net
+	Copyright (c) 2022 Randy Gaul http://www.randygaul.net
 	This software is provided 'as-is', without any express or implied warranty.
 	In no event will the authors be held liable for any damages arising from
 	the use of this software.
