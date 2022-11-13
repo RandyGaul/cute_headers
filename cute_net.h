@@ -102,7 +102,7 @@
 		                * Implemented stats queries (packet loss, round-trip-time, etc.)
 		                * Return proper error if packets of size 0 are sent.
 		                * Renamed cn_error_t to cn_result_t.
-		                  Fixed a bug where reliable sequence numbers were incremented
+		                * Fixed a bug where reliable sequence numbers were incremented
 		                  at the wrong time, causing a desynchronization and connection
 		                  drop.
 */
@@ -8730,7 +8730,7 @@ cn_result_t cn_transport_process_packet(cn_transport_t* transport, void* data, i
 	uint16_t fragment_index = cn_read_uint16(&buffer);
 	uint16_t fragment_size = cn_read_uint16(&buffer);
 	int total_packet_size = fragment_count * transport->fragment_size;
-	if (prefix) CN_PRINTF("Arrived: fragment sequence %d.\n", fragment_sequence);
+	CN_PRINTF("Arrived: fragment sequence %d.\n", fragment_sequence);
 
 	if (total_packet_size > transport->max_size_single_send) {
 		return cn_error_failure("Packet exceeded `max_size_single_send` limit.");
@@ -8762,7 +8762,7 @@ cn_result_t cn_transport_process_packet(cn_transport_t* transport, void* data, i
 			CN_PRINTF("Sequence for this reassembly is stale.\n");
 			return cn_error_failure("Sequence for this reassembly is stale.");
 		} else {
-			if (prefix) CN_PRINTF("Found fragment sequence %d.\n", fragment_sequence);
+			CN_PRINTF("Found fragment sequence %d.\n", fragment_sequence);
 		}
 		reassembly->received_final_fragment = 0;
 		reassembly->packet_size = total_packet_size;
@@ -9047,22 +9047,22 @@ void cn_client_enable_network_simulator(cn_client_t* client, double latency, dou
 
 float cn_client_get_packet_loss_estimate(cn_client_t* client)
 {
-	return client->transport->ack_system->packet_loss;
+	return (float)client->transport->ack_system->packet_loss;
 }
 
 float cn_client_get_rtt_estimate(cn_client_t* client)
 {
-	return client->transport->ack_system->rtt;
+	return (float)client->transport->ack_system->rtt;
 }
 
 float cn_client_get_incoming_kbps_estimate(cn_client_t* client)
 {
-	return client->transport->ack_system->incoming_bandwidth_kbps;
+	return (float)client->transport->ack_system->incoming_bandwidth_kbps;
 }
 
 float cn_client_get_outgoing_kbps_estimate(cn_client_t* client)
 {
-	return client->transport->ack_system->outgoing_bandwidth_kbps;
+	return (float)client->transport->ack_system->outgoing_bandwidth_kbps;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -9187,7 +9187,7 @@ void cn_server_update(cn_server_t* server, double dt, uint64_t current_time)
 			s_server_event_push(server, &e);
 			cn_transport_destroy(server->client_transports[e.u.disconnected.client_index]);
 			cn_transport_config_t transport_config = cn_transport_config_defaults();
-			transport_config.resend_rate = server->config.resend_rate;
+			transport_config.resend_rate = (float)server->config.resend_rate;
 			transport_config.index = e.u.disconnected.client_index;
 			transport_config.send_packet_fn = s_send_packet_fn;
 			transport_config.udata = server;
@@ -9284,25 +9284,25 @@ void cn_server_enable_network_simulator(cn_server_t* server, double latency, dou
 float cn_server_get_packet_loss_estimate(cn_server_t* server, int client_index)
 {
 	CN_ASSERT(cn_server_is_client_connected(server, client_index));
-	return server->client_transports[client_index]->ack_system->packet_loss;
+	return (float)server->client_transports[client_index]->ack_system->packet_loss;
 }
 
 float cn_server_get_rtt_estimate(cn_server_t* server, int client_index)
 {
 	CN_ASSERT(cn_server_is_client_connected(server, client_index));
-	return server->client_transports[client_index]->ack_system->rtt;
+	return (float)server->client_transports[client_index]->ack_system->rtt;
 }
 
 float cn_server_get_incoming_kbps_estimate(cn_server_t* server, int client_index)
 {
 	CN_ASSERT(cn_server_is_client_connected(server, client_index));
-	return server->client_transports[client_index]->ack_system->outgoing_bandwidth_kbps;
+	return (float)server->client_transports[client_index]->ack_system->outgoing_bandwidth_kbps;
 }
 
 float cn_server_get_outgoing_kbps_estimate(cn_server_t* server, int client_index)
 {
 	CN_ASSERT(cn_server_is_client_connected(server, client_index));
-	return server->client_transports[client_index]->ack_system->incoming_bandwidth_kbps;
+	return (float)server->client_transports[client_index]->ack_system->incoming_bandwidth_kbps;
 }
 
 // -------------------------------------------------------------------------------------------------
