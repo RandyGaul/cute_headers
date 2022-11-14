@@ -316,14 +316,14 @@ void cs_free_audio_source(cs_audio_source_t* audio);
 // -------------------------------------------------------------------------------------------------
 // Music sounds.
 
-cs_error_t cs_music_play(cs_audio_source_t* audio, float fade_in_time /* = 0 */);
-cs_error_t cs_music_stop(float fade_out_time /* = 0 */);
+void cs_music_play(cs_audio_source_t* audio, float fade_in_time /* = 0 */);
+void cs_music_stop(float fade_out_time /* = 0 */);
 void cs_music_pause();
 void cs_music_resume();
 void cs_music_set_volume(float volume_0_to_1);
 void cs_music_set_loop(bool true_to_loop);
-cs_error_t cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
-cs_error_t cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
+void cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
+void cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
 uint64_t cs_music_get_sample_index();
 cs_error_t cs_music_set_sample_index(uint64_t sample_index);
 
@@ -2733,11 +2733,10 @@ static cs_sound_inst_t* s_inst(cs_audio_source_t* src, cs_sound_params_t params)
 	return inst;
 }
 
-cs_error_t cs_music_play(cs_audio_source_t* audio_source, float fade_in_time)
+void cs_music_play(cs_audio_source_t* audio_source, float fade_in_time)
 {
 	if (s_ctx->music_state != CUTE_SOUND_MUSIC_STATE_PLAYING) {
-		cs_error_t err = cs_music_stop(0);
-		if (err) return err;
+		cs_music_stop(0);
 	}
 
 	if (fade_in_time < 0) fade_in_time = 0;
@@ -2753,22 +2752,25 @@ cs_error_t cs_music_play(cs_audio_source_t* audio_source, float fade_in_time)
 	CUTE_SOUND_ASSERT(s_ctx->music_next == NULL);
 	cs_sound_inst_t* inst = s_inst_music(audio_source, fade_in_time == 0 ? 1.0f : 0);
 	s_ctx->music_playing = inst;
-
-	return CUTE_SOUND_ERROR_NONE;
 }
 
-cs_error_t cs_music_stop(float fade_out_time)
+void cs_music_stop(float fade_out_time)
 {
 	if (fade_out_time < 0) fade_out_time = 0;
 
 	if (fade_out_time == 0) {
 		// Immediately turn off all music if no fade out time.
-		if (s_ctx->music_playing) s_ctx->music_playing->active = false;
-		if (s_ctx->music_next) s_ctx->music_next->active = false;
+		if (s_ctx->music_playing) {
+			s_ctx->music_playing->active = false;
+			s_ctx->music_playing->paused = false;
+		}
+		if (s_ctx->music_next) {
+			s_ctx->music_next->active = false;
+			s_ctx->music_next->paused = false;
+		}
 		s_ctx->music_playing = NULL;
 		s_ctx->music_next = NULL;
 		s_ctx->music_state = CUTE_SOUND_MUSIC_STATE_NONE;
-		return CUTE_SOUND_ERROR_NONE;
 	} else {
 		switch (s_ctx->music_state) {
 		case CUTE_SOUND_MUSIC_STATE_NONE:
@@ -2781,7 +2783,7 @@ cs_error_t cs_music_stop(float fade_out_time)
 			break;
 
 		case CUTE_SOUND_MUSIC_STATE_FADE_OUT:
-			return CUTE_SOUND_ERROR_NONE;
+			break;
 
 		case CUTE_SOUND_MUSIC_STATE_FADE_IN:
 		{
@@ -2811,10 +2813,8 @@ cs_error_t cs_music_stop(float fade_out_time)
 		}	break;
 
 		case CUTE_SOUND_MUSIC_STATE_PAUSED:
-			return CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED;
+			cs_music_stop(0);
 		}
-
-		return CUTE_SOUND_ERROR_NONE;
 	}
 }
 
@@ -2851,14 +2851,15 @@ void cs_music_resume()
 	s_ctx->music_state = s_ctx->music_state_to_resume_from_paused;
 }
 
-cs_error_t cs_music_switch_to(cs_audio_source_t* audio_source, float fade_out_time, float fade_in_time)
+void cs_music_switch_to(cs_audio_source_t* audio_source, float fade_out_time, float fade_in_time)
 {
 	if (fade_in_time < 0) fade_in_time = 0;
 	if (fade_out_time < 0) fade_out_time = 0;
 
 	switch (s_ctx->music_state) {
 	case CUTE_SOUND_MUSIC_STATE_NONE:
-		return cs_music_play(audio_source, fade_in_time);
+		cs_music_play(audio_source, fade_in_time);
+		break;
 
 	case CUTE_SOUND_MUSIC_STATE_PLAYING:
 	{
@@ -2917,19 +2918,19 @@ cs_error_t cs_music_switch_to(cs_audio_source_t* audio_source, float fade_out_ti
 	}	break;
 
 	case CUTE_SOUND_MUSIC_STATE_PAUSED:
-		return CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED;
+		cs_music_stop(0);
+		cs_music_switch_to(audio_source, fade_out_time, fade_in_time);
+		break;
 	}
-
-	return CUTE_SOUND_ERROR_NONE;
 }
 
-cs_error_t cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_time)
+void cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_time)
 {
 	if (cross_fade_time < 0) cross_fade_time = 0;
 
 	switch (s_ctx->music_state) {
 	case CUTE_SOUND_MUSIC_STATE_NONE:
-		return cs_music_play(audio_source, cross_fade_time);
+		cs_music_play(audio_source, cross_fade_time);
 
 	case CUTE_SOUND_MUSIC_STATE_PLAYING:
 	{
@@ -2986,10 +2987,9 @@ cs_error_t cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_
 	}	break;
 
 	case CUTE_SOUND_MUSIC_STATE_PAUSED:
-		return CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED;
+		cs_music_stop(0);
+		cs_music_crossfade(audio_source, cross_fade_time);
 	}
-
-	return CUTE_SOUND_ERROR_NONE;
 }
 
 uint64_t cs_music_get_sample_index()
