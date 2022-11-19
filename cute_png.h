@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_png.h - v1.04
+	cute_png.h - v1.05
 
 	To create implementation (the function definitions)
 		#define CUTE_PNG_IMPLEMENTATION
