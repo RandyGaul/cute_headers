@@ -514,7 +514,7 @@ void cs_stop_all_playing_sounds();
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
-		#include <SDL2/SDL.h>
+		#include <SDL.h>
 	#endif
 	#ifndef _WIN32
 		#include <alloca.h>
@@ -1339,7 +1339,6 @@ typedef struct cs_context_t
 	cs_inst_page_t* pages /* = NULL */;
 	cs_list_t playing_sounds;
 	cs_list_t free_sounds;
-	void* mem_ctx /* = NULL */;
 
 	unsigned latency_samples;
 	int Hz;
@@ -1393,6 +1392,7 @@ typedef struct cs_context_t
 #endif
 } cs_context_t;
 
+void* s_mem_ctx;
 cs_context_t* s_ctx = NULL;
 
 void cs_sleep(int milliseconds)
@@ -1708,21 +1708,21 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->music_next = NULL;
 	s_ctx->audio_sources_to_free_capacity = 32;
 	s_ctx->audio_sources_to_free_size = 0;
-	s_ctx->audio_sources_to_free = (cs_audio_source_t**)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_capacity, s_ctx->mem_ctx);
+	s_ctx->audio_sources_to_free = (cs_audio_source_t**)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_capacity, s_mem_ctx);
 	s_ctx->instance_id_gen = 1;
 	hashtable_init(&s_ctx->instance_map, sizeof(cs_audio_source_t*), 1024, user_allocator_context);
 	s_ctx->pages = NULL;
 	cs_list_init(&s_ctx->playing_sounds);
 	cs_list_init(&s_ctx->free_sounds);
 	s_add_page();
-	s_ctx->mem_ctx = user_allocator_context;
+	s_mem_ctx = user_allocator_context;
 	s_ctx->latency_samples = buffered_samples;
 	s_ctx->Hz = play_frequency_in_Hz;
 	s_ctx->bps = bps;
 	s_ctx->wide_count = wide_count;
-	s_ctx->floatA = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_ctx->mem_ctx);
-	s_ctx->floatB = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_ctx->mem_ctx);
-	s_ctx->samples = (cs__m128i*)cs_malloc16(sizeof(cs__m128i) * wide_count, s_ctx->mem_ctx);
+	s_ctx->floatA = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_mem_ctx);
+	s_ctx->floatB = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_mem_ctx);
+	s_ctx->samples = (cs__m128i*)cs_malloc16(sizeof(cs__m128i) * wide_count, s_mem_ctx);
 	s_ctx->running = true;
 	s_ctx->separate_thread = false;
 	s_ctx->sleep_milliseconds = 0;
@@ -1802,25 +1802,37 @@ void cs_shutdown()
 
 #endif
 
+	if (!cs_list_empty(&s_ctx->playing_sounds)) {
+		cs_list_node_t* playing_node = cs_list_begin(&s_ctx->playing_sounds);
+		cs_list_node_t* end_node = cs_list_end(&s_ctx->playing_sounds);
+		do {
+			cs_list_node_t* next_node = playing_node->next;
+			cs_sound_inst_t* playing = CUTE_SOUND_LIST_HOST(cs_sound_inst_t, node, playing_node);
+			cs_audio_source_t* audio = playing->audio;
+			if (audio) audio->playing_count = 0;
+			playing_node = next_node;
+		} while (playing_node != end_node);
+	}
+
 	cs_inst_page_t* page = s_ctx->pages;
 	while (page) {
 		cs_inst_page_t* next = page->next;
-		CUTE_SOUND_FREE(page, s_ctx->mem_ctx);
+		CUTE_SOUND_FREE(page, s_mem_ctx);
 		page = next;
 	}
 
 	for (int i = 0; i < s_ctx->audio_sources_to_free_size; ++i) {
 		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
-		cs_free16(audio->channels[0], s_ctx->mem_ctx);
-		CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
+		cs_free16(audio->channels[0], s_mem_ctx);
+		CUTE_SOUND_FREE(audio, s_mem_ctx);
 	}
-	CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
+	CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_mem_ctx);
 
-	cs_free16(s_ctx->floatA, s_ctx->mem_ctx);
-	cs_free16(s_ctx->floatB, s_ctx->mem_ctx);
-	cs_free16(s_ctx->samples, s_ctx->mem_ctx);
+	cs_free16(s_ctx->floatA, s_mem_ctx);
+	cs_free16(s_ctx->floatB, s_mem_ctx);
+	cs_free16(s_ctx->samples, s_mem_ctx);
 	hashtable_term(&s_ctx->instance_map);
-	void* mem_ctx = s_ctx->mem_ctx;
+	void* mem_ctx = s_mem_ctx;
 	(void)mem_ctx;
 	CUTE_SOUND_FREE(s_ctx, mem_ctx);
 	s_ctx = NULL;
@@ -2227,7 +2239,11 @@ void cs_mix()
 			playing->active = false;
 
 			if (playing->audio) {
-				playing->audio->playing_count -= 1;
+				if (s_ctx->running) {
+					playing->audio->playing_count -= 1;
+				} else {
+					playing->audio->playing_count = 0;
+				}
 				CUTE_SOUND_ASSERT(playing->audio->playing_count >= 0);
 			}
 
@@ -2276,8 +2292,8 @@ void cs_mix()
 	for (int i = 0; i < s_ctx->audio_sources_to_free_size;) {
 		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
 		if (audio->playing_count == 0) {
-			cs_free16(audio->channels[0], s_ctx->mem_ctx);
-			CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
+			cs_free16(audio->channels[0], s_mem_ctx);
+			CUTE_SOUND_FREE(audio, s_mem_ctx);
 			s_ctx->audio_sources_to_free[i] = s_ctx->audio_sources_to_free[--s_ctx->audio_sources_to_free_size];
 		} else {
 			++i;
@@ -2376,10 +2392,10 @@ static void cs_last_element(cs__m128* a, int i, int j, int16_t* samples, int off
 cs_audio_source_t* cs_load_wav(const char* path, cs_error_t* err /* = NULL */)
 {
 	int size;
-	void* wav = cs_read_file_to_memory(path, &size, s_ctx->mem_ctx);
+	void* wav = cs_read_file_to_memory(path, &size, s_mem_ctx);
 	if (!wav) return NULL;
 	cs_audio_source_t* audio = cs_read_mem_wav(wav, size, err);
-	CUTE_SOUND_FREE(wav, s_ctx->mem_ctx);
+	CUTE_SOUND_FREE(wav, s_mem_ctx);
 	return audio;
 }
 
@@ -2431,7 +2447,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 		data = cs_next(data);
 	}
 
-	audio = (cs_audio_source_t*)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t), s_ctx->mem_ctx);
+	audio = (cs_audio_source_t*)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t), s_mem_ctx);
 	CUTE_SOUND_MEMSET(audio, 0, sizeof(*audio));
 	audio->sample_rate = (int)fmt.nSamplesPerSec;
 
@@ -2505,22 +2521,28 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 
 void cs_free_audio_source(cs_audio_source_t* audio)
 {
-	cs_lock();
-	if (audio->playing_count == 0) {
-		cs_free16(audio->channels[0], s_ctx->mem_ctx);
-		CUTE_SOUND_FREE(audio, s_ctx->mem_ctx);
-	} else {
-		if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
-			int new_capacity = s_ctx->audio_sources_to_free_capacity * 2;
-			cs_audio_source_t** new_sources = (cs_audio_source_t**)CUTE_SOUND_ALLOC(new_capacity, s_ctx->mem_ctx);
-			CUTE_SOUND_MEMCPY(new_sources, s_ctx->audio_sources_to_free, sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_size);
-			CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_ctx->mem_ctx);
-			s_ctx->audio_sources_to_free = new_sources;
-			s_ctx->audio_sources_to_free_capacity = new_capacity;
+	if (s_ctx) {
+		cs_lock();
+		if (audio->playing_count == 0) {
+			cs_free16(audio->channels[0], s_mem_ctx);
+			CUTE_SOUND_FREE(audio, s_mem_ctx);
+		} else {
+			if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
+				int new_capacity = s_ctx->audio_sources_to_free_capacity * 2;
+				cs_audio_source_t** new_sources = (cs_audio_source_t**)CUTE_SOUND_ALLOC(new_capacity, s_mem_ctx);
+				CUTE_SOUND_MEMCPY(new_sources, s_ctx->audio_sources_to_free, sizeof(cs_audio_source_t*) * s_ctx->audio_sources_to_free_size);
+				CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_mem_ctx);
+				s_ctx->audio_sources_to_free = new_sources;
+				s_ctx->audio_sources_to_free_capacity = new_capacity;
+			}
+			s_ctx->audio_sources_to_free[s_ctx->audio_sources_to_free_size++] = audio;
 		}
-		s_ctx->audio_sources_to_free[s_ctx->audio_sources_to_free_size++] = audio;
+		cs_unlock();
+	} else {
+		CUTE_SOUND_ASSERT(audio->playing_count == 0);
+		cs_free16(audio->channels[0], NULL);
+		CUTE_SOUND_FREE(audio, s_mem_ctx);
 	}
-	cs_unlock();
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
@@ -2556,10 +2578,10 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 	cs_audio_source_t* cs_load_wav_rw(SDL_RWops* context, cs_error_t* err)
 	{
 		int size;
-		char* wav = (char*)cs_read_rw_to_memory(context, &size, s_ctx->mem_ctx);
+		char* wav = (char*)cs_read_rw_to_memory(context, &size, s_mem_ctx);
 		if (!memory) return NULL;
 		cs_audio_source_t* audio = cs_read_mem_wav(wav, length, err);
-		CUTE_SOUND_FREE(wav, s_ctx->mem_ctx);
+		CUTE_SOUND_FREE(wav, s_mem_ctx);
 		return audio;
 	}
 
@@ -2577,7 +2599,7 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 	int sample_rate;
 	int sample_count = stb_vorbis_decode_memory((const unsigned char*)memory, (int)length, &channel_count, &sample_rate, &samples);
 	if (sample_count <= 0) { if (err) *err = CUTE_SOUND_ERROR_STB_VORBIS_DECODE_FAILED; return NULL; }
-	audio = (cs_audio_source_t*)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t), s_ctx->mem_ctx);
+	audio = (cs_audio_source_t*)CUTE_SOUND_ALLOC(sizeof(cs_audio_source_t), s_mem_ctx);
 	CUTE_SOUND_MEMSET(audio, 0, sizeof(*audio));
 
 	{
@@ -2663,10 +2685,10 @@ cs_audio_source_t* cs_load_ogg(const char* path, cs_error_t* err)
 	cs_audio_source_t* cs_load_ogg_rw(SDL_RWops* rw, cs_error_t* err)
 	{
 		int length;
-		void* memory = cs_read_rw_to_memory(rw, &length, s_ctx->mem_ctx);
+		void* memory = cs_read_rw_to_memory(rw, &length, s_mem_ctx);
 		if (!memory) return NULL;
 		cs_audio_source_t* audio = cs_read_ogg_wav(memory, length, err);
-		CUTE_SOUND_FREE(memory, s_ctx->mem_ctx);
+		CUTE_SOUND_FREE(memory, s_mem_ctx);
 		return audio;
 	}
 
