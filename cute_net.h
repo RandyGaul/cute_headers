@@ -588,9 +588,7 @@ CN_INLINE cn_result_t cn_error_success(void) { cn_result_t result; result.code =
 #endif
 
 #if !defined(CN_ALLOC)
-	#define _CRTDBG_MAP_ALLOC
 	#include <stdlib.h>
-	#include <crtdbg.h>
 	#define CN_ALLOC(size, ctx) malloc(size)
 	#define CN_FREE(mem, ctx) free(mem)
 #endif
@@ -8032,7 +8030,6 @@ typedef struct cn_packet_assembly_t
 static void s_fragment_reassembly_entry_cleanup(void* data, uint16_t sequence, void* udata, void* mem_ctx)
 {
 	cn_fragment_reassembly_entry_t* reassembly = (cn_fragment_reassembly_entry_t*)data;
-	if (reassembly->packet && *reassembly->packet == 0xDD) __debugbreak();
 	CN_FREE(reassembly->packet, mem_ctx);
 	CN_FREE(reassembly->fragment_received, mem_ctx);
 }
