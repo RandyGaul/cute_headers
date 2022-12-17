@@ -3131,7 +3131,10 @@ void cs_stop_all_playing_sounds()
 	cs_lock();
 
 	// Set all playing sounds (that aren't music) active to false.
-	if (cs_list_empty(&s_ctx->playing_sounds)) return;
+	if (cs_list_empty(&s_ctx->playing_sounds)) {
+		cs_unlock();
+		return;
+	}
 	cs_list_node_t* playing_sound = cs_list_begin(&s_ctx->playing_sounds);
 	cs_list_node_t* end = cs_list_end(&s_ctx->playing_sounds);
 
