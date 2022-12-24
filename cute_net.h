@@ -672,7 +672,7 @@ extern "C" {
 #define _hydro_attr_warn_unused_result_ _hydro_attr_((warn_unused_result))
 #define _hydro_attr_weak_ _hydro_attr_((weak))
 
-#if defined(__INTEL_COMPILER) || defined(_MSC_VER)
+#if defined(__INTEL_COMPILER) || (defined(_MSC_VER) && !defined(__clang__))
 #define _hydro_attr_aligned_(X) __declspec(align(X))
 #elif defined(__clang__) || defined(__GNUC__)
 #define _hydro_attr_aligned_(X) _hydro_attr_((aligned(X)))
