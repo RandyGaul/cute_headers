@@ -230,7 +230,7 @@ struct cp_atlas_image_t
 
 	#ifdef _WIN32
 		#include <malloc.h>
-	#else
+	#elif defined(__linux__)
 		#include <alloca.h>
 	#endif
 #endif
