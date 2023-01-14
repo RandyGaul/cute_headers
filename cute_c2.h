@@ -321,7 +321,6 @@ CUTE_C2_API void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Po
 
 typedef enum
 {
-	C2_TYPE_NONE,
 	C2_TYPE_CIRCLE,
 	C2_TYPE_AABB,
 	C2_TYPE_CAPSULE,
@@ -1122,7 +1121,7 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 	float tolerance = 1.0e-4f;
 
 	c2TOIResult result;
-	result.hit = false;
+	result.hit = 0;
 	result.n = c2V(0, 0);
 	result.p = c2V(0, 0);
 	result.toi = 1.0f;
@@ -1170,7 +1169,7 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 	}
 
 	if (result.iterations == 0) {
-		result.hit = false;
+		result.hit = 0;
 	} else {
 		if (c2Dot(v, v) > 0) result.n = c2SafeNorm(c2Neg(v));
 		int i = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, result.n));
@@ -1178,7 +1177,7 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 		p = c2Add(c2Add(p, c2Mulvs(result.n, rA)), c2Mulvs(vA, t));
 		result.p = p;
 		result.toi = t;
-		result.hit = true;
+		result.hit = 1;
 	}
 
 	return result;
