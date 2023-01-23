@@ -1549,7 +1549,7 @@ static void cs_free16(void* p, void* mem_ctx)
 		int byte_size = buffer->mDataByteSize;
 		CUTE_SOUND_ASSERT(byte_size == samples_requested_to_consume * bps);
 
-		int zero_bytes = cs_pull_bytes(s_ctx, buffer->mData, byte_size);
+		int zero_bytes = cs_pull_bytes(buffer->mData, byte_size);
 		CUTE_SOUND_MEMSET(((char*)buffer->mData) + (byte_size - zero_bytes), 0, zero_bytes);
 
 		return noErr;
