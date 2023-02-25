@@ -981,7 +981,7 @@ void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item 
 
 
     void* dest_item = (void*)( ( (uintptr_t) table->items_data ) + table->count * table->item_size );
-    memcpy( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
+    HASHTABLE_MEMCPY( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
     table->items_key[ table->count ] = key;
     table->items_slot[ table->count ] = slot;
     ++table->count;
@@ -2030,13 +2030,13 @@ static void cs_dsound_memcpy_to_driver(int16_t* samples, int byte_to_lock, int b
 	unsigned running_index = s_ctx->running_index;
 	INT16* sample1 = (INT16*)region1;
 	DWORD sample1_count = size1 / s_ctx->bps;
-	memcpy(sample1, samples, sample1_count * sizeof(INT16) * 2);
+	CUTE_SOUND_MEMCPY(sample1, samples, sample1_count * sizeof(INT16) * 2);
 	samples += sample1_count * 2;
 	running_index += sample1_count;
 
 	INT16* sample2 = (INT16*)region2;
 	DWORD sample2_count = size2 / s_ctx->bps;
-	memcpy(sample2, samples, sample2_count * sizeof(INT16) * 2);
+	CUTE_SOUND_MEMCPY(sample2, samples, sample2_count * sizeof(INT16) * 2);
 	samples += sample2_count * 2;
 	running_index += sample2_count;
 

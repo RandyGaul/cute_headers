@@ -1637,7 +1637,7 @@ cp_image_t cp_make_atlas(int atlas_width, int atlas_height, const cp_image_t* pn
 			int new_capacity = atlas_node_capacity * 2;
 			cp_atlas_node_t* new_nodes = (cp_atlas_node_t*)CUTE_PNG_ALLOC(sizeof(cp_atlas_node_t) * new_capacity);
 			CUTE_PNG_CHECK(new_nodes, "out of mem");
-			memcpy(new_nodes, nodes, sizeof(cp_atlas_node_t) * sp);
+			CUTE_PNG_MEMCPY(new_nodes, nodes, sizeof(cp_atlas_node_t) * sp);
 			CUTE_PNG_FREE(nodes);
 			// best_fit became a dangling pointer, so relocate it
 			best_fit = new_nodes + (best_fit - nodes);

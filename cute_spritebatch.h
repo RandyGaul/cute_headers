@@ -787,7 +787,7 @@ void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item 
 
 
     void* dest_item = (void*)( ( (uintptr_t) table->items_data ) + table->count * table->item_size );
-    memcpy( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
+    HASHTABLE_MEMCPY( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
     table->items_key[ table->count ] = key;
     table->items_slot[ table->count ] = slot;
     ++table->count;
@@ -1779,7 +1779,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 			int new_capacity = atlas_node_capacity * 2;
 			spritebatch_internal_atlas_node_t* new_nodes = (spritebatch_internal_atlas_node_t*)SPRITEBATCH_MALLOC(sizeof(spritebatch_internal_atlas_node_t) * new_capacity, mem_ctx);
 			SPRITEBATCH_CHECK(new_nodes, "out of mem");
-			memcpy(new_nodes, nodes, sizeof(spritebatch_internal_atlas_node_t) * sp);
+			SPRITEBATCH_MEMCPY(new_nodes, nodes, sizeof(spritebatch_internal_atlas_node_t) * sp);
 			SPRITEBATCH_FREE(nodes, mem_ctx);
 			nodes = new_nodes;
 			atlas_node_capacity = new_capacity;
