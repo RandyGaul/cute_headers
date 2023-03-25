@@ -68,3 +68,7 @@ Each lib contains license info at the end of the file. There is a choice between
 > - *I was looking for a header I've seen before, but it's missing. Where did it go?*
 
 Some of the unpopular or not so useful headers became deprecated, and [live here now](https://github.com/RandyGaul/cute_headers_deprecated).
+
+> - *Do you have any higher level libraries? These seem a bit too low-level.
+
+The cute headers are indeed rather low-level. They solve specific problems. If you're looking for a higher level game creation framework I suggestion trying out [Cute Framework](https://github.com/RandyGaul/cute_framework), a 2D game creation framework built largely on-top of the various low-level cute headers seen here.
