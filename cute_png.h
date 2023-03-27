@@ -81,6 +81,7 @@
 			CUTE_PNG_MEMCMP
 			CUTE_PNG_MEMSET
 			CUTE_PNG_ASSERT
+			CUTE_PNG_FPRINTF
 			CUTE_PNG_SEEK_SET
 			CUTE_PNG_SEEK_END
 			CUTE_PNG_FILE
@@ -274,6 +275,11 @@ struct cp_atlas_image_t
 #if !defined(CUTE_PNG_ASSERT)
 	#include <assert.h>
 	#define CUTE_PNG_ASSERT assert
+#endif
+
+#if !defined(CUTE_PNG_FPRINTF)
+	#include <stdio.h>
+	#define CUTE_PNG_FPRINTF fprintf
 #endif
 
 #if !defined(CUTE_PNG_SEEK_SET)
@@ -1771,7 +1777,7 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 	CUTE_PNG_FILE* fp = CUTE_PNG_FOPEN(out_path_atlas_txt, "wt");
 	CUTE_PNG_CHECK(fp, "unable to open out_path_atlas_txt in cp_default_save_atlas");
 
-	fprintf(fp, "%s\n%d\n\n", out_path_image, img_count);
+	CUTE_PNG_FPRINTF(fp, "%s\n%d\n\n", out_path_image, img_count);
 
 	for (int i = 0; i < img_count; ++i)
 	{
@@ -1787,8 +1793,8 @@ int cp_default_save_atlas(const char* out_path_image, const char* out_path_atlas
 			float max_x = image->maxx;
 			float max_y = image->maxy;
 
-			if (name) fprintf(fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", name, width, height, min_x, min_y, max_x, max_y);
-			else fprintf(fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y);
+			if (name) CUTE_PNG_FPRINTF(fp, "{ \"%s\", w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", name, width, height, min_x, min_y, max_x, max_y);
+			else CUTE_PNG_FPRINTF(fp, "{ w = %d, h = %d, u = { %.10f, %.10f }, v = { %.10f, %.10f } }\n", width, height, min_x, min_y, max_x, max_y);
 		}
 	}
 
