@@ -78,6 +78,7 @@
 			CUTE_PNG_CALLOC
 			CUTE_PNG_REALLOC
 			CUTE_PNG_MEMCPY
+			CUTE_PNG_MEMCMP
 			CUTE_PNG_MEMSET
 			CUTE_PNG_ASSERT
 			CUTE_PNG_SEEK_SET
@@ -258,6 +259,11 @@ struct cp_atlas_image_t
 #if !defined(CUTE_PNG_MEMCPY)
 	#include <string.h>
 	#define CUTE_PNG_MEMCPY memcpy
+#endif
+
+#if !defined(CUTE_PNG_MEMCMP)
+	#include <string.h>
+	#define CUTE_PNG_MEMCMP memcmp
 #endif
 
 #if !defined(CUTE_PNG_MEMSET)
@@ -941,7 +947,7 @@ static const uint8_t* cp_chunk(cp_raw_png_t* png, const char* chunk, uint32_t mi
 	uint32_t len = cp_make32(png->p);
 	const uint8_t* start = png->p;
 
-	if (!memcmp(start + 4, chunk, 4) && len >= minlen)
+	if (!CUTE_PNG_MEMCMP(start + 4, chunk, 4) && len >= minlen)
 	{
 		int offset = len + 12;
 
@@ -964,7 +970,7 @@ static const uint8_t* cp_find(cp_raw_png_t* png, const char* chunk, uint32_t min
 		start = png->p;
 		png->p += len + 12;
 
-		if (!memcmp(start+4, chunk, 4) && len >= minlen && png->p <= png->end)
+		if (!CUTE_PNG_MEMCMP(start+4, chunk, 4) && len >= minlen && png->p <= png->end)
 			return start + 8;
 	}
 
@@ -1084,7 +1090,7 @@ cp_image_t cp_load_png_mem(const void* png_data, int png_length)
 	png.p = (uint8_t*)png_data;
 	png.end = (uint8_t*)png_data + png_length;
 
-	CUTE_PNG_CHECK(!memcmp(png.p, sig, 8), "incorrect file signature (is this a png file?)");
+	CUTE_PNG_CHECK(!CUTE_PNG_MEMCMP(png.p, sig, 8), "incorrect file signature (is this a png file?)");
 	png.p += 8;
 
 	ihdr = cp_chunk(&png, "IHDR", 13);
@@ -1245,7 +1251,7 @@ void cp_load_png_wh(const void* png_data, int png_length, int* w_out, int* h_out
 	if (w_out) *w_out = 0;
 	if (h_out) *h_out = 0;
 
-	CUTE_PNG_CHECK(!memcmp(png.p, sig, 8), "incorrect file signature (is this a png file?)");
+	CUTE_PNG_CHECK(!CUTE_PNG_MEMCMP(png.p, sig, 8), "incorrect file signature (is this a png file?)");
 	png.p += 8;
 
 	ihdr = cp_chunk(&png, "IHDR", 13);
@@ -1313,7 +1319,7 @@ cp_indexed_image_t cp_load_indexed_png_mem(const void *png_data, int png_length)
 	png.p = (uint8_t*)png_data;
 	png.end = (uint8_t*)png_data + png_length;
 
-	CUTE_PNG_CHECK(!memcmp(png.p, sig, 8), "incorrect file signature (is this a png file?)");
+	CUTE_PNG_CHECK(!CUTE_PNG_MEMCMP(png.p, sig, 8), "incorrect file signature (is this a png file?)");
 	png.p += 8;
 
 	ihdr = cp_chunk(&png, "IHDR", 13);
