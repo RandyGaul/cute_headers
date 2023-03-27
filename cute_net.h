@@ -7746,7 +7746,7 @@ typedef struct cn_ack_system_t
 
 #define CN_CHECK(X) if (X) ret = -1;
 
-#define CN_SEQUENCE_BUFFER_EMPTY (~0UL)
+#define CN_SEQUENCE_BUFFER_EMPTY (0xFFFFFFFF)
 
 typedef void (cn_sequence_buffer_cleanup_entry_fn)(void* data, uint16_t sequence, void* udata, void* mem_ctx);
 
@@ -7754,8 +7754,8 @@ void cn_sequence_buffer_remove(cn_sequence_buffer_t* buffer, uint16_t sequence, 
 {
 	int index = sequence % buffer->capacity;
 	if (buffer->entry_sequence[index] != CN_SEQUENCE_BUFFER_EMPTY) {
-		buffer->entry_sequence[index] = CN_SEQUENCE_BUFFER_EMPTY;
 		if (cleanup_fn) cleanup_fn(buffer->entry_data + buffer->stride * index, buffer->entry_sequence[index], buffer->udata, buffer->mem_ctx);
+		buffer->entry_sequence[index] = CN_SEQUENCE_BUFFER_EMPTY;
 	}
 }
 
