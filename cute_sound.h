@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.03
+	cute_sound.h - v2.04
 
 
 	To create implementation (the function definitions)
@@ -3182,7 +3182,7 @@ void cs_set_global_user_allocator_context(void* user_allocator_context)
 	This software is available under 2 licenses - you may choose the one you like.
 	------------------------------------------------------------------------------
 	ALTERNATIVE A - zlib license
-	Copyright (c) 2022 Randy Gaul http://www.randygaul.net
+	Copyright (c) 2023 Randy Gaul https://randygaul.github.io/
 	This software is provided 'as-is', without any express or implied warranty.
 	In no event will the authors be held liable for any damages arising from
 	the use of this software.
