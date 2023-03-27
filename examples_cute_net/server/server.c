@@ -43,7 +43,7 @@ void panic(cn_result_t err) {
 }
 
 int main(void) {
-	const char* address_and_port = "127.0.0.1:5001";
+	const char* address_and_port = "192.168.1.2:5001";
 	cn_endpoint_t endpoint;
 	cn_endpoint_init(&endpoint, address_and_port);
 
@@ -56,6 +56,8 @@ int main(void) {
 	cn_result_t result = cn_server_start(server, address_and_port);
 	if (cn_is_error(result)) panic(result);
 	printf("Server started, listening on port %d.\n", (int)endpoint.port);
+
+	cn_server_set_public_ip(server, "76.146.197.231:5001");
 
 	while (1) {
 		float dt = ct_time();

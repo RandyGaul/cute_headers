@@ -112,7 +112,7 @@ int main(void)
 	// Must be unique for each different player in your game.
 	uint64_t client_id = 5;
 
-	const char* server_address_and_port = "127.0.0.1:5001";
+	const char* server_address_and_port = "76.146.197.231:5001";
 	cn_endpoint_t endpoint;
 	cn_endpoint_init(&endpoint, server_address_and_port);
 
