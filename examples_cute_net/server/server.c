@@ -57,8 +57,6 @@ int main(void) {
 	if (cn_is_error(result)) panic(result);
 	printf("Server started, listening on port %d.\n", (int)endpoint.port);
 
-	cn_server_set_public_ip(server, "76.146.197.231:5001");
-
 	while (1) {
 		float dt = ct_time();
 		uint64_t unix_time = unix_timestamp();
