@@ -1,6 +1,10 @@
 #define CUTE_NET_IMPLEMENTATION
 #include "../../cute_net.h"
 
+// Get this header from here: https://github.com/RandyGaul/cute_headers/blob/master/cute_time.h
+#define CUTE_TIME_IMPLEMENTATION
+#include "cute_time.h"
+
 #include <time.h>
 
 // This can be whatever you want. It's a unique identifier for your game or application, and
@@ -37,10 +41,6 @@ void panic(cn_result_t err) {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
 }
-
-// Get this header from here: https://github.com/RandyGaul/cute_headers/blob/master/cute_time.h
-#define CUTE_TIME_IMPLEMENTATION
-#include "../../cute_time.h"
 
 int main(void) {
 	const char* address_and_port = "127.0.0.1:5001";

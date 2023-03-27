@@ -237,8 +237,10 @@ typedef struct cn_crypto_sign_public_t { uint8_t key[32]; } cn_crypto_sign_publi
 typedef struct cn_crypto_sign_secret_t { uint8_t key[64]; } cn_crypto_sign_secret_t;
 typedef struct cn_crypto_signature_t { uint8_t bytes[64]; } cn_crypto_signature_t;
 
-#ifndef CN_INLINE 
+#ifdef __cplusplus
 #	define CN_INLINE inline
+#else
+#	define CN_INLINE static inline
 #endif
 
 //--------------------------------------------------------------------------------------------------
