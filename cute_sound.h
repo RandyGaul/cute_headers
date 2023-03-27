@@ -89,6 +89,7 @@
 		                * Fixed a bug where dsound mixing could run too fast.
 		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
 		                  need for refcount polling.
+		2.04 (03/27/2023) Added cs_get_global_context and friends.
 
 
 	CONTRIBUTORS
@@ -359,10 +360,13 @@ void cs_set_playing_sounds_volume(float volume_0_to_1);
 void cs_stop_all_playing_sounds();
 
 // -------------------------------------------------------------------------------------------------
-// C++ overloads.
+// Global context.
 
-#ifdef __cplusplus
-#endif
+void* cs_get_global_context();
+void cs_set_global_context(void* context);
+
+void* cs_get_global_user_allocator_context();
+void cs_set_global_user_allocator_context(void* user_allocator_context);
 
 #define CUTE_SOUND_H
 #endif
@@ -3148,6 +3152,26 @@ void cs_stop_all_playing_sounds()
 	} while (playing_sound != end);
 
 	cs_unlock();
+}
+
+void* cs_get_global_context()
+{
+	return s_ctx;
+}
+
+void cs_set_global_context(void* context)
+{
+	s_ctx = context;
+}
+
+void* cs_get_global_user_allocator_context()
+{
+	return s_mem_ctx;
+}
+
+void cs_set_global_user_allocator_context(void* user_allocator_context)
+{
+	s_mem_ctx = user_allocator_context;
 }
 
 #endif // CUTE_SOUND_IMPLEMENTATION_ONCE
