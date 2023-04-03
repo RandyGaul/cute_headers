@@ -2351,7 +2351,7 @@ static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 		sizeNum = (int)CUTE_SOUND_FTELL(fp);
 		CUTE_SOUND_FSEEK(fp, 0, CUTE_SOUND_SEEK_SET);
 		data = CUTE_SOUND_ALLOC(sizeNum, mem_ctx);
-		(void)(CUTE_SOUND_FREAD(data, sizeNum, 1, fp) + 1);
+		CUTE_SOUND_FREAD(data, sizeNum, 1, fp);
 		CUTE_SOUND_FCLOSE(fp);
 	}
 
