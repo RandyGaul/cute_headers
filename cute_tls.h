@@ -135,6 +135,9 @@
 		badssl.com to try out a variety of failure cases (the commented strings at the top of the
 		demo function).
 
+			#define CUTE_TLS_IMPLEMENTATION
+			#include "cute_tls.h"
+			
 			int main()
 			{
 				const char* hostname = "www.google.com";
@@ -422,7 +425,6 @@ static void tls_recv(TLS_Context* ctx)
 	#ifdef TLS_APPLE
 		// Queue up an asynchronous receive block loop.
 		nw_connection_receive(ctx->connection, 1, TLS_MAX_PACKET_SIZE, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, 	nw_error_t receive_error) {
-			printf("Got packet\n");
 			if (content != NULL) {
 				// What a horrid API design... So over-engineered to simply memcpy a buffer.
 				int size = (int)dispatch_data_get_size(content);
