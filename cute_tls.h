@@ -1020,7 +1020,6 @@ TLS_State tls_process(TLS_Connection connection)
 		#endif
 
 		#ifdef TLS_S2N
-			printf("recv\n");
 			tls_recv(ctx);
 
 			// We don't need to do anything special for encryption (unlike SChannel)
@@ -1028,7 +1027,6 @@ TLS_State tls_process(TLS_Connection connection)
 
 			// Push our incoming buffer into packet queue.
 			if (ctx->received) {
-				printf("Got packet %d\n", ctx->received);
 				int size = ctx->received;
 				void* data = TLS_MALLOC(size);
 				TLS_MEMCPY(data, ctx->incoming, size);
