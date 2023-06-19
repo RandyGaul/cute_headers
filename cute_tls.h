@@ -47,15 +47,13 @@
 
 	LIMITATIONS
 
-		No other platforms other than Windows/MacOS/iOS are supported. It's possible to
-		add support for Linux devices, but, I'm not aware of a native API that comes with
-		most nix OS's out of the box. Some good alternatives could be Amazon's s2n, or perhaps
-		mbedtls (formerly known as PolarSSL). This could be a great area for a user contribution
-		via pull-request on GitHub.
+		Emscripten/Android platforms are not currently supported.
 
 		Client credentials are not supported.
 
 		IPv6 is not supported, though this is totally possible, just not initially in v1.00.
+
+		The server side of the connection is *not* supported. This is a client-only implementation.
 
 
 	BUILDING ON APPLE DEVICES
@@ -65,19 +63,42 @@
 		releasing newer Obj-C replacements.
 
 		Link against Network.framework, and Security.framework. Make sure automatic reference
-		counting (ARC) is off if you're using XCode. (Currently not sure if Security is explicitly
-		required, or if it will get pulled in by linking to Network).
+		counting (ARC) is off if you're using XCode.
 
 		Example command line:
 
-			clang -framework Network -framework Security main.cpp -o my_executable
+			clang -framework Network main.cpp -o my_executable
 
 
-	OTHER OPERATING SYSTEMS (e.g. ANDROID/LINUX)
+	BUILDING ON *NIX (INCLUDING APPLE DEVICES)
 
-		Unfortunately there is no defacto TLS handshake OS-level implementation on Linux that works
-		out of the box. As a result a third-party library must be used (like OpenSSL, s2n, or mbedtls
-		to name a few options). This could be a great area for a pull-request. Similar story for Android.
+		A wrapping implementation of s2n is implemented, see: https://github.com/aws/s2n-tls
+		s2n is a pretty good library for implementing TLS servers, but can also be used for
+		clients. It's quite a good library for Apple/Linux, but has no Windows support. Since
+		Linux has no out-of-the-box TLS handshake implementation at the OS-level, unlike Apple/Windows,
+		we have to choose some third-party tool to get things done. Another decent choice could
+		have been mbedtls, but s2n is implemented with much less code, and was thus chosen instead.
+
+		If on MacOS for development make sure to install s2n on your machine. I suggest using brew.
+
+			brew install s2n
+
+		Regardless of how you install s2n make sure your compiler can find the static library and
+		headers in order to properly link against s2n. Here's an example implementation for devloping
+		on MacOS: https://github.com/RandyGaul/cute_headers/tree/master/examples_cute_tls/macos/s2n
+
+		For Linux it's basically he same story. If you're using Linux I assume you know what you're
+		doing, so follow along on the s2n docs as you see fit: https://github.com/aws/s2n-tls
+
+
+	OTHER OPERATING SYSTEMS (e.g. ANDROID/EMSCRIPTEN)
+
+		Android is a bit of another story. I don't have too much Android dev experience, but the best
+		option may be to call from C into Java and use Android's on SSL socket, or their HTTPS APi
+		directly from Java: https://developer.android.com/training/articles/security-ssl
+
+		For Emscripten it looks like they have a C++ websocket wrapper that might work, though I
+		have yet to try it: https://emscripten.org/docs/porting/networking.html#emscripten-websockets-api
 
 
 	CUSTOMIZATION
@@ -90,6 +111,7 @@
 		TLS_MEMSET
 		TLS_MEMMOVE
 		TLS_ASSERT
+		TLS_STRCMP
 		TLS_PACKET_QUEUE_MAX_ENTRIES (default at 64)
 
 
@@ -104,6 +126,7 @@
 
 	Revision history:
 		1.00 (06/17/2023) initial release
+		1.01 (06/19/2023) s2n implementation for apple/linux
 */
 
 /*
@@ -258,12 +281,20 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #	define _WINSOCK_DEPRECATED_NO_WARNINGS
 #endif
 
-#ifdef _WIN32
-#	define TLS_WINDOWS
-#elif defined(__APPLE__)
-#	define TLS_APPLE
-#else
-#	define TLS_MBEDTLS
+#ifdef CUTE_TLS_S2N
+#	define TLS_S2N
+#endif
+
+#ifndef TLS_S2N
+#	ifdef _WIN32
+#		define TLS_WINDOWS
+#	elif defined(__APPLE__)
+#		define TLS_APPLE
+#	elif defined(__linux__) || defined(__unix__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#		define TLS_S2N
+#	else
+#		error Platform not yet supported.
+#	endif
 #endif
 
 #ifdef TLS_WINDOWS
@@ -291,8 +322,19 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #elif defined(TLS_APPLE)
 #	include <Network/Network.h>
 #	include <pthread.h>
-#elif defined(TLS_MBEDTLS)
-#	error Not supported yet.
+#elif defined(TLS_S2N)
+#	include <assert.h>
+#	include <stdio.h>
+#	include <stdlib.h>
+#	include <string.h>
+#	include <sys/socket.h>
+#	include <fcntl.h>
+#	include <unistd.h>
+#	include <netdb.h>
+#	include <errno.h>
+#	include <s2n.h>
+#else
+#	error No supported backend implementation found.
 #endif
 
 #define TLS_1_KB 1024
@@ -321,6 +363,14 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 
 #ifndef TLS_ASSERT
 #	define TLS_ASSERT assert
+#endif
+
+#ifndef TLS_STRCMP
+#	define TLS_STRCMP strcmp
+#endif
+
+#ifndef TLS_STRNCMP
+#	define TLS_STRNCMP strncmp
 #endif
 
 #ifndef TLS_PACKET_QUEUE_MAX_ENTRIES
@@ -386,16 +436,26 @@ typedef struct TLS_Context
 	SecPkgContext_StreamSizes sizes;
 	bool tcp_connect_pending;
 	bool first_call;
-	int received;    // byte count in incoming buffer (ciphertext)
-	int used;        // byte count used from incoming buffer to decrypt current packet
-	int available;   // byte count available for decrypted bytes
-	char* decrypted; // points to incoming buffer where data is decrypted in-place
+	int received;    // Byte count in incoming buffer (ciphertext).
+	int used;        // Byte count used from incoming buffer to decrypt current packet.
+	int available;   // Byte count available for decrypted bytes.
+	char* decrypted; // Points to incoming buffer where data is decrypted in-place.
+	char incoming[TLS_MAX_PACKET_SIZE];
+#elif defined(TLS_S2N)
+	int sock;
+	struct s2n_connection* connection;
+	bool tcp_connect_pending;
+	int received;
 	char incoming[TLS_MAX_PACKET_SIZE];
 #elif defined(TLS_APPLE)
 	dispatch_queue_t dispatch;
 	nw_connection_t connection;
 #endif
 } TLS_Context;
+
+#ifdef TLS_S2N
+int tls_s2n_init = 0;
+#endif
 
 // Called in a poll-style manner on Windows.
 // For Apple we call this once on init to setup a tail-end recursive callback loop.
@@ -411,17 +471,17 @@ static void tls_recv(TLS_Context* ctx)
 			if (r == 0) {
 				// Server disconnected the socket.
 				ctx->state = TLS_STATE_DISCONNECTED;
-				return;
+				break;
 			} else if (r == SOCKET_ERROR) {
 				// Socket related error.
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
-				return;
+				ctx->state = SOCKET_ERROR;
+				break;
 			} else {
 				ctx->received += r;
 			}
 		}
 	#endif // TLS_WINDOWS
-	
+
 	#ifdef TLS_APPLE
 		// Queue up an asynchronous receive block loop.
 		nw_connection_receive(ctx->connection, 1, TLS_MAX_PACKET_SIZE, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, 	nw_error_t receive_error) {
@@ -445,6 +505,30 @@ static void tls_recv(TLS_Context* ctx)
 			}
 		});
 	#endif // TLS_APPLE
+
+	#ifdef TLS_S2N
+		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
+		int bytes_read = 0;
+		while (bytes_read < sizeof(ctx->incoming)) {
+			int r = s2n_recv(ctx->connection, ctx->incoming + bytes_read, sizeof(ctx->incoming) - bytes_read, &blocked);
+			s2n_error_type etype = s2n_error_get_type(s2n_errno);
+			if (r == 0) {
+				break;
+			} else if (r > 0) {
+				bytes_read += r;
+			} else if (etype == S2N_ERR_T_CLOSED) {
+				ctx->state = TLS_STATE_DISCONNECTED;
+				break;
+			} else if (etype == S2N_ERR_T_IO) {
+				ctx->state = TLS_STATE_INVALID_SOCKET;
+				break;
+			} else if (etype != S2N_ERR_T_BLOCKED) {
+				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				break;
+			}
+		}
+		ctx->received = bytes_read;
+	#endif // TLS_S2N
 }
 
 TLS_Connection tls_connect(const char* hostname, int port)
@@ -458,20 +542,30 @@ TLS_Connection tls_connect(const char* hostname, int port)
 	char sport[64];
 	snprintf(sport, sizeof(sport), "%u", port);
 
-	#ifdef TLS_WINDOWS
+	#if defined(TLS_WINDOWS) || defined(TLS_S2N)
 		ctx->tcp_connect_pending = 1;
-		ctx->first_call = 1;
 
-		// Initialize winsock.
-		WSADATA wsadata;
-		if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) {
-			TLS_FREE(ctx);
-			return result;
-		}
+		#ifdef TLS_WINDOWS
+			ctx->first_call = 1;
 
+			// Initialize winsock.
+			WSADATA wsadata;
+			if (WSAStartup(MAKEWORD(2, 2), &wsadata) != 0) {
+				TLS_FREE(ctx);
+				return result;
+			}
+		#elif defined(TLS_S2N)
+			if (!tls_s2n_init) {
+				tls_s2n_init = 1;
+				s2n_init();
+			}
+		#endif
+	#endif // defined(TLS_WINDOWS) || defined(TLS_S2N)
+
+	#if defined(TLS_WINDOWS) || defined(TLS_S2N)
 		// Perform DNS lookup.
 		struct addrinfo hints;
-		TLS_MEMSET(&hints, 0, sizeof(hints ));
+		TLS_MEMSET(&hints, 0, sizeof(hints));
 		hints.ai_family = AF_UNSPEC;
 		hints.ai_flags = AI_PASSIVE;
 		hints.ai_socktype = SOCK_STREAM;
@@ -485,26 +579,28 @@ TLS_Connection tls_connect(const char* hostname, int port)
 
 		// Create a TCP IPv4 socket.
 		ctx->sock = socket(AF_INET, SOCK_STREAM, 0);
-		if (ctx->sock == INVALID_SOCKET) {
+		if (ctx->sock == -1) {
+			freeaddrinfo(addri);
 			TLS_FREE(ctx);
 			return result;
 		}
 
 		// Set non-blocking IO.
 		{
-			DWORD non_blocking = 1;
-			#ifdef _WIN32
+			int non_blocking = 1;
+			#ifdef TLS_WINDOWS
 				int res = ioctlsocket(ctx->sock, FIONBIO, &non_blocking);
 			#else
 				int flags = fcntl(ctx->sock, F_GETFL, 0);
 				int res = fcntl(ctx->sock, F_SETFL, flags | O_NONBLOCK);
 			#endif
 			if (res != 0) {
-				#ifdef _WIN32
+				#ifdef TLS_WINDOWS
 					closesocket(ctx->sock);
 				#else
 					close(ctx->sock);
 				#endif
+				freeaddrinfo(addri);
 				TLS_FREE(ctx);
 				return result;
 			}
@@ -512,7 +608,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 
 		// Startup the TCP connection.
 		if (connect(ctx->sock, addri->ai_addr, (int)addri->ai_addrlen) == -1) {
-			#ifdef _WIN32
+			#ifdef TLS_WINDOWS
 				int error = WSAGetLastError();
 				if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
 					freeaddrinfo(addri);
@@ -535,7 +631,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 
 		ctx->state = TLS_STATE_PENDING;
 
-		#ifdef _WIN32
+		#ifdef TLS_WINDOWS
 		// Initialize a credentials handle for Secure Channel.
 		// This is needed for InitializeSecurityContextA.
 		{
@@ -553,8 +649,36 @@ TLS_Connection tls_connect(const char* hostname, int port)
 				return result;
 			}
 		}
+		#elif defined(TLS_S2N)
+			// Create connection and set our socket onto it. s2n wraps our socket -- actually
+			// a pretty cool API design, which actually simplifies send/recv in our implementation.
+			struct s2n_connection* connection = s2n_connection_new(S2N_CLIENT);
+			if (!connection) {
+				close(ctx->sock);
+				TLS_FREE(ctx);
+				return result;
+			}
+			if (s2n_connection_set_fd(connection, ctx->sock) < 0) {
+				close(ctx->sock);
+				TLS_FREE(ctx);
+				return result;
+			}
+			ctx->connection = connection;
+
+			// Disable client certs (not supported).
+			s2n_connection_set_client_auth_type(connection, S2N_CERT_AUTH_NONE);
+
+			// Make sure the cert hostname matches our expectation. If this isn't set here
+			// the connection will fail to validate. We could also use `s2n_connection_set_verify_host_callback`
+			// but this makes use of a built-in default callback (as per s2n docs). This was *not* at all
+			// clear in the docs, and was figured out through painful trial + error.
+			s2n_set_server_name(connection, hostname);
+
+			// Turn off randomized side-channel blinding. This feature is useful for highly
+			// secure servers, but for our simple client it's just annoying.
+			s2n_connection_set_blinding(connection, S2N_SELF_SERVICE_BLINDING);
 		#endif
-	#endif // TLS_WINDOWS
+	#endif // defined(TLS_WINDOWS) || defined(TLS_S2N)
 
 	#ifdef TLS_APPLE
 		// Used for syncing the packet queue.
@@ -647,10 +771,7 @@ TLS_State tls_process(TLS_Connection connection)
 	if (ctx->state < 0) {
 		return ctx->state;
 	} else if (ctx->state == TLS_STATE_PENDING) {
-		#ifdef TLS_APPLE
-			// Nothing needed here.
-		#endif
-		#ifdef TLS_WINDOWS
+		#if defined(TLS_WINDOWS) || defined(TLS_S2N)
 			// Wait for TCP to connect.
 			if (ctx->tcp_connect_pending) {
 				fd_set sockets_to_check;
@@ -668,7 +789,9 @@ TLS_State tls_process(TLS_Connection connection)
 					return ctx->state;
 				}
 			}
-	
+		#endif // defined(TLS_WINDOWS) || defined(TLS_S2N)
+
+		#ifdef TLS_WINDOWS
 			// TLS handshake algorithm.
 			// 1. Call InitializeSecurityContext.
 			//    The first call creates a security context.
@@ -778,6 +901,45 @@ TLS_State tls_process(TLS_Connection connection)
 			// 4. Read data from the server (recv).
 			tls_recv(ctx);
 		#endif // TLS_WINDOWS
+
+		#ifdef TLS_APPLE
+			// Nothing needed here.
+		#endif // TLS_APPLE
+
+		#ifdef TLS_S2N
+			// s2n wraps a file descriptor (our socket) and performs the entire
+			// handshake for us. Pretty nice!
+			s2n_blocked_status blocked = S2N_NOT_BLOCKED;
+			s2n_errno = S2N_ERR_T_OK;
+			if (s2n_negotiate(ctx->connection, &blocked) != S2N_SUCCESS) {
+				s2n_error_type etype = s2n_error_get_type(s2n_errno);
+				if (etype == S2N_ERR_T_PROTO) {
+					// For some unknown reason s2n doesn't expose their error constants, like at all.
+					// So to avoid finding the correct header and including it, we can at least us
+					// string comparisons, as that's the only way s2n has exposed error codes that aren't
+					// a nightmare to hookup, and likely won't break as they add new error types.
+					#define TLS_S2N_ERROR_MATCHES(X) (!TLS_STRCMP(s2n_strerror_name(s2n_errno), #X))
+					if (TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_UNTRUSTED) ||
+					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_REVOKED) ||
+					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_TYPE_UNSUPPORTED) ||
+					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_INVALID)) {
+						ctx->state = TLS_STATE_BAD_CERTIFICATE;
+					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_EXPIRED)) {
+						ctx->state = TLS_STATE_CERTIFICATE_EXPIRED;
+					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_NO_APPLICATION_PROTOCOL)) {
+						ctx->state = TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS;
+					}
+				} else if (etype == S2N_ERR_T_IO) {
+					ctx->state = TLS_STATE_INVALID_SOCKET;
+				} else if (etype != S2N_ERR_T_BLOCKED) {
+					ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				} else {
+					// Continue calling s2n_negotiate...
+				}
+			} else {
+				ctx->state = TLS_STATE_CONNECTED;
+			}
+		#endif // TLS_S2N
 	} else if (ctx->state >= 0) {
 		// Stall if the packet queue is full.
 		if (ctx->q.count == TLS_PACKET_QUEUE_MAX_ENTRIES) {
@@ -856,6 +1018,29 @@ TLS_State tls_process(TLS_Connection connection)
 			// Nothing on Apple.
 			// Reads are setup via chained callbacks upon connection starting.
 		#endif
+
+		#ifdef TLS_S2N
+			printf("recv\n");
+			tls_recv(ctx);
+
+			// We don't need to do anything special for encryption (unlike SChannel)
+			// since s2n wraps our file descriptor (socket) for us.
+
+			// Push our incoming buffer into packet queue.
+			if (ctx->received) {
+				printf("Got packet %d\n", ctx->received);
+				int size = ctx->received;
+				void* data = TLS_MALLOC(size);
+				TLS_MEMCPY(data, ctx->incoming, size);
+				ctx->received = 0;
+
+				tls_packet_queue_push(&ctx->q, data, size);
+
+				if (ctx->state == TLS_STATE_DISCONNECTED) {
+					ctx->state = TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN;
+				}
+			}
+		#endif // TLS_S2N
 	}
 
 	return ctx->state;
@@ -884,6 +1069,7 @@ const char* tls_state_string(TLS_State state)
 void tls_disconnect(TLS_Connection connection)
 {
 	TLS_Context* ctx = (TLS_Context*)connection.id;
+
 	#ifdef _WIN32
 		if (ctx->state >= 0) {
 			DWORD type = SCHANNEL_SHUTDOWN;
@@ -917,11 +1103,13 @@ void tls_disconnect(TLS_Connection connection)
 		FreeCredentialsHandle(&ctx->handle);
 		closesocket(ctx->sock);
 	#endif
+
 	#ifdef TLS_APPLE
 		dispatch_release(ctx->dispatch);
 		nw_release(ctx->connection);
 		pthread_mutex_destroy(&ctx->q.lock);
 	#endif
+
 	while (ctx->q.count) {
 		void* packet;
 		int size;
@@ -1011,13 +1199,13 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 						int error = WSAGetLastError();
 						if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
 							// Error sending data to socket, or server disconnected.
-							ctx->state = TLS_STATE_DISCONNECTED;
+							ctx->state = TLS_STATE_UNKNOWN_ERROR;
 							return -1;
 						}
 					#else
 						if (errno != EAGAIN) {
 							// Error sending data to socket, or server disconnected.
-							ctx->state = TLS_STATE_DISCONNECTED;
+							ctx->state = TLS_STATE_UNKNOWN_ERROR;
 							return -1;
 						}
 					#endif
@@ -1043,6 +1231,21 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 			}
 		});
 	#endif // TLS_APPLE
+
+	#ifdef TLS_S2N
+		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
+		int bytes_written = 0;
+		while (bytes_written < size) {
+			int w = s2n_send(ctx->connection, data + bytes_written, size - bytes_written, &blocked);
+			if (w >= 0) {
+				bytes_written += w;
+			} else if (s2n_error_get_type(s2n_errno) != S2N_ERR_T_BLOCKED) {
+				// Error sending data to socket, or server disconnected.
+				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				return -1;
+			}
+		}
+	#endif // TLS_S2N
 
 	return 0;
 }
