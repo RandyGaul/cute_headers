@@ -1112,7 +1112,7 @@ void tls_disconnect(TLS_Connection connection)
 
 	#ifdef TLS_S2N
 		// This is supposed to be in a loop, but, we're not going to do that as
-		// it's too much effort and doesn't play nicely with the APi design here.
+		// it's too much effort and doesn't play nicely with the API design here.
 		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
 		s2n_shutdown(ctx->connection, &blocked);
 
