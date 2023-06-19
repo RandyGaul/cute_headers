@@ -21,6 +21,8 @@
 		through a TCP socket.
 
 		On Windows Secure Channel is used. On Apple machines the Network.framework is used.
+		For *Nix s2n can be used a third-party solution, since no good OS-level TLS
+		handshake is currently available on Linux.
 
 
 	GENERAL INFORMATION ABOUT HTTPS
