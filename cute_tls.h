@@ -1110,6 +1110,15 @@ void tls_disconnect(TLS_Connection connection)
 		pthread_mutex_destroy(&ctx->q.lock);
 	#endif
 
+	#ifdef TLS_S2N
+		// This is supposed to be in a loop, but, we're not going to do that as
+		// it's too much effort and doesn't play nicely with the APi design here.
+		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
+		s2n_shutdown(ctx->connection, &blocked);
+
+		s2n_connection_free(ctx->connection);
+	#endif
+
 	while (ctx->q.count) {
 		void* packet;
 		int size;
