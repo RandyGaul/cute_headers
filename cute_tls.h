@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tls.h - v1.00
+	cute_tls.h - v1.01
 
 	To create implementation (the function definitions)
 		#define CUTE_TLS_IMPLEMENTATION
