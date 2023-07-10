@@ -267,6 +267,10 @@ int tls_read(TLS_Connection connection, void* data, int size);
 // Returns 0 on disconnect or -1 on error.
 int tls_send(TLS_Connection connection, const void* data, int size);
 
+#define TLS_1_KB 1024
+#define TLS_MAX_RECORD_SIZE (16 * TLS_1_KB)                  // TLS defines records to be up to 16kb.
+#define TLS_MAX_PACKET_SIZE (TLS_MAX_RECORD_SIZE + TLS_1_KB) // Some extra rooms for records split over two packets.
+
 #endif // CUTE_TLS_H
 
 #ifdef CUTE_TLS_IMPLEMENTATION
@@ -317,7 +321,7 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #	include <shlwapi.h>
 #	include <assert.h>
 #	include <stdio.h>
-	
+
 #	pragma comment (lib, "ws2_32.lib")
 #	pragma comment (lib, "secur32.lib")
 #	pragma comment (lib, "shlwapi.lib")
@@ -338,10 +342,6 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #else
 #	error No supported backend implementation found.
 #endif
-
-#define TLS_1_KB 1024
-#define TLS_MAX_RECORD_SIZE (16 * TLS_1_KB)                  // TLS defines records to be up to 16kb.
-#define TLS_MAX_PACKET_SIZE (TLS_MAX_RECORD_SIZE + TLS_1_KB) // Some extra rooms for records split over two packets.
 
 #define TLS_MIN(x, y) ((x) < (y) ? (x) : (y))
 #define TLS_ARRAYSIZE(A) (sizeof(A) / sizeof(*A))
@@ -513,7 +513,7 @@ static void tls_recv(TLS_Context* ctx)
 		int bytes_read = 0;
 		while (bytes_read < sizeof(ctx->incoming)) {
 			int r = s2n_recv(ctx->connection, ctx->incoming + bytes_read, sizeof(ctx->incoming) - bytes_read, &blocked);
-			s2n_error_type etype = s2n_error_get_type(s2n_errno);
+			s2n_error_type etype = (s2n_error_type)s2n_error_get_type(s2n_errno);
 			if (r == 0) {
 				break;
 			} else if (r > 0) {
@@ -914,7 +914,7 @@ TLS_State tls_process(TLS_Connection connection)
 			s2n_blocked_status blocked = S2N_NOT_BLOCKED;
 			s2n_errno = S2N_ERR_T_OK;
 			if (s2n_negotiate(ctx->connection, &blocked) != S2N_SUCCESS) {
-				s2n_error_type etype = s2n_error_get_type(s2n_errno);
+				s2n_error_type etype = (s2n_error_type)s2n_error_get_type(s2n_errno);
 				if (etype == S2N_ERR_T_PROTO) {
 					// For some unknown reason s2n doesn't expose their error constants, like at all.
 					// So to avoid finding the correct header and including it, we can at least us
