@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_aseprite.h - v1.03
+	cute_aseprite.h - v1.02
 
 	To create implementation (the function definitions)
 		#define CUTE_ASEPRITE_IMPLEMENTATION
@@ -39,16 +39,12 @@
 		Special thanks to Richard Mitton for the initial implementation of the
 		zlib inflater.
 
-		Special thanks to Mathew Mariani for the initial implementation of tilemap
-		and tileset support.
-
 
 	Revision history:
 		1.00 (08/25/2020) initial release
 		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
 		1.02 (02/05/2022) fixed icc profile parse bug, support transparent pal-
 		                  ette index, can parse 1.3 files (no tileset support)
-		1.03 (05/29/2023) added support for tilemaps nad tilesets
 */
 
 /*
@@ -117,16 +113,15 @@ typedef struct ase_color_t ase_color_t;
 typedef struct ase_frame_t ase_frame_t;
 typedef struct ase_layer_t ase_layer_t;
 typedef struct ase_cel_t ase_cel_t;
-typedef struct ase_tileset_t ase_tileset_t;
 typedef struct ase_tag_t ase_tag_t;
 typedef struct ase_slice_t ase_slice_t;
 typedef struct ase_palette_entry_t ase_palette_entry_t;
 typedef struct ase_palette_t ase_palette_t;
 typedef struct ase_udata_t ase_udata_t;
 typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
-typedef struct ase_cel_tilemap_t ase_cel_tilemap_t;
 typedef struct ase_color_profile_t ase_color_profile_t;
 typedef struct ase_fixed_t ase_fixed_t;
+typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
 
 struct ase_color_t
 {
@@ -162,7 +157,6 @@ typedef enum ase_layer_type_t
 {
 	ASE_LAYER_TYPE_NORMAL,
 	ASE_LAYER_TYPE_GROUP,
-	ASE_LAYER_TYPE_TILEMAP,
 } ase_layer_type_t;
 
 struct ase_layer_t
@@ -172,7 +166,6 @@ struct ase_layer_t
 	const char* name;
 	ase_layer_t* parent;
 	float opacity;
-	int tileset_index;
 	ase_udata_t udata;
 };
 
@@ -184,18 +177,10 @@ struct ase_cel_extra_chunk_t
 	ase_fixed_t w, h;
 };
 
-struct ase_cel_tilemap_t
-{
-	uint32_t bitmask_id;
-	uint32_t bitmask_xflip;
-	uint32_t bitmask_yflip;
-	uint32_t bitmask_rot;
-};
-
 struct ase_cel_t
 {
 	ase_layer_t* layer;
-	void* data; // Pixels for image layers, tiles for tile layers.
+	void* pixels;
 	int w, h;
 	int x, y;
 	float opacity;
@@ -203,31 +188,7 @@ struct ase_cel_t
 	uint16_t linked_frame_index;
 	int has_extra;
 	ase_cel_extra_chunk_t extra;
-	int is_tilemap;
-	ase_cel_tilemap_t tilemap;
 	ase_udata_t udata;
-};
-
-struct ase_tileset_t
-{
-	int tile_count;
-	int tile_w;
-	int tile_h;
-	uint16_t base_index;
-	const char* name;
-	struct {
-		uint32_t file_id; // This ID is one entry of the the External Files Chunk.
-		uint32_t tileset_id; // Tileset ID in the external file.
-	} external;
-	void* data;
-	ase_udata_t* tile_udatas;
-	ase_udata_t udata;
-};
-
-struct ase_tile_t
-{
-	uint32_t tile_id;
-
 };
 
 struct ase_frame_t
@@ -327,7 +288,6 @@ struct ase_t
 	int has_color_profile;
 	ase_color_profile_t color_profile;
 	ase_palette_t palette;
-	ase_tileset_t tileset;
 
 	int layer_count;
 	ase_layer_t layers[CUTE_ASEPRITE_MAX_LAYERS];
@@ -777,7 +737,7 @@ typedef struct ase_state_t
 	void* mem_ctx;
 } ase_state_t;
 
-static uint8_t s_read_byte(ase_state_t* s)
+static uint8_t s_read_uint8(ase_state_t* s)
 {
 	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint8_t));
 	uint8_t** p = &s->in;
@@ -786,7 +746,7 @@ static uint8_t s_read_byte(ase_state_t* s)
 	return value;
 }
 
-static uint16_t s_read_word(ase_state_t* s)
+static uint16_t s_read_uint16(ase_state_t* s)
 {
 	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint16_t));
 	uint8_t** p = &s->in;
@@ -800,17 +760,12 @@ static uint16_t s_read_word(ase_state_t* s)
 static ase_fixed_t s_read_fixed(ase_state_t* s)
 {
 	ase_fixed_t value;
-	value.a = s_read_word(s);
-	value.b = s_read_word(s);
+	value.a = s_read_uint16(s);
+	value.b = s_read_uint16(s);
 	return value;
 }
 
-static void s_backup(ase_state_t* s, int bytes)
-{
-	s->in -= bytes;
-}
-
-static uint32_t s_read_dword(ase_state_t* s)
+static uint32_t s_read_uint32(ase_state_t* s)
 {
 	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint32_t));
 	uint8_t** p = &s->in;
@@ -824,8 +779,8 @@ static uint32_t s_read_dword(ase_state_t* s)
 }
 
 #ifdef CUTE_ASPRITE_S_READ_UINT64
-// s_read_qword() is not currently used.
-static uint64_t s_read_qword(ase_state_t* s)
+// s_read_uint64() is not currently used.
+static uint64_t s_read_uint64(ase_state_t* s)
 {
 	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint64_t));
 	uint8_t** p = &s->in;
@@ -843,25 +798,25 @@ static uint64_t s_read_qword(ase_state_t* s)
 }
 #endif
 
-#define s_read_short(s) (int16_t)s_read_word(s)
-#define s_read_long(s) (int32_t)s_read_dword(s)
+#define s_read_int16(s) (int16_t)s_read_uint16(s)
+#define s_read_int32(s) (int32_t)s_read_uint32(s)
 
 #ifdef CUTE_ASPRITE_S_READ_BYTES
 // s_read_bytes() is not currently used.
 static void s_read_bytes(ase_state_t* s, uint8_t* bytes, int num_bytes)
 {
 	for (int i = 0; i < num_bytes; ++i) {
-		bytes[i] = s_read_byte(s);
+		bytes[i] = s_read_uint8(s);
 	}
 }
 #endif
 
 static const char* s_read_string(ase_state_t* s)
 {
-	int len = (int)s_read_word(s);
+	int len = (int)s_read_uint16(s);
 	char* bytes = (char*)CUTE_ASEPRITE_ALLOC(len + 1, s->mem_ctx);
 	for (int i = 0; i < len; ++i) {
-		bytes[i] = (char)s_read_byte(s);
+		bytes[i] = (char)s_read_uint8(s);
 	}
 	bytes[len] = 0;
 	return bytes;
@@ -967,42 +922,6 @@ static ase_color_t s_color(ase_t* ase, void* src, int index)
 	return result;
 }
 
-static void s_parse_udata_chunk(ase_state_t* s, ase_udata_t* udata)
-{
-	int flags = (int)s_read_dword(s);
-	if (flags & 1) {
-		udata->has_text = 1;
-		udata->text = s_read_string(s);
-	}
-	if (flags & 2) {
-		udata->color.r = s_read_byte(s);
-		udata->color.g = s_read_byte(s);
-		udata->color.b = s_read_byte(s);
-		udata->color.a = s_read_byte(s);
-	}
-	if (flags & 4) {
-		// Aseprite v1.3 property map.
-		// Not yet supported.
-		// https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md#user-data-chunk-0x2020
-		CUTE_ASEPRITE_ASSERT(false);
-	}
-}
-
-static int s_try_parse_udata_chunk(ase_state_t* s, ase_udata_t* udata)
-{
-	uint32_t chunk_size = s_read_dword(s);
-	uint16_t chunk_type = s_read_word(s);
-	(void)chunk_size;
-
-	if (chunk_type == 0x2020) {
-		s_parse_udata_chunk(s, udata);
-		return 1;
-	} else {
-		s_backup(s, 4 + 2);
-		return 0;
-	}
-}
-
 ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ctx)
 {
 	ase_t* ase = (ase_t*)CUTE_ASEPRITE_ALLOC(sizeof(ase_t), mem_ctx);
@@ -1014,129 +933,118 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	s->end = s->in + size;
 	s->mem_ctx = mem_ctx;
 
-	// Following the spec here:
-	// https://github.com/aseprite/aseprite/blob/main/docs/ase-file-specs.md
-
 	s_skip(s, sizeof(uint32_t)); // File size.
-	int magic = (int)s_read_word(s);
+	int magic = (int)s_read_uint16(s);
 	CUTE_ASEPRITE_ASSERT(magic == 0xA5E0);
 
-	ase->frame_count = (int)s_read_word(s);
-	ase->w = s_read_word(s);
-	ase->h = s_read_word(s);
-	uint16_t bpp = s_read_word(s) / 8;
+	ase->frame_count = (int)s_read_uint16(s);
+	ase->w = s_read_uint16(s);
+	ase->h = s_read_uint16(s);
+	uint16_t bpp = s_read_uint16(s) / 8;
 	if (bpp == 4) ase->mode = ASE_MODE_RGBA;
 	else if (bpp == 2) ase->mode = ASE_MODE_GRAYSCALE;
 	else {
 		CUTE_ASEPRITE_ASSERT(bpp == 1);
 		ase->mode = ASE_MODE_INDEXED;
 	}
-	uint32_t valid_layer_opacity = s_read_dword(s) & 1;
-	int speed = s_read_word(s);
+	uint32_t valid_layer_opacity = s_read_uint32(s) & 1;
+	int speed = s_read_uint16(s);
 	s_skip(s, sizeof(uint32_t) * 2); // Spec says skip these bytes, as they're zero'd.
-	ase->transparent_palette_entry_index = s_read_byte(s);
+	ase->transparent_palette_entry_index = s_read_uint8(s);
 	s_skip(s, 3); // Spec says skip these bytes.
-	ase->number_of_colors = (int)s_read_word(s);
-	ase->pixel_w = (int)s_read_byte(s);
-	ase->pixel_h = (int)s_read_byte(s);
-	ase->grid_x = (int)s_read_short(s);
-	ase->grid_y = (int)s_read_short(s);
-	ase->grid_w = (int)s_read_word(s);
-	ase->grid_h = (int)s_read_word(s);
+	ase->number_of_colors = (int)s_read_uint16(s);
+	ase->pixel_w = (int)s_read_uint8(s);
+	ase->pixel_h = (int)s_read_uint8(s);
+	ase->grid_x = (int)s_read_int16(s);
+	ase->grid_y = (int)s_read_int16(s);
+	ase->grid_w = (int)s_read_uint16(s);
+	ase->grid_h = (int)s_read_uint16(s);
 	s_skip(s, 84); // For future use (set to zero).
 
 	ase->frames = (ase_frame_t*)CUTE_ASEPRITE_ALLOC((int)(sizeof(ase_frame_t)) * ase->frame_count, mem_ctx);
 	CUTE_ASEPRITE_MEMSET(ase->frames, 0, sizeof(ase_frame_t) * (size_t)ase->frame_count);
 
-	ase_layer_t* layer_stack[CUTE_ASEPRITE_MAX_LAYERS];
+	ase_udata_t* last_udata = NULL;
+	int was_on_tags = 0;
 	int tag_index = 0;
+
+	ase_layer_t* layer_stack[CUTE_ASEPRITE_MAX_LAYERS];
 
 	// Parse all chunks in the .aseprite file.
 	for (int i = 0; i < ase->frame_count; ++i) {
 		ase_frame_t* frame = ase->frames + i;
 		frame->ase = ase;
 		s_skip(s, sizeof(uint32_t)); // Frame size.
-		magic = (int)s_read_word(s);
+		magic = (int)s_read_uint16(s);
 		CUTE_ASEPRITE_ASSERT(magic == 0xF1FA);
-		int chunk_count = (int)s_read_word(s);
-		frame->duration_milliseconds = s_read_word(s);
+		int chunk_count = (int)s_read_uint16(s);
+		frame->duration_milliseconds = s_read_uint16(s);
 		if (frame->duration_milliseconds == 0) frame->duration_milliseconds = speed;
 		s_skip(s, 2); // For future use (set to zero).
-		uint32_t new_chunk_count = s_read_dword(s);
+		uint32_t new_chunk_count = s_read_uint32(s);
 		if (new_chunk_count) chunk_count = (int)new_chunk_count;
 
-		// Udata state -- parsed over multiple chunks.
-		ase_udata_t* last_udata = NULL;
-		int tile_udata_index = 0;
-		int tile_udata_count = 0;
-		ase_udata_t* tile_udatas = NULL;
-
 		for (int j = 0; j < chunk_count; ++j) {
-			uint32_t chunk_size = s_read_dword(s);
-			uint16_t chunk_type = s_read_word(s);
+			uint32_t chunk_size = s_read_uint32(s);
+			uint16_t chunk_type = s_read_uint16(s);
 			chunk_size -= (uint32_t)(sizeof(uint32_t) + sizeof(uint16_t));
 			uint8_t* chunk_start = s->in;
-			int was_on_tileset = 0;
-			int was_on_tags = 0;
 
 			switch (chunk_type) {
 			case 0x2004: // Layer chunk.
 			{
 				CUTE_ASEPRITE_ASSERT(ase->layer_count < CUTE_ASEPRITE_MAX_LAYERS);
 				ase_layer_t* layer = ase->layers + ase->layer_count++;
-				layer->flags = (ase_layer_flags_t)s_read_word(s);
-				layer->type = (ase_layer_type_t)s_read_word(s);
+				layer->flags = (ase_layer_flags_t)s_read_uint16(s);
+				layer->type = (ase_layer_type_t)s_read_uint16(s);
 				layer->parent = NULL;
-				int child_level = (int)s_read_word(s);
+				int child_level = (int)s_read_uint16(s);
 				layer_stack[child_level] = layer;
 				if (child_level) {
 					layer->parent = layer_stack[child_level - 1];
 				}
 				s_skip(s, sizeof(uint16_t)); // Default layer width in pixels (ignored).
 				s_skip(s, sizeof(uint16_t)); // Default layer height in pixels (ignored).
-				int blend_mode = (int)s_read_word(s);
+				int blend_mode = (int)s_read_uint16(s);
 				if (blend_mode) CUTE_ASEPRITE_WARNING("Unknown blend mode encountered.");
-				layer->opacity = s_read_byte(s) / 255.0f;
+				layer->opacity = s_read_uint8(s) / 255.0f;
 				if (!valid_layer_opacity) layer->opacity = 1.0f;
 				s_skip(s, 3); // For future use (set to zero).
 				layer->name = s_read_string(s);
 				last_udata = &layer->udata;
-				if (layer->type == 2) {
-					layer->tileset_index = (int)s_read_dword(s);
-				}
 			}	break;
 
 			case 0x2005: // Cel chunk.
 			{
 				CUTE_ASEPRITE_ASSERT(frame->cel_count < CUTE_ASEPRITE_MAX_LAYERS);
 				ase_cel_t* cel = frame->cels + frame->cel_count++;
-				int layer_index = (int)s_read_word(s);
+				int layer_index = (int)s_read_uint16(s);
 				cel->layer = ase->layers + layer_index;
-				cel->x = s_read_short(s);
-				cel->y = s_read_short(s);
-				cel->opacity = s_read_byte(s) / 255.0f;
-				int cel_type = (int)s_read_word(s);
+				cel->x = s_read_int16(s);
+				cel->y = s_read_int16(s);
+				cel->opacity = s_read_uint8(s) / 255.0f;
+				int cel_type = (int)s_read_uint16(s);
 				s_skip(s, 7); // For future (set to zero).
 				switch (cel_type) {
 				case 0: // Raw cel.
-					cel->w = s_read_word(s);
-					cel->h = s_read_word(s);
-					cel->data = CUTE_ASEPRITE_ALLOC(cel->w * cel->h * bpp, mem_ctx);
-					CUTE_ASEPRITE_MEMCPY(cel->data, s->in, (size_t)(cel->w * cel->h * bpp));
+					cel->w = s_read_uint16(s);
+					cel->h = s_read_uint16(s);
+					cel->pixels = CUTE_ASEPRITE_ALLOC(cel->w * cel->h * bpp, mem_ctx);
+					CUTE_ASEPRITE_MEMCPY(cel->pixels, s->in, (size_t)(cel->w * cel->h * bpp));
 					s_skip(s, cel->w * cel->h * bpp);
 					break;
 
 				case 1: // Linked cel.
 					cel->is_linked = 1;
-					cel->linked_frame_index = s_read_word(s);
+					cel->linked_frame_index = s_read_uint16(s);
 					break;
 
 				case 2: // Compressed image cel.
 				{
-					cel->w = s_read_word(s);
-					cel->h = s_read_word(s);
-					int zlib_byte0 = s_read_byte(s);
-					int zlib_byte1 = s_read_byte(s);
+					cel->w = s_read_uint16(s);
+					cel->h = s_read_uint16(s);
+					int zlib_byte0 = s_read_uint8(s);
+					int zlib_byte1 = s_read_uint8(s);
 					int deflate_bytes = (int)chunk_size - (int)(s->in - chunk_start);
 					void* pixels = s->in;
 					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0x0F) == 0x08); // Only zlib compression method (RFC 1950) is supported.
@@ -1146,33 +1054,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					void* pixels_decompressed = CUTE_ASEPRITE_ALLOC(pixels_sz, mem_ctx);
 					int ret = s_inflate(pixels, deflate_bytes, pixels_decompressed, pixels_sz, mem_ctx);
 					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
-					cel->data = pixels_decompressed;
-					s_skip(s, deflate_bytes);
-				}	break;
-
-				case 3: // Compressed tilemap.
-				{
-					cel->is_tilemap = 1;
-					cel->w = s_read_word(s);
-					cel->h = s_read_word(s);
-					uint16_t bits_per_tile = s_read_word(s); // At the moment it's always 32-bit per tile.
-					cel->tilemap.bitmask_id = s_read_dword(s);
-					cel->tilemap.bitmask_xflip = s_read_dword(s);
-					cel->tilemap.bitmask_yflip = s_read_dword(s);
-					cel->tilemap.bitmask_rot = s_read_dword(s);
-					s_skip(s, 10); // Reserved.
-					int zlib_byte0 = s_read_byte(s);
-					int zlib_byte1 = s_read_byte(s);
-					int deflate_bytes = (int)chunk_size - (int)(s->in - chunk_start);
-					void* tiles = s->in;
-					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0x0F) == 0x08); // Only zlib compression method (RFC 1950) is supported.
-					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0xF0) <= 0x70); // Innapropriate window size detected.
-					CUTE_ASEPRITE_ASSERT(!(zlib_byte1 & 0x20)); // Preset dictionary is present and not supported.
-					int tiles_sz = cel->w * cel->h * bits_per_tile;
-					void* tiles_decompressed = CUTE_ASEPRITE_ALLOC(tiles_sz, mem_ctx);
-					int ret = s_inflate(tiles, deflate_bytes, tiles_decompressed, tiles_sz, mem_ctx);
-					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
-					cel->data = tiles_decompressed;
+					cel->pixels = pixels_decompressed;
 					s_skip(s, deflate_bytes);
 				}	break;
 				}
@@ -1183,7 +1065,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			{
 				ase_cel_t* cel = frame->cels + frame->cel_count;
 				cel->has_extra = 1;
-				cel->extra.precise_bounds_are_set = (int)s_read_dword(s);
+				cel->extra.precise_bounds_are_set = (int)s_read_uint32(s);
 				cel->extra.precise_x = s_read_fixed(s);
 				cel->extra.precise_y = s_read_fixed(s);
 				cel->extra.w = s_read_fixed(s);
@@ -1194,13 +1076,13 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			case 0x2007: // Color profile chunk.
 			{
 				ase->has_color_profile = 1;
-				ase->color_profile.type = (ase_color_profile_type_t)s_read_word(s);
-				ase->color_profile.use_fixed_gamma = (int)s_read_word(s) & 1;
+				ase->color_profile.type = (ase_color_profile_type_t)s_read_uint16(s);
+				ase->color_profile.use_fixed_gamma = (int)s_read_uint16(s) & 1;
 				ase->color_profile.gamma = s_read_fixed(s);
 				s_skip(s, 8); // For future use (set to zero).
 				if (ase->color_profile.type == ASE_COLOR_PROFILE_TYPE_EMBEDDED_ICC) {
 					// Use the embedded ICC profile.
-					ase->color_profile.icc_profile_data_length = s_read_dword(s);
+					ase->color_profile.icc_profile_data_length = s_read_uint32(s);
 					ase->color_profile.icc_profile_data = CUTE_ASEPRITE_ALLOC(ase->color_profile.icc_profile_data_length, mem_ctx);
 					CUTE_ASEPRITE_MEMCPY(ase->color_profile.icc_profile_data, s->in, ase->color_profile.icc_profile_data_length);
 					s->in += ase->color_profile.icc_profile_data_length;
@@ -1209,18 +1091,18 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2018: // Tags chunk.
 			{
-				ase->tag_count = (int)s_read_word(s);
+				ase->tag_count = (int)s_read_uint16(s);
 				s_skip(s, 8); // For future (set to zero).
 				CUTE_ASEPRITE_ASSERT(ase->tag_count < CUTE_ASEPRITE_MAX_TAGS);
 				for (int k = 0; k < ase->tag_count; ++k) {
 					ase_tag_t tag;
-					tag.from_frame = (int)s_read_word(s);
-					tag.to_frame = (int)s_read_word(s);
-					tag.loop_animation_direction = (ase_animation_direction_t)s_read_byte(s);
+					tag.from_frame = (int)s_read_uint16(s);
+					tag.to_frame = (int)s_read_uint16(s);
+					tag.loop_animation_direction = (ase_animation_direction_t)s_read_uint8(s);
 					s_skip(s, 8); // For future (set to zero).
-					tag.r = s_read_byte(s);
-					tag.g = s_read_byte(s);
-					tag.b = s_read_byte(s);
+					tag.r = s_read_uint8(s);
+					tag.g = s_read_uint8(s);
+					tag.b = s_read_uint8(s);
 					s_skip(s, 1); // Extra byte (zero).
 					tag.name = s_read_string(s);
 					ase->tags[k] = tag;
@@ -1230,18 +1112,18 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2019: // Palette chunk.
 			{
-				ase->palette.entry_count = (int)s_read_dword(s);
+				ase->palette.entry_count = (int)s_read_uint32(s);
 				CUTE_ASEPRITE_ASSERT(ase->palette.entry_count <= CUTE_ASEPRITE_MAX_PALETTE_ENTRIES);
-				int first_index = (int)s_read_dword(s);
-				int last_index = (int)s_read_dword(s);
+				int first_index = (int)s_read_uint32(s);
+				int last_index = (int)s_read_uint32(s);
 				s_skip(s, 8); // For future (set to zero).
 				for (int k = first_index; k <= last_index; ++k) {
-					int has_name = s_read_word(s);
+					int has_name = s_read_uint16(s);
 					ase_palette_entry_t entry;
-					entry.color.r = s_read_byte(s);
-					entry.color.g = s_read_byte(s);
-					entry.color.b = s_read_byte(s);
-					entry.color.a = s_read_byte(s);
+					entry.color.r = s_read_uint8(s);
+					entry.color.g = s_read_uint8(s);
+					entry.color.b = s_read_uint8(s);
+					entry.color.a = s_read_uint8(s);
 					if (has_name) {
 						entry.color_name = s_read_string(s);
 					} else {
@@ -1254,95 +1136,56 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2020: // Udata chunk.
 			{
-				CUTE_ASEPRITE_ASSERT(last_udata);
-				s_parse_udata_chunk(s, last_udata);
+				CUTE_ASEPRITE_ASSERT(last_udata || was_on_tags);
+				if (was_on_tags && !last_udata) {
+					CUTE_ASEPRITE_ASSERT(tag_index < ase->tag_count);
+					last_udata = &ase->tags[tag_index++].udata;
+				}
+				int flags = (int)s_read_uint32(s);
+				if (flags & 1) {
+					last_udata->has_text = 1;
+					last_udata->text = s_read_string(s);
+				}
+				if (flags & 2) {
+					last_udata->color.r = s_read_uint8(s);
+					last_udata->color.g = s_read_uint8(s);
+					last_udata->color.b = s_read_uint8(s);
+					last_udata->color.a = s_read_uint8(s);
+				}
 				last_udata = NULL;
 			}	break;
 
 			case 0x2022: // Slice chunk.
 			{
-				int slice_count = (int)s_read_dword(s);
-				int flags = (int)s_read_dword(s);
+				int slice_count = (int)s_read_uint32(s);
+				int flags = (int)s_read_uint32(s);
 				s_skip(s, sizeof(uint32_t)); // Reserved.
 				const char* name = s_read_string(s);
 				for (int k = 0; k < (int)slice_count; ++k) {
 					ase_slice_t slice = { 0 };
 					slice.name = name;
-					slice.frame_number = (int)s_read_dword(s);
-					slice.origin_x = (int)s_read_long(s);
-					slice.origin_y = (int)s_read_long(s);
-					slice.w = (int)s_read_dword(s);
-					slice.h = (int)s_read_dword(s);
+					slice.frame_number = (int)s_read_uint32(s);
+					slice.origin_x = (int)s_read_int32(s);
+					slice.origin_y = (int)s_read_int32(s);
+					slice.w = (int)s_read_uint32(s);
+					slice.h = (int)s_read_uint32(s);
 					if (flags & 1) {
 						// It's a 9-patches slice.
 						slice.has_center_as_9_slice = 1;
-						slice.center_x = (int)s_read_long(s);
-						slice.center_y = (int)s_read_long(s);
-						slice.center_w = (int)s_read_dword(s);
-						slice.center_h = (int)s_read_dword(s);
+						slice.center_x = (int)s_read_int32(s);
+						slice.center_y = (int)s_read_int32(s);
+						slice.center_w = (int)s_read_uint32(s);
+						slice.center_h = (int)s_read_uint32(s);
 					} else if (flags & 2) {
 						// Has pivot information.
 						slice.has_pivot = 1;
-						slice.pivot_x = (int)s_read_long(s);
-						slice.pivot_y = (int)s_read_long(s);
+						slice.pivot_x = (int)s_read_int32(s);
+						slice.pivot_y = (int)s_read_int32(s);
 					}
 					CUTE_ASEPRITE_ASSERT(ase->slice_count < CUTE_ASEPRITE_MAX_SLICES);
 					ase->slices[ase->slice_count++] = slice;
 					last_udata = &ase->slices[ase->slice_count - 1].udata;
 				}
-			}	break;
-
-			case 0x2023: // Tileset chunk.
-			{
-				ase_tileset_t *tileset = &ase->tileset;
-				int tileset_id = (int)s_read_dword(s);
-				int tileset_flags = (int)s_read_dword(s);
-				tileset->tile_count = (int)s_read_dword(s);
-				tileset->tile_w = (int)s_read_word(s);
-				tileset->tile_h = (int)s_read_word(s);
-				tileset->base_index = s_read_short(s);
-				s_skip(s, 14); // Reserved.
-				tileset->name = s_read_string(s);
-
-				// Make sure we're not dealing with an old unsupported tileset format.
-				CUTE_ASEPRITE_ASSERT(tileset_flags & 4);
-
-				if (tileset_flags & 1) {
-					// External tileset.
-					tileset->external.file_id = s_read_dword(s);
-					tileset->external.tileset_id = s_read_dword(s);
-					// As of writing this Aseprite doesn't quite support external tilesets or files very well (see https://github.com/aseprite/aseprite/issues/3877).
-					// For now this feature is considered not supported.
-					CUTE_ASEPRITE_ASSERT(false);
-				} else if (tileset_flags & 2) {
-					// Embedded tileset.
-					int compressed_data_length = (int)s_read_dword(s);
-					int zlib_byte0 = s_read_byte(s);
-					int zlib_byte1 = s_read_byte(s);
-					void* pixels = s->in;
-					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0x0F) == 0x08); // Only zlib compression method (RFC 1950) is supported.
-					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0xF0) <= 0x70); // Innapropriate window size detected.
-					CUTE_ASEPRITE_ASSERT(!(zlib_byte1 & 0x20)); // Preset dictionary is present and not supported.
-					int pixels_sz = tileset->tile_w * tileset->tile_h * tileset->tile_count * bpp;
-					void *pixels_decompressed = CUTE_ASEPRITE_ALLOC(pixels_sz, mem_ctx);
-					int ret = s_inflate(pixels, compressed_data_length, pixels_decompressed, pixels_sz, mem_ctx);
-					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
-					tileset->data = pixels_decompressed;
-					s_skip(s, compressed_data_length - 2); // -2 here since we read two zlib bytes above.
-				}
-				tileset->tile_udatas = (ase_udata_t*)CUTE_ASEPRITE_ALLOC(sizeof(ase_udata_t) * tileset->tile_count, mem_ctx);
-				CUTE_ASEPRITE_MEMSET(tileset->tile_udatas, 0, sizeof(ase_udata_t) * tileset->tile_count);
-				tile_udatas = tileset->tile_udatas;
-				tile_udata_count = tileset->tile_count;
-				last_udata = &tileset->udata;
-				was_on_tileset = 1;
-			}	break;
-
-			case 0x2008: // External Files chunk.
-			{
-				// As of writing this Aseprite doesn't quite support external tilesets or files very well (see https://github.com/aseprite/aseprite/issues/3877).
-				// For now this feature is considered not supported.
-				CUTE_ASEPRITE_ASSERT(false);
 			}	break;
 
 			default:
@@ -1352,26 +1195,6 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			uint32_t size_read = (uint32_t)(s->in - chunk_start);
 			CUTE_ASEPRITE_ASSERT(size_read == chunk_size);
-
-			if (was_on_tags) {
-				// An array of user data chunks can follow the tags chunk.
-				while (s_try_parse_udata_chunk(s, &ase->tags[tag_index].udata)) {
-					CUTE_ASEPRITE_ASSERT(tag_index < ase->tag_count);
-					tag_index++;
-				}
-			} else if (was_on_tileset) {
-				// After the tileset chunk it's userdata can appear, followed by an array of userdatas, one for
-				// each tile in the tileset.
-				if (s_try_parse_udata_chunk(s, last_udata)) {
-					last_udata = NULL;
-					++j;
-					while (s_try_parse_udata_chunk(s, tile_udatas + tile_udata_index)) {
-						CUTE_ASEPRITE_ASSERT(tile_udata_index < tile_udata_count);
-						tile_udata_index++;
-						++j;
-					}
-				}
-			}
 		}
 	}
 
@@ -1401,7 +1224,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				}
 				CUTE_ASEPRITE_ASSERT(found);
 			}
-			void* src = cel->data;
+			void* src = cel->pixels;
 			uint8_t opacity = (uint8_t)(cel->opacity * cel->layer->opacity * 255.0f);
 			int cx = cel->x;
 			int cy = cel->y;
@@ -1432,18 +1255,12 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 void cute_aseprite_free(ase_t* ase)
 {
-	if (ase->tileset.data) {
-		CUTE_ASEPRITE_FREE(ase->tileset.data, ase->mem_ctx);
-	}
-	if (ase->tileset.tile_udatas) {
-		CUTE_ASEPRITE_FREE(ase->tileset.tile_udatas, ase->mem_ctx);
-	}
 	for (int i = 0; i < ase->frame_count; ++i) {
 		ase_frame_t* frame = ase->frames + i;
 		CUTE_ASEPRITE_FREE(frame->pixels, ase->mem_ctx);
 		for (int j = 0; j < frame->cel_count; ++j) {
 			ase_cel_t* cel = frame->cels + j;
-			CUTE_ASEPRITE_FREE(cel->data, ase->mem_ctx);
+			CUTE_ASEPRITE_FREE(cel->pixels, ase->mem_ctx);
 			CUTE_ASEPRITE_FREE((void*)cel->udata.text, ase->mem_ctx);
 		}
 	}
