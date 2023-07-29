@@ -1,14 +1,15 @@
 #define _CRT_SECURE_NO_WARNINGS
-#include <SDL2/SDL.h>
 
 #define STB_VORBIS_HEADER_ONLY
 #include "../stb_vorbis.c"
 
 #define CUTE_SOUND_IMPLEMENTATION
-#define CUTE_SOUND_FORCE_SDL
+#define CUTE_SOUND_PLATFORM_SDL
 #include <cute_sound.h>
 
+#ifndef CUTE_SOUND_PLATFORM_SDL
 #include <Windows.h>
+#endif
 
 #define CUTE_TIME_IMPLEMENTATION
 #include "cute_time.h"
@@ -16,7 +17,7 @@
 int main(int argc, char *args[])
 {
 	void* os_handle = NULL;
-#ifndef CUTE_SOUND_FORCE_SDL
+#ifndef CUTE_SOUND_PLATFORM_SDL
 	os_handle = GetConsoleWindow();
 #endif
 	cs_init(os_handle, 44100, 1024, NULL);

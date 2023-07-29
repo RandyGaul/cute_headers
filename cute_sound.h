@@ -17,6 +17,13 @@
 		and stereo sounds, without any external dependencies other than things that ship
 		with standard OSs, or SDL2 for more uncommon OSs.
 
+		While platform detection is done automatically, you are able to explicitly
+		specify which to use by defining one of the following:
+
+			#define CUTE_SOUND_PLATFORM_WINDOWS
+			#define CUTE_SOUND_PLATFORM_APPLE
+			#define CUTE_SOUND_PLATFORM_SDL
+
 		For Windows cute_sound uses DirectSound. Due to the use of SSE intrinsics, MinGW
 		builds must be made with the compiler option: -march=native, or optionally SSE
 		can be disabled with CUTE_SOUND_SCALAR_MODE. More on this mode written below.
@@ -38,7 +45,6 @@
 		before you #include cute_sound.h:
 
 			#define CUTE_SOUND_SDL_RWOPS
-
 
 	REVISION HISTORY
 
@@ -454,35 +460,36 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 #define CUTE_SOUND_APPLE   2
 #define CUTE_SOUND_SDL     3
 
-#if defined(_WIN32)
-
-	#if !defined _CRT_SECURE_NO_WARNINGS
-		#define _CRT_SECURE_NO_WARNINGS
-	#endif
-
-	#if !defined _CRT_NONSTDC_NO_DEPRECATE
-		#define _CRT_NONSTDC_NO_DEPRECATE
-	#endif
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
-
-#elif defined(__APPLE__)
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
-
-#else
-
-	// Just use SDL on other esoteric platforms.
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
+// Use CUTE_SOUND_FORCE_SDL as a way to force CUTE_SOUND_PLATFORM_SDL.
+#ifdef CUTE_SOUND_FORCE_SDL
+	#define CUTE_SOUND_PLATFORM_SDL
 #endif
 
-// Use CUTE_SOUND_FORCE_SDL to override the above macros and use the SDL port.
-#ifdef CUTE_SOUND_FORCE_SDL
-
-	#undef CUTE_SOUND_PLATFORM
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
+#ifndef CUTE_SOUND_PLATFORM
+	// Check the specific platform defines.
+	#ifdef CUTE_SOUND_PLATFORM_WINDOWS
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+	#elif defined(CUTE_SOUND_PLATFORM_APPLE)
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+	#elif defined(CUTE_SOUND_PLATFORM_SDL)
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+	#else
+		// Detect the platform automatically.
+		#if defined(_WIN32)
+			#if !defined _CRT_SECURE_NO_WARNINGS
+				#define _CRT_SECURE_NO_WARNINGS
+			#endif
+			#if !defined _CRT_NONSTDC_NO_DEPRECATE
+				#define _CRT_NONSTDC_NO_DEPRECATE
+			#endif
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+		#elif defined(__APPLE__)
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+		#else
+			// Just use SDL on other esoteric platforms.
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+		#endif
+	#endif
 #endif
 
 // Platform specific file inclusions.
@@ -518,7 +525,11 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
-		#include <SDL.h>
+		// Define CUTE_SOUND_SDL_H to allow changing the SDL.h path.
+		#ifndef CUTE_SOUND_SDL_H
+			#define CUTE_SOUND_SDL_H <SDL.h>
+		#endif
+		#include CUTE_SOUND_SDL_H
 	#endif
 	#ifndef _WIN32
 		#include <alloca.h>

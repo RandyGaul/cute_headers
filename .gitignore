@@ -4,6 +4,7 @@
 # Executables
 example
 tests
+examples_cute_sound/sdl_demo/sdl_demo
 
 # vim
 *.swp
