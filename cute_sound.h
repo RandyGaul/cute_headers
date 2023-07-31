@@ -2476,7 +2476,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 		wide_count /= 4;
 		int wide_offset = sample_count & 3;
 		int16_t* samples = (int16_t*)(data + 8);
-		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
+		float* sample = (float*)CUTE_SOUND_ALLOC(sizeof(float) * 4 + 16, s_mem_ctx);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 
 		switch (audio->channel_count) {
@@ -2528,6 +2528,8 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 			if (err) *err = CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED;
 			CUTE_SOUND_ASSERT(false);
 		}
+
+		CUTE_SOUND_FREE(sample, s_mem_ctx);
 	}
 
 	if (err) *err = CUTE_SOUND_ERROR_NONE;
@@ -2620,7 +2622,7 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 	{
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 		int wide_offset = sample_count & 3;
-		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
+		float* sample = (float*)CUTE_SOUND_ALLOC(sizeof(float) * 4 + 16, s_mem_ctx);
 		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 		cs__m128* a = NULL;
 		cs__m128* b = NULL;
@@ -2678,7 +2680,7 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		audio->channels[0] = a;
 		audio->channels[1] = b;
 		audio->playing_count = 0;
-		free(samples);
+		CUTE_SOUND_FREE(samples, s_mem_ctx);
 	}
 
 	if (err) *err = CUTE_SOUND_ERROR_NONE;
