@@ -329,6 +329,8 @@ struct cute_tiled_layer_t
 	int y;                               // Vertical layer offset in tiles. Always 0.
 	float parallaxx;                     // X axis parallax factor.
 	float parallaxy;                     // Y axis parallax factor.
+	int repeatx;
+	int repeaty;
 	int id;                              // ID of the layer.
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
@@ -2089,6 +2091,8 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 	CUTE_TILED_MEMSET(layer, 0, sizeof(cute_tiled_layer_t));
 	layer->parallaxx = 1.0f;
 	layer->parallaxy = 1.0f;
+	layer->repeatx = 0;
+	layer->repeaty = 0;
 
 	cute_tiled_expect(m, '{');
 
@@ -2215,6 +2219,14 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		case 18213590351201320707U: // parallaxy
 			cute_tiled_read_float(m, &layer->parallaxy);
+			break;
+
+		case 222650047040294978U: // repeatx
+			cute_tiled_read_bool(m, &layer->repeatx);
+			break;
+
+		case 223606622156649323U: // repeaty
+			cute_tiled_read_bool(m, &layer->repeaty);
 			break;
 
 		case 3133932603199444032U: // id
