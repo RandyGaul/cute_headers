@@ -330,7 +330,7 @@ struct cute_tiled_layer_t
 	float parallaxx;                     // X axis parallax factor.
 	float parallaxy;                     // Y axis parallax factor.
 	int repeatx;                         // Repeat image in the X direction
-	int repeaty;                         // Repeat image in the X direction
+	int repeaty;                         // Repeat image in the Y direction
 	int id;                              // ID of the layer.
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
