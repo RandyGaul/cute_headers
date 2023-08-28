@@ -329,8 +329,8 @@ struct cute_tiled_layer_t
 	int y;                               // Vertical layer offset in tiles. Always 0.
 	float parallaxx;                     // X axis parallax factor.
 	float parallaxy;                     // Y axis parallax factor.
-	int repeatx;
-	int repeaty;
+	int repeatx;                         // Repeat image in the X direction
+	int repeaty;                         // Repeat image in the X direction
 	int id;                              // ID of the layer.
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
