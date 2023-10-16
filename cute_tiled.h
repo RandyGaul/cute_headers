@@ -2066,9 +2066,8 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 1485919047363370797U: // class
-			CUTE_TILED_WARNING("Class field of Tiled objects is not yet supported. Ignoring field.");
-			while (cute_tiled_peak(m) != ',' && cute_tiled_peak(m) != '}') cute_tiled_next(m);
-			if (cute_tiled_peak(m) == '}')	continue;
+			// This is technically different than type, but it used the same way in newer versions of Tiled
+			cute_tiled_intern_string(m, &object->type);
 			break;
 
 		default:
