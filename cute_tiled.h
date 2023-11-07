@@ -307,6 +307,7 @@ static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_
 struct cute_tiled_layer_t
 {
 	/* chunks */                         // Not currently supported.
+	cute_tiled_string_t class_;          // The class of the layer (since 1.9, optional).
 	/* compression; */                   // Not currently supported.
 	int data_count;                      // Number of integers in `data`.
 	int* data;                           // Array of GIDs. `tilelayer` only. Only support CSV style exports.
@@ -372,7 +373,8 @@ struct cute_tiled_tile_descriptor_t
 //    #include <cute_tiled.h>
 struct cute_tiled_tileset_t
 {
-	uint32_t backgroundcolor;            // Hex-formatted color (#AARRGGBB) (optional).
+	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t class_;          // The class of the tileset (since 1.9, optional).
 	int columns;                         // The number of tile columns in the tileset.
 	int firstgid;                        // GID corresponding to the first tile in the set.
 	/* grid */                           // Not currently supported.
@@ -403,7 +405,8 @@ struct cute_tiled_tileset_t
 
 struct cute_tiled_map_t
 {
-	uint32_t backgroundcolor;            // Hex-formatted color (#AARRGGBB) (optional).
+	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t class_;          // The class of the map (since 1.9, optional).
 	int height;                          // Number of tile rows.
 	/* hexsidelength */                  // Not currently supported.
 	int infinite;                        // Whether the map has infinite dimensions.
@@ -2082,9 +2085,8 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 1485919047363370797U: // class
-			CUTE_TILED_WARNING("Class field of Tiled objects is not yet supported. Ignoring field.");
-			while (cute_tiled_peak(m) != ',' && cute_tiled_peak(m) != '}') cute_tiled_next(m);
-			if (cute_tiled_peak(m) == '}')	continue;
+			// This is technically different than type, but it used the same way in newer versions of Tiled
+			cute_tiled_intern_string(m, &object->type);
 			break;
 
 		default:
@@ -2121,6 +2123,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		switch (h)
 		{
+		case 1485919047363370797U: // class
+			cute_tiled_intern_string(m, &layer->class_);
+			break;
+
 		case 14868627273436340303U: // compression
 			CUTE_TILED_CHECK(0, "Compression is not yet supported. The expected tile format is CSV (uncompressed). Please see the docs if you are interested in compression.");
 			break;
@@ -2469,6 +2475,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_expect(m, '"');
 			break;
 
+		case 1485919047363370797U: // class
+			cute_tiled_intern_string(m, &tileset->class_);
+			break;
+
 		case 12570673734542705940U: // columns
 			cute_tiled_read_int(m, &tileset->columns);
 			break;
@@ -2623,6 +2633,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		cute_tiled_expect(m, '"');
 		break;
 
+	case 1485919047363370797U: // class
+		cute_tiled_intern_string(m, &m->map.class_);
+		break;
+
 	case 5549108793316760247U: // compressionlevel
 	{
 		int compressionlevel;
@@ -2757,6 +2771,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 	while (layer)
 	{
 		cute_tiled_object_t* object;
+		cute_tiled_deintern_string(m, &layer->class_);
 		cute_tiled_deintern_string(m, &layer->draworder);
 		cute_tiled_deintern_string(m, &layer->name);
 		cute_tiled_deintern_string(m, &layer->type);
@@ -2781,6 +2796,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_tiled_tileset_t* tileset)
 {
 	cute_tiled_tile_descriptor_t* tile_descriptor;
+	cute_tiled_deintern_string(m, &tileset->class_);
 	cute_tiled_deintern_string(m, &tileset->image);
 	cute_tiled_deintern_string(m, &tileset->name);
 	cute_tiled_deintern_string(m, &tileset->type);
@@ -2802,6 +2818,7 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_tileset_t* tileset;
 	cute_tiled_layer_t* layer;
+	cute_tiled_deintern_string(m, &m->map.class_);
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);
