@@ -45,6 +45,7 @@
 		1.01 (08/31/2020) fixed memleaks, tag parsing bug (crash), blend bugs
 		1.02 (02/05/2022) fixed icc profile parse bug, support transparent pal-
 		                  ette index, can parse 1.3 files (no tileset support)
+		1.03 (11/27/2023) fixed slice pivot parse bug
 */
 
 /*
@@ -1176,7 +1177,8 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 						slice.center_y = (int)s_read_int32(s);
 						slice.center_w = (int)s_read_uint32(s);
 						slice.center_h = (int)s_read_uint32(s);
-					} else if (flags & 2) {
+					}
+					if (flags & 2) {
 						// Has pivot information.
 						slice.has_pivot = 1;
 						slice.pivot_x = (int)s_read_int32(s);
