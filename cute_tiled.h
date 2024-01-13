@@ -222,7 +222,7 @@ struct cute_tiled_property_t
 		float floating;
 		cute_tiled_string_t string;
 		cute_tiled_string_t file;
-		int color;
+		uint32_t color;
 	} data;
 	CUTE_TILED_PROPERTY_TYPE type;
 	cute_tiled_string_t name;
@@ -373,7 +373,7 @@ struct cute_tiled_tile_descriptor_t
 //    #include <cute_tiled.h>
 struct cute_tiled_tileset_t
 {
-	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t class_;          // The class of the tileset (since 1.9, optional).
 	int columns;                         // The number of tile columns in the tileset.
 	int firstgid;                        // GID corresponding to the first tile in the set.
@@ -405,7 +405,7 @@ struct cute_tiled_tileset_t
 
 struct cute_tiled_map_t
 {
-	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t class_;          // The class of the map (since 1.9, optional).
 	int height;                          // Number of tile rows.
 	/* hexsidelength */                  // Not currently supported.
@@ -1623,10 +1623,11 @@ cute_tiled_err:
 		CUTE_TILED_FAIL_IF(!cute_tiled_read_int_internal(m, num)); \
 	} while (0)
 
-static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* out)
+static uint32_t cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, uint32_t* out)
 {
 	char* end;
 	unsigned long long int val;
+	int val_length = 0;
 	switch (cute_tiled_peak(m))
 	{
 	case '#':
@@ -1645,16 +1646,15 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 	val = CUTE_TILED_STRTOULL(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
 
-	// Count the length to determine if we need to force AARRGGBB, instead of RRGGBB.
-	int length = 0;
+	// Count the length of the value to determine if we need to force AARRGGBB, instead of RRGGBB.
 	while (m->in != end) {
 		m->in++;
-		length++;
+		val_length++;
 	}
 	*out = (uint32_t)val;
 
-	// When less than 6 characters, force an alpha channel of 0xFF.
-	if (length <= 6) {
+	// When less than 6 characters, force an alpha channel of 255.
+	if (val_length <= 6) {
 		uint32_t alpha = 0xFF << 24;
 		*out = (*out & 0x00FFFFFF) | alpha;
 	}
@@ -1930,7 +1930,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 			if (is_hex_color)
 			{
 				cute_tiled_expect(m, '"');
-				cute_tiled_read_hex_int(m, &prop.data.integer);
+				cute_tiled_read_hex_int(m, &prop.data.color);
 				cute_tiled_expect(m, '"');
 				prop.type = CUTE_TILED_PROPERTY_COLOR;
 			}
