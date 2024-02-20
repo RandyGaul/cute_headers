@@ -7,7 +7,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_c2](cute_c2.h)** | 2D collision detection routines on primitives, boolean results and/or manifold generation, shape cast/sweep test, raycasts | 1.10 | C/C++
 **[cute_net](cute_net.h)** | Networking library for games requiring an optional reliability layer over UDP with a baked in security scheme | 1.03 | C/C++
 **[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.07 | C/C++
-**[cute_aseprite](cute_aseprite.h)** | Parses .ase/.aseprite files into a compact and convenient struct collection | 1.02 | C/C++
+**[cute_aseprite](cute_aseprite.h)** | Parses .ase/.aseprite files into a compact and convenient struct collection | 1.04 | C/C++
 **[cute_sound](cute_sound.h)** | Load/play/loop (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, music + crossfade support | 2.04 | C/C++
 **[cute_math](cute_math.h)** | Professional level 3D vector math via SSE intrinsics | 1.02 | C++
 **[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.05 | C/C++
