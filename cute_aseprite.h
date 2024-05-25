@@ -1097,18 +1097,16 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				s_skip(s, 8); // For future (set to zero).
 				CUTE_ASEPRITE_ASSERT(ase->tag_count < CUTE_ASEPRITE_MAX_TAGS);
 				for (int k = 0; k < ase->tag_count; ++k) {
-					ase_tag_t tag;
-					tag.from_frame = (int)s_read_uint16(s);
-					tag.to_frame = (int)s_read_uint16(s);
-					tag.loop_animation_direction = (ase_animation_direction_t)s_read_uint8(s);
-					tag.repeat = s_read_uint16(s);
+					ase->tags[k].from_frame = (int)s_read_uint16(s);
+					ase->tags[k].to_frame = (int)s_read_uint16(s);
+					ase->tags[k].loop_animation_direction = (ase_animation_direction_t)s_read_uint8(s);
+					ase->tags[k].repeat = s_read_uint16(s);
 					s_skip(s, 6); // For future (set to zero).
-					tag.r = s_read_uint8(s);
-					tag.g = s_read_uint8(s);
-					tag.b = s_read_uint8(s);
+					ase->tags[k].r = s_read_uint8(s);
+					ase->tags[k].g = s_read_uint8(s);
+					ase->tags[k].b = s_read_uint8(s);
 					s_skip(s, 1); // Extra byte (zero).
-					tag.name = s_read_string(s);
-					ase->tags[k] = tag;
+					ase->tags[k].name = s_read_string(s);
 				}
 				was_on_tags = 1;
 			}	break;
