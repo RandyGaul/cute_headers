@@ -996,22 +996,22 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			switch (chunk_type) {
 			case 0x0004: // Old Palette chunk (used when there are no colors with alpha in the palette)
 			{
-				int nbPackets = (int)s_read_uint16(s);
-				for (int k = 0; k < nbPackets ; k++ ) {
-					uint16_t maxColor=0;
-					uint8_t skip = s_read_uint8(s);
-					uint16_t nbColors = s_read_uint8(s);
+				uint16_t nbPackets = s_read_uint16(s);
+				for (uint16_t k = 0; k < nbPackets; k++) {
+					uint16_t maxColor = 0;
+					uint16_t skip = (uint16_t)s_read_uint8(s);
+					uint16_t nbColors = (uint16_t)s_read_uint8(s);
 					if (nbColors == 0) nbColors = 256;
 
-					for (int l = 0; l < nbColors; l++) {
+					for (uint16_t l = 0; l < nbColors; l++) {
 						ase_palette_entry_t entry;
 						entry.color.r = s_read_uint8(s);
 						entry.color.g = s_read_uint8(s);
 						entry.color.b = s_read_uint8(s);
 						entry.color.a = 255;
 						entry.color_name = NULL;
-						ase->palette.entries[skip+l] = entry;
-						if (skip+l > maxColor) maxColor = skip+l;
+						ase->palette.entries[skip + l] = entry;
+						if (skip + l > maxColor) maxColor = skip + l;
 					}
 
 					ase->palette.entry_count = maxColor+1;
