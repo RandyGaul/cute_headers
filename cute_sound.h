@@ -717,20 +717,20 @@ before you include this file in *one* C/C++ file to create the implementation.
 
 typedef struct hashtable_t hashtable_t;
 
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx );
-void hashtable_term( hashtable_t* table );
+static void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx );
+static void hashtable_term( hashtable_t* table );
 
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item );
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key );
-void hashtable_clear( hashtable_t* table );
+static void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item );
+static void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key );
+static void hashtable_clear( hashtable_t* table );
 
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key );
+static void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key );
 
-int hashtable_count( hashtable_t const* table );
-void* hashtable_items( hashtable_t const* table );
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
+static int hashtable_count( hashtable_t const* table );
+static void* hashtable_items( hashtable_t const* table );
+static HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
 
-void hashtable_swap( hashtable_t* table, int index_a, int index_b );
+static void hashtable_swap( hashtable_t* table, int index_a, int index_b );
 
 
 #endif /* hashtable_h */
@@ -827,7 +827,7 @@ static HASHTABLE_U32 hashtable_internal_pow2ceil( HASHTABLE_U32 v )
     }
 
 
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx )
+static void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx )
     {
     initial_capacity = (int)hashtable_internal_pow2ceil( initial_capacity >=0 ? (HASHTABLE_U32) initial_capacity : 32U );
     table->memctx = memctx;
@@ -848,7 +848,7 @@ void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, vo
     }
 
 
-void hashtable_term( hashtable_t* table )
+static void hashtable_term( hashtable_t* table )
     {
     HASHTABLE_FREE( table->memctx, table->items_key );
     HASHTABLE_FREE( table->memctx, table->slots );
@@ -957,7 +957,7 @@ static void hashtable_internal_expand_items( hashtable_t* table )
     }
 
 
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item )
+static void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item )
     {
     HASHTABLE_ASSERT( hashtable_internal_find_slot( table, key ) < 0 );
 
@@ -1004,7 +1004,7 @@ void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item 
     } 
 
 
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
+static void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
     {
     int const slot = hashtable_internal_find_slot( table, key );
     HASHTABLE_ASSERT( slot >= 0 );
@@ -1031,14 +1031,14 @@ void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
     } 
 
 
-void hashtable_clear( hashtable_t* table )
+static void hashtable_clear( hashtable_t* table )
     {
     table->count = 0;
     HASHTABLE_MEMSET( table->slots, 0, table->slot_capacity * sizeof( *table->slots ) );
     }
 
 
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
+static void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
     {
     int const slot = hashtable_internal_find_slot( table, key );
     if( slot < 0 ) return 0;
@@ -1049,25 +1049,25 @@ void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
     }
 
 
-int hashtable_count( hashtable_t const* table )
+static int hashtable_count( hashtable_t const* table )
     {
     return table->count;
     }
 
 
-void* hashtable_items( hashtable_t const* table )
+static void* hashtable_items( hashtable_t const* table )
     {
     return table->items_data;
     }
 
 
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table )
+static HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table )
     {
     return table->items_key;
     }
 
 
-void hashtable_swap( hashtable_t* table, int index_a, int index_b )
+static void hashtable_swap( hashtable_t* table, int index_a, int index_b )
     {
     if( index_a < 0 || index_a >= table->count || index_b < 0 || index_b >= table->count ) return;
 
