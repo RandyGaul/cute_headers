@@ -320,6 +320,15 @@ void cs_free_audio_source(cs_audio_source_t* audio);
 
 #endif // SDL_rwops_h_
 
+
+// -------------------------------------------------------------------------------------------------
+// Audio source accessors.
+
+int cs_get_sample_rate(const cs_audio_source_t* audio);
+int cs_get_sample_count(const cs_audio_source_t* audio);
+int cs_get_channel_count(const cs_audio_source_t* audio);
+
+
 // -------------------------------------------------------------------------------------------------
 // Music sounds.
 
@@ -2560,6 +2569,21 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 		cs_free16(audio->channels[0], NULL);
 		CUTE_SOUND_FREE(audio, s_mem_ctx);
 	}
+}
+
+int cs_get_sample_rate(const cs_audio_source_t* audio)
+{
+	return audio->sample_rate;   
+}
+
+int cs_get_sample_count(const cs_audio_source_t* audio)
+{
+	return audio->sample_count;
+}
+
+int cs_get_channel_count(const cs_audio_source_t* audio)
+{
+	return audio->channel_count;
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
