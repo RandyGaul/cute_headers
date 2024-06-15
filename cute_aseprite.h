@@ -12,7 +12,7 @@
 
 	SUMMARY
 
-		cute_asesprite.h is a single-file header that implements some functions to
+		cute_aseprite.h is a single-file header that implements some functions to
 		parse .ase/.aseprite files. The entire file is parsed all at once and some
 		structs are filled out then handed back to you.
 
@@ -65,7 +65,7 @@
 
 			for (int i = 0; i < ase->frame_count; ++i) {
 				ase_frame_t* frame = ase->frames + i;
-				anim.add_frame(frame->duration, frame->pixels);
+				anim.add_frame(frame->duration_milliseconds, frame->pixels);
 			}
 
 
@@ -123,7 +123,6 @@ typedef struct ase_udata_t ase_udata_t;
 typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
 typedef struct ase_color_profile_t ase_color_profile_t;
 typedef struct ase_fixed_t ase_fixed_t;
-typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
 
 struct ase_color_t
 {
@@ -930,7 +929,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	ase_t* ase = (ase_t*)CUTE_ASEPRITE_ALLOC(sizeof(ase_t), mem_ctx);
 	CUTE_ASEPRITE_MEMSET(ase, 0, sizeof(*ase));
 
-	ase_state_t state = { 0 };
+	ase_state_t state = { 0, 0, 0 };
 	ase_state_t* s = &state;
 	s->in = (uint8_t*)memory;
 	s->end = s->in + size;
@@ -1188,7 +1187,8 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				s_skip(s, sizeof(uint32_t)); // Reserved.
 				const char* name = s_read_string(s);
 				for (int k = 0; k < (int)slice_count; ++k) {
-					ase_slice_t slice = { 0 };
+					ase_slice_t slice;
+					CUTE_ASEPRITE_MEMSET(&slice, 0, sizeof(slice));
 					slice.name = name;
 					slice.frame_number = (int)s_read_uint32(s);
 					slice.origin_x = (int)s_read_int32(s);
