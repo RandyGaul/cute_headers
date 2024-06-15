@@ -390,6 +390,18 @@ struct ase_t
 	#define CUTE_ASEPRITE_FCLOSE fclose
 #endif
 
+#if defined(CUTE_ASEPRITE_BE_SWAP64) && defined(CUTE_ASEPRITE_BE_SWAP32) && defined(CUTE_ASEPRITE_BE_SWAP16)
+	// provide byte swapping functions for big endian hosts
+	#define CUTE_ASEPRITE_LE16TOHOST(x)  CUTE_ASEPRITE_BE_SWAP16((x))
+	#define CUTE_ASEPRITE_LE32TOHOST(x)  CUTE_ASEPRITE_BE_SWAP32((x))
+	#define CUTE_ASEPRITE_LE64TOHOST(x)  CUTE_ASEPRITE_BE_SWAP64((x))
+#else
+	// no byte swapping needed because the host is little endian
+	#define CUTE_ASEPRITE_LE16TOHOST(x)  (x)
+	#define CUTE_ASEPRITE_LE32TOHOST(x)  (x)
+	#define CUTE_ASEPRITE_LE64TOHOST(x)  (x)
+#endif
+
 static const char* s_error_file = NULL; // The filepath of the file being parsed. NULL if from memory.
 static const char* s_error_reason;      // Used to capture errors during DEFLATE parsing.
 
@@ -757,7 +769,7 @@ static uint16_t s_read_uint16(ase_state_t* s)
 	value = (*p)[0];
 	value |= (((uint16_t)((*p)[1])) << 8);
 	*p += 2;
-	return value;
+	return CUTE_ASEPRITE_LE16TOHOST(value);
 }
 
 static ase_fixed_t s_read_fixed(ase_state_t* s)
@@ -778,7 +790,7 @@ static uint32_t s_read_uint32(ase_state_t* s)
 	value |= (((uint32_t)((*p)[2])) << 16);
 	value |= (((uint32_t)((*p)[3])) << 24);
 	*p += 4;
-	return value;
+	return CUTE_ASEPRITE_LE32TOHOST(value);
 }
 
 #ifdef CUTE_ASPRITE_S_READ_UINT64
@@ -797,7 +809,7 @@ static uint64_t s_read_uint64(ase_state_t* s)
 	value |= (((uint64_t)((*p)[6])) << 48);
 	value |= (((uint64_t)((*p)[7])) << 56);
 	*p += 8;
-	return value;
+	return CUTE_ASEPRITE_LE64TOHOST(value);
 }
 #endif
 
