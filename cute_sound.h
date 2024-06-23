@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.04
+	cute_sound.h - v2.05
 
 
 	To create implementation (the function definitions)
@@ -96,6 +96,7 @@
 		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
 		                  need for refcount polling.
 		2.04 (03/27/2023) Added cs_get_global_context and friends.
+  		2.05 (06/23/2024) Looping sounds play seamlessly.
 
 
 	CONTRIBUTORS
@@ -109,6 +110,7 @@
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
+  		Brie              2.05 - Looping sound rollover
 
 
 	DOCUMENTATION (very quick intro)
