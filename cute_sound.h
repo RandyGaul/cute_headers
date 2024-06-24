@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.04
+	cute_sound.h - v2.05
 
 
 	To create implementation (the function definitions)
@@ -96,6 +96,7 @@
 		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
 		                  need for refcount polling.
 		2.04 (03/27/2023) Added cs_get_global_context and friends.
+  		2.05 (06/23/2024) Looping sounds play seamlessly.
 
 
 	CONTRIBUTORS
@@ -109,6 +110,7 @@
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
+  		Brie              2.05 - Looping sound rollover
 
 
 	DOCUMENTATION (very quick intro)
@@ -2114,6 +2116,7 @@ void cs_mix()
 	cs__m128 zero;
 	int wide_count;
 	int samples_to_write;
+	int write_offset;
 
 	cs_lock();
 
@@ -2125,6 +2128,7 @@ void cs_mix()
 
 	if (bytes_to_write < (int)s_ctx->latency_samples) goto unlock;
 	samples_to_write = bytes_to_write / s_ctx->bps;
+	write_offset = 0;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
@@ -2168,7 +2172,7 @@ void cs_mix()
 				// Make sure the audio file was loaded properly.
 				CUTE_SOUND_ASSERT(cA);
 
-				int mix_count = samples_to_write;
+				int mix_count = samples_to_write - write_offset;
 				int offset = (int)playing->sample_index;
 				int remaining = audio->sample_count - offset;
 				if (remaining < mix_count) mix_count = remaining;
@@ -2210,6 +2214,7 @@ void cs_mix()
 				int mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
 				int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
 				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
+				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
 				int sample_count = (mix_wide - 2 * delay_wide) * 4;
 				(void)sample_count;
 
@@ -2221,8 +2226,8 @@ void cs_mix()
 						cs__m128 A = cA[i + offset_wide];
 						cs__m128 B = cs_mm_mul_ps(A, vB);
 						A = cs_mm_mul_ps(A, vA);
-						floatA[i] = cs_mm_add_ps(floatA[i], A);
-						floatB[i] = cs_mm_add_ps(floatB[i], B);
+						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
+						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
 					}
 					break;
 
@@ -2235,8 +2240,8 @@ void cs_mix()
 
 						A = cs_mm_mul_ps(A, vA);
 						B = cs_mm_mul_ps(B, vB);
-						floatA[i] = cs_mm_add_ps(floatA[i], A);
-						floatB[i] = cs_mm_add_ps(floatB[i], B);
+						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
+						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
 					}
 				}	break;
 				}
@@ -2247,7 +2252,8 @@ void cs_mix()
 				if (playing->sample_index == audio->sample_count) {
 					if (playing->looped) {
 						playing->sample_index = 0;
-						goto get_next_playing_sound;
+						write_offset += mix_count;
+						continue;
 					}
 
 					goto remove;
@@ -2256,6 +2262,7 @@ void cs_mix()
 
 		get_next_playing_sound:
 			playing_node = next_node;
+			write_offset = 0;
 			continue;
 
 		remove:
@@ -2275,6 +2282,7 @@ void cs_mix()
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
 			hashtable_remove(&s_ctx->instance_map, playing->id);
 			playing_node = next_node;
+			write_offset = 0;
 			continue;
 		} while (playing_node != end_node);
 	}
