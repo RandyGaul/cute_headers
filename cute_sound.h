@@ -2754,7 +2754,7 @@ static void s_insert(cs_sound_inst_t* inst)
 	inst->audio->playing_count += 1;
 	inst->active = true;
 	inst->id = s_ctx->instance_id_gen++;
-	hashtable_insert(&s_ctx->instance_map, inst->id, inst);
+	hashtable_insert(&s_ctx->instance_map, inst->id, &inst);
 	// s_on_make_playing(inst);
 	cs_unlock();
 }
@@ -3093,7 +3093,9 @@ cs_sound_params_t cs_sound_params_default()
 
 static cs_sound_inst_t* s_get_inst(cs_playing_sound_t sound)
 {
-	return (cs_sound_inst_t*)hashtable_find(&s_ctx->instance_map, sound.id);
+	cs_sound_inst_t** inst = (cs_sound_inst_t**)hashtable_find(&s_ctx->instance_map, sound.id);
+	if (inst) return *inst;
+	return NULL;
 }
 
 cs_playing_sound_t cs_play_sound(cs_audio_source_t* audio, cs_sound_params_t params)
