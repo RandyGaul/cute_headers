@@ -8,7 +8,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_net](cute_net.h)** | Networking library for games requiring an optional reliability layer over UDP with a baked in security scheme | 1.03 | C/C++
 **[cute_tiled](cute_tiled.h)** | Very efficient loader for Tiled maps exported to JSON format | 1.07 | C/C++
 **[cute_aseprite](cute_aseprite.h)** | Parses .ase/.aseprite files into a compact and convenient struct collection | 1.04 | C/C++
-**[cute_sound](cute_sound.h)** | Load/play/loop (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, music + crossfade support | 2.04 | C/C++
+**[cute_sound](cute_sound.h)** | Load/play/loop (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, music + crossfade support | 2.05 | C/C++
 **[cute_math](cute_math.h)** | Professional level 3D vector math via SSE intrinsics | 1.02 | C++
 **[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.05 | C/C++
 **[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.04 | C/C++
