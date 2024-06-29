@@ -377,6 +377,7 @@ void cs_sound_set_is_looped(cs_playing_sound_t sound, bool true_for_looped);
 void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1);
 void cs_sound_set_pan(cs_playing_sound_t sound, float pan_0_to_1);
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index);
+void cs_sound_stop(cs_playing_sound_t sound);
 
 void cs_set_playing_sounds_volume(float volume_0_to_1);
 void cs_stop_all_playing_sounds();
@@ -3219,6 +3220,13 @@ cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_i
 	if (sample_index > inst->audio->sample_count) return CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT;
 	inst->sample_index = sample_index;
 	return CUTE_SOUND_ERROR_NONE;
+}
+
+void cs_sound_stop(cs_playing_sound_t sound)
+{
+	cs_sound_inst_t* inst = s_get_inst(sound);
+	if (!inst) return;
+	inst->active = false;
 }
 
 void cs_set_playing_sounds_volume(float volume_0_to_1)
