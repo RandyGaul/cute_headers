@@ -11,6 +11,8 @@ int main()
 	cs_audio_source_t* jump = cs_load_wav("../jump.wav", NULL);
 	cs_audio_source_t* piano = cs_load_wav("../piano2.wav", NULL);
 	cs_sound_params_t params = cs_sound_params_default();
+	cs_playing_sound_t jump_snd = CUTE_PLAYING_SOUND_INVALID;
+	cs_playing_sound_t piano_snd = CUTE_PLAYING_SOUND_INVALID;
 	printf("jump.wav has a sample rate of %d Hz.\n", jump->sample_rate);
 	printf("piano2.wav has a sample rate of %d Hz.\n", piano->sample_rate);
 
@@ -22,12 +24,12 @@ int main()
 		if (GetAsyncKeyState(VK_ESCAPE))
 			break;
 
-		if (cs_ref_count(jump) == 0 && GetAsyncKeyState(0x31)) {
-			cs_play_sound(jump, params);
+		if (!cs_sound_is_active(jump_snd) && GetAsyncKeyState(0x31)) {
+			jump_snd = cs_play_sound(jump, params);
 		}
 
-		if (cs_ref_count(piano) == 0 && GetAsyncKeyState(0x32))
-			cs_play_sound(piano, params);
+		if (!cs_sound_is_active(piano_snd) && GetAsyncKeyState(0x32))
+			piano_snd = cs_play_sound(piano, params);
 
 		cs_update(0);
 	}

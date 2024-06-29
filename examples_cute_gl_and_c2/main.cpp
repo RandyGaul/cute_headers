@@ -1539,6 +1539,58 @@ void c2toi_jeff()
 	DrawAABB(b.min, b.max);
 }
 
+void poly_box_collided_aguywhocodes()
+{
+	c2Poly c;
+
+	c.count = 4;
+	c.verts[0] = { -10, -10 };
+	c.verts[1] = { 10, -10 };
+	c.verts[2] = { 10, 10 };
+	c.verts[3] = { -10, 10 };
+	c2MakePoly(&c);
+
+	c2Poly cc;
+	c2MakePoly(&cc);
+
+	cc.count = 4;
+	cc.verts[0] = { -1, -1 };
+	cc.verts[1] = { 1, -1 };
+	cc.verts[2] = { 1, 1 };
+	cc.verts[3] = { -1, 1 };
+
+	c2x p;
+
+	p.p.x = 0;
+	p.p.y = 0;
+
+	p.r.c = 1;
+	p.r.s = 0;
+
+	c2x pp;
+
+	pp.p.x = 1;
+	pp.p.y = 1;
+
+	pp.r.c = 1;
+	pp.r.s = 0;
+
+	int hit = c2Collided(&cc, &pp, C2_TYPE_POLY, &c, &p, C2_TYPE_POLY);
+	if (hit) {
+		gl_line_color(ctx, 1, 0, 0);
+	} else {
+		gl_line_color(ctx, 1, 1, 1);
+	}
+	DrawPoly(c.verts, c.count);
+	c2v ccv[4] = {
+		c2Mulxv(pp, cc.verts[0]),
+		c2Mulxv(pp, cc.verts[1]),
+		c2Mulxv(pp, cc.verts[2]),
+		c2Mulxv(pp, cc.verts[3]),
+	};
+	DrawPoly(ccv, cc.count);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1630,8 +1682,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 25;
-		if (arrow_pressed) code = (code + 1) % 26;
+		static int code = 26;
+		if (arrow_pressed) code = (code + 1) % 27;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1660,6 +1712,7 @@ int main()
 		case 23: tyler_glaiel_c2CapsuletoPolyManifold_normal_bug_on_deep_case(); break;
 		case 24: try_out_and_render_dual();
 		case 25: c2toi_jeff();
+		case 26: poly_box_collided_aguywhocodes();
 		}
 
 		// push a draw call to tinygl

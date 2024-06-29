@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.05
+	cute_sound.h - v2.06
 
 
 	To create implementation (the function definitions)
@@ -45,6 +45,7 @@
 		before you #include cute_sound.h:
 
 			#define CUTE_SOUND_SDL_RWOPS
+
 
 	REVISION HISTORY
 
@@ -95,8 +96,11 @@
 		                * Fixed a bug where dsound mixing could run too fast.
 		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
 		                  need for refcount polling.
-		2.04 (03/27/2023) Added cs_get_global_context and friends.
-  		2.05 (06/23/2024) Looping sounds play seamlessly.
+		2.04 (02/04/2024) Added `cs_cull_duplicates` helper for removing extra plays
+		                  to the same sound on the exact same update tick.
+		2.05 (03/27/2023) Added cs_get_global_context and friends, and extra accessors
+		                  for panning and similar.
+		2.06 (06/23/2024) Looping sounds play seamlessly.
 
 
 	CONTRIBUTORS
@@ -110,7 +114,7 @@
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
-  		Brie              2.05 - Looping sound rollover
+		Brie              2.06 - Looping sound rollover
 
 
 	DOCUMENTATION (very quick intro)
@@ -322,14 +326,12 @@ void cs_free_audio_source(cs_audio_source_t* audio);
 
 #endif // SDL_rwops_h_
 
-
 // -------------------------------------------------------------------------------------------------
 // Audio source accessors.
 
 int cs_get_sample_rate(const cs_audio_source_t* audio);
 int cs_get_sample_count(const cs_audio_source_t* audio);
 int cs_get_channel_count(const cs_audio_source_t* audio);
-
 
 // -------------------------------------------------------------------------------------------------
 // Music sounds.
@@ -349,6 +351,7 @@ cs_error_t cs_music_set_sample_index(uint64_t sample_index);
 // Playing sounds.
 
 typedef struct cs_playing_sound_t { uint64_t id; } cs_playing_sound_t;
+#define CUTE_PLAYING_SOUND_INVALID (cs_playing_sound_t){ 0 }
 
 typedef struct cs_sound_params_t
 {
@@ -377,6 +380,13 @@ cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_i
 
 void cs_set_playing_sounds_volume(float volume_0_to_1);
 void cs_stop_all_playing_sounds();
+
+/**
+ * Off by default. When enabled only one instance of audio can be created per audio update-tick. This
+ * does *not* take into account the starting sample index, so disable this feature if you want to spawn
+ * audio with dynamic sample indices, such as when syncing programmatically generated scores/sequences.
+ */
+void cs_cull_duplicates(bool true_to_enable);
 
 // -------------------------------------------------------------------------------------------------
 // Global context.
@@ -1348,6 +1358,10 @@ typedef struct cs_context_t
 	bool global_pause /* = false */;
 	float music_volume /* = 1.0f */;
 	float sound_volume /* = 1.0f */;
+	bool cull_duplicates /* = false */;
+	void** duplicates /* = NULL */;
+	int duplicate_count /* = 0 */;
+	int duplicate_capacity /* = 0 */;
 
 	bool music_paused /* = false */;
 	bool music_looped /* = true */;
@@ -1799,7 +1813,9 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->mutex = SDL_CreateMutex();
 
 #endif
-
+	s_ctx->duplicate_capacity = 0;
+	s_ctx->duplicate_count = 0;
+	s_ctx->duplicates = NULL;
 	return CUTE_SOUND_ERROR_NONE;
 }
 
@@ -1860,9 +1876,7 @@ void cs_shutdown()
 	cs_free16(s_ctx->floatB, s_mem_ctx);
 	cs_free16(s_ctx->samples, s_mem_ctx);
 	hashtable_term(&s_ctx->instance_map);
-	void* mem_ctx = s_mem_ctx;
-	(void)mem_ctx;
-	CUTE_SOUND_FREE(s_ctx, mem_ctx);
+	CUTE_SOUND_FREE(s_ctx, s_mem_ctx);
 	s_ctx = NULL;
 }
 
@@ -2118,7 +2132,7 @@ void cs_mix()
 	cs__m128 zero;
 	int wide_count;
 	int samples_to_write;
-	int write_offset;
+	int write_offset = 0;
 
 	cs_lock();
 
@@ -2130,7 +2144,6 @@ void cs_mix()
 
 	if (bytes_to_write < (int)s_ctx->latency_samples) goto unlock;
 	samples_to_write = bytes_to_write / s_ctx->bps;
-	write_offset = 0;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
@@ -2165,6 +2178,22 @@ void cs_mix()
 			if (!playing->active || !s_ctx->running) goto remove;
 			if (!audio) goto remove;
 			if (playing->paused) goto get_next_playing_sound;
+			if (s_ctx->cull_duplicates) {
+				for (int i = 0; i < s_ctx->duplicate_count; ++i) {
+					if (s_ctx->duplicates[i] == (void*)audio) {
+						goto remove;
+					}
+				}
+				if (s_ctx->duplicate_count == s_ctx->duplicate_capacity) {
+					int new_capacity = s_ctx->duplicate_capacity ? s_ctx->duplicate_capacity * 2 : 1024;
+					void* duplicates = CUTE_SOUND_ALLOC(sizeof(void*) * new_capacity, s_ctx->mem_ctx);
+					CUTE_SOUND_MEMCPY(duplicates, s_ctx->duplicates, sizeof(void*) * s_ctx->duplicate_count);
+					CUTE_SOUND_FREE(s_ctx->duplicates, s_ctx->mem_ctx);
+					s_ctx->duplicates = (void**)duplicates;
+					s_ctx->duplicate_capacity = new_capacity;
+				}
+				s_ctx->duplicates[s_ctx->duplicate_count++] = (void*)audio;
+			}
 
 			{
 				cs__m128* cA = (cs__m128*)audio->channels[0];
@@ -2288,6 +2317,8 @@ void cs_mix()
 			continue;
 		} while (playing_node != end_node);
 	}
+
+	s_ctx->duplicate_count = 0;
 
 	// load all floats into 16 bit packed interleaved samples
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
@@ -3220,6 +3251,11 @@ void cs_stop_all_playing_sounds()
 	cs_unlock();
 }
 
+void cs_cull_duplicates(bool true_to_enable)
+{
+	s_ctx->cull_duplicates = true_to_enable;
+}
+
 void* cs_get_global_context()
 {
 	return s_ctx;
@@ -3227,7 +3263,7 @@ void* cs_get_global_context()
 
 void cs_set_global_context(void* context)
 {
-	s_ctx = context;
+	s_ctx = (cs_context_t*)context;
 }
 
 void* cs_get_global_user_allocator_context()

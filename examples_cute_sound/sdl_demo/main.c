@@ -5,11 +5,11 @@
 
 #define CUTE_SOUND_IMPLEMENTATION
 #define CUTE_SOUND_PLATFORM_SDL
+#define CUTE_SOUND_SDL_H <SDL2/SDL.h>
 #include <cute_sound.h>
 
-#ifndef CUTE_SOUND_PLATFORM_SDL
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
-#endif
 
 #define CUTE_TIME_IMPLEMENTATION
 #include "cute_time.h"
