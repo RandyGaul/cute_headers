@@ -105,6 +105,8 @@
 
 #if !defined(CUTE_TILED_H)
 
+#include <stdint.h> // uint32_t
+
 // Read this in the event of errors
 extern const char* cute_tiled_error_reason;
 extern int cute_tiled_error_line;
@@ -220,7 +222,7 @@ struct cute_tiled_property_t
 		float floating;
 		cute_tiled_string_t string;
 		cute_tiled_string_t file;
-		int color;
+		uint32_t color;
 	} data;
 	CUTE_TILED_PROPERTY_TYPE type;
 	cute_tiled_string_t name;
@@ -305,6 +307,7 @@ static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_
 struct cute_tiled_layer_t
 {
 	/* chunks */                         // Not currently supported.
+	cute_tiled_string_t class_;          // The class of the layer (since 1.9, optional).
 	/* compression; */                   // Not currently supported.
 	int data_count;                      // Number of integers in `data`.
 	int* data;                           // Array of GIDs. `tilelayer` only. Only support CSV style exports.
@@ -319,8 +322,8 @@ struct cute_tiled_layer_t
 	float opacity;                       // Value between 0 and 1.
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
-	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
-	int tintcolor;                       // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t transparentcolor;           // Hex-formatted color (#AARRGGBB) (optional).
+	uint32_t tintcolor;                  // Hex-formatted color (#AARRGGBB) (optional).
 	cute_tiled_string_t type;            // `tilelayer`, `objectgroup`, `imagelayer` or `group`.
 	cute_tiled_string_t image;           // An image filepath. Used if layer is type `imagelayer`.
 	int visible;                         // 0 or 1. Whether layer is shown or hidden in editor.
@@ -329,6 +332,8 @@ struct cute_tiled_layer_t
 	int y;                               // Vertical layer offset in tiles. Always 0.
 	float parallaxx;                     // X axis parallax factor.
 	float parallaxy;                     // Y axis parallax factor.
+	int repeatx;                         // Repeat image in the X direction
+	int repeaty;                         // Repeat image in the Y direction
 	int id;                              // ID of the layer.
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
@@ -368,7 +373,8 @@ struct cute_tiled_tile_descriptor_t
 //    #include <cute_tiled.h>
 struct cute_tiled_tileset_t
 {
-	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t class_;          // The class of the tileset (since 1.9, optional).
 	int columns;                         // The number of tile columns in the tileset.
 	int firstgid;                        // GID corresponding to the first tile in the set.
 	/* grid */                           // Not currently supported.
@@ -389,7 +395,7 @@ struct cute_tiled_tileset_t
 	int tileoffset_y;                    // Pixel offset to align tiles to the grid.
 	cute_tiled_tile_descriptor_t* tiles; // Linked list of tile descriptors. Can be NULL.
 	int tilewidth;                       // Maximum width of tiles in this set.
-	int transparentcolor;                // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t transparentcolor;           // Hex-formatted color (#AARRGGBB) (optional).
 	cute_tiled_string_t type;            // `tileset` (for tileset files, since 1.0).
 	cute_tiled_string_t source;          // Relative path to tileset, when saved externally from the map file.
 	cute_tiled_tileset_t* next;          // Pointer to next tileset. NULL if final tileset.
@@ -399,7 +405,8 @@ struct cute_tiled_tileset_t
 
 struct cute_tiled_map_t
 {
-	int backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
+	cute_tiled_string_t class_;          // The class of the map (since 1.9, optional).
 	int height;                          // Number of tile rows.
 	/* hexsidelength */                  // Not currently supported.
 	int infinite;                        // Whether the map has infinite dimensions.
@@ -1616,10 +1623,11 @@ cute_tiled_err:
 		CUTE_TILED_FAIL_IF(!cute_tiled_read_int_internal(m, num)); \
 	} while (0)
 
-static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* out)
+static uint32_t cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, uint32_t* out)
 {
 	char* end;
 	unsigned long long int val;
+	int val_length = 0;
 	switch (cute_tiled_peak(m))
 	{
 	case '#':
@@ -1637,8 +1645,21 @@ static int cute_tiled_read_hex_int_internal(cute_tiled_map_internal_t* m, int* o
 
 	val = CUTE_TILED_STRTOULL(m->in, &end, 16);
 	CUTE_TILED_CHECK(m->in != end, "Invalid integer found during parse.");
+
+	// Count the length of the value to determine if we need to force AARRGGBB, instead of RRGGBB.
+	while (m->in != end) {
+		m->in++;
+		val_length++;
+	}
+	*out = (uint32_t)val;
+
+	// When less than 6 characters, force an alpha channel of 255.
+	if (val_length <= 6) {
+		uint32_t alpha = 0xFF << 24;
+		*out = (*out & 0x00FFFFFF) | alpha;
+	}
+
 	m->in = end;
-	*out = (int)val;
 	return 1;
 
 cute_tiled_err:
@@ -1909,7 +1930,7 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 			if (is_hex_color)
 			{
 				cute_tiled_expect(m, '"');
-				cute_tiled_read_hex_int(m, &prop.data.integer);
+				cute_tiled_read_hex_int(m, &prop.data.color);
 				cute_tiled_expect(m, '"');
 				prop.type = CUTE_TILED_PROPERTY_COLOR;
 			}
@@ -2064,9 +2085,8 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		case 1485919047363370797U: // class
-			CUTE_TILED_WARNING("Class field of Tiled objects is not yet supported. Ignoring field.");
-			while (cute_tiled_peak(m) != ',' && cute_tiled_peak(m) != '}') cute_tiled_next(m);
-			if (cute_tiled_peak(m) == '}')	continue;
+			// This is technically different than type, but it used the same way in newer versions of Tiled
+			cute_tiled_intern_string(m, &object->type);
 			break;
 
 		default:
@@ -2089,6 +2109,8 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 	CUTE_TILED_MEMSET(layer, 0, sizeof(cute_tiled_layer_t));
 	layer->parallaxx = 1.0f;
 	layer->parallaxy = 1.0f;
+	layer->repeatx = 0;
+	layer->repeaty = 0;
 
 	cute_tiled_expect(m, '{');
 
@@ -2101,6 +2123,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		switch (h)
 		{
+		case 1485919047363370797U: // class
+			cute_tiled_intern_string(m, &layer->class_);
+			break;
+
 		case 14868627273436340303U: // compression
 			CUTE_TILED_CHECK(0, "Compression is not yet supported. The expected tile format is CSV (uncompressed). Please see the docs if you are interested in compression.");
 			break;
@@ -2215,6 +2241,14 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		case 18213590351201320707U: // parallaxy
 			cute_tiled_read_float(m, &layer->parallaxy);
+			break;
+
+		case 222650047040294978U: // repeatx
+			cute_tiled_read_bool(m, &layer->repeatx);
+			break;
+
+		case 223606622156649323U: // repeaty
+			cute_tiled_read_bool(m, &layer->repeaty);
 			break;
 
 		case 3133932603199444032U: // id
@@ -2441,6 +2475,10 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			cute_tiled_expect(m, '"');
 			break;
 
+		case 1485919047363370797U: // class
+			cute_tiled_intern_string(m, &tileset->class_);
+			break;
+
 		case 12570673734542705940U: // columns
 			cute_tiled_read_int(m, &tileset->columns);
 			break;
@@ -2595,6 +2633,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		cute_tiled_expect(m, '"');
 		break;
 
+	case 1485919047363370797U: // class
+		cute_tiled_intern_string(m, &m->map.class_);
+		break;
+
 	case 5549108793316760247U: // compressionlevel
 	{
 		int compressionlevel;
@@ -2729,6 +2771,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 	while (layer)
 	{
 		cute_tiled_object_t* object;
+		cute_tiled_deintern_string(m, &layer->class_);
 		cute_tiled_deintern_string(m, &layer->draworder);
 		cute_tiled_deintern_string(m, &layer->name);
 		cute_tiled_deintern_string(m, &layer->type);
@@ -2753,6 +2796,7 @@ static void cute_tiled_deintern_layer(cute_tiled_map_internal_t* m, cute_tiled_l
 static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_tiled_tileset_t* tileset)
 {
 	cute_tiled_tile_descriptor_t* tile_descriptor;
+	cute_tiled_deintern_string(m, &tileset->class_);
 	cute_tiled_deintern_string(m, &tileset->image);
 	cute_tiled_deintern_string(m, &tileset->name);
 	cute_tiled_deintern_string(m, &tileset->type);
@@ -2774,6 +2818,7 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 {
 	cute_tiled_tileset_t* tileset;
 	cute_tiled_layer_t* layer;
+	cute_tiled_deintern_string(m, &m->map.class_);
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);

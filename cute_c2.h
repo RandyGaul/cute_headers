@@ -1481,7 +1481,7 @@ static inline float c2SignedDistPointToPlane_OneDimensional(float p, float n, fl
 static inline float c2RayToPlane_OneDimensional(float da, float db)
 {
 	if (da < 0) return 0; // Ray started behind plane.
-	else if (da * db >= 0) return 1.0f; // Ray starts and ends on the same of the plane.
+	else if (da * db > 0) return 1.0f; // Ray starts and ends on the same of the plane.
 	else // Ray starts and ends on opposite sides of the plane (or directly on the plane).
 	{
 		float d = da - db;
@@ -1526,10 +1526,10 @@ int c2RaytoAABB(c2Ray A, c2AABB B, c2Raycast* out)
 	float t3 = c2RayToPlane_OneDimensional(da3, db3);
 
 	// Calculate hit predicate, no branching.
-	int hit0 = t0 < 1.0f;
-	int hit1 = t1 < 1.0f;
-	int hit2 = t2 < 1.0f;
-	int hit3 = t3 < 1.0f;
+	int hit0 = t0 <= 1.0f;
+	int hit1 = t1 <= 1.0f;
+	int hit2 = t2 <= 1.0f;
+	int hit3 = t3 <= 1.0f;
 	int hit = hit0 | hit1 | hit2 | hit3;
 
 	if (hit)
