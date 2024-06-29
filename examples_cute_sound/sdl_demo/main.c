@@ -4,6 +4,7 @@
 #define STB_VORBIS_HEADER_ONLY
 #include "../stb_vorbis.c"
 
+#define CUTE_SOUND_SDL_H <SDL2/SDL.h>
 #define CUTE_SOUND_IMPLEMENTATION
 #define CUTE_SOUND_FORCE_SDL
 #include <cute_sound.h>
@@ -31,6 +32,19 @@ int main(int argc, char *args[])
 	while (count--) {
 		cs_sleep(500);
 		cs_sound_params_t params = cs_sound_params_default();
+		cs_play_sound(jump, params);
+		printf("Jump!\n");
+	}
+
+	cs_sleep(500);
+	printf("Jump five times with various pitches...\n");
+	cs_sleep(1000);
+
+	count = 5;
+	while (count--) {
+		cs_sleep(500);
+		cs_sound_params_t params = cs_sound_params_default();
+		params.pitch = ((float)count / 4.0f) + 0.5f;
 		cs_play_sound(jump, params);
 		printf("Jump!\n");
 	}
@@ -68,6 +82,17 @@ int main(int argc, char *args[])
 	while (elapsed < 3) {
 		float dt = ct_time();
 		elapsed += dt;
+		cs_update(dt);
+		cs_sleep(1);
+	}
+
+	printf("Play music with 25%% higher pitch.\n");
+
+	elapsed = 0;
+	while (elapsed < 5) {
+		float dt = ct_time();
+		elapsed += dt;
+		cs_music_set_pitch(elapsed / 5.0f + 0.25f);
 		cs_update(dt);
 		cs_sleep(1);
 	}

@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_sound.h - v2.04
+	cute_sound.h - v2.06
 
 
 	To create implementation (the function definitions)
@@ -16,6 +16,13 @@
 		cute_sound is a C API for loading, playing, looping, panning and fading mono
 		and stereo sounds, without any external dependencies other than things that ship
 		with standard OSs, or SDL2 for more uncommon OSs.
+
+		While platform detection is done automatically, you are able to explicitly
+		specify which to use by defining one of the following:
+
+			#define CUTE_SOUND_PLATFORM_WINDOWS
+			#define CUTE_SOUND_PLATFORM_APPLE
+			#define CUTE_SOUND_PLATFORM_SDL
 
 		For Windows cute_sound uses DirectSound. Due to the use of SSE intrinsics, MinGW
 		builds must be made with the compiler option: -march=native, or optionally SSE
@@ -89,7 +96,11 @@
 		                * Fixed a bug where dsound mixing could run too fast.
 		2.03 (11/12/2022) Added internal queue for freeing audio sources to avoid the
 		                  need for refcount polling.
-		2.04 (03/27/2023) Added cs_get_global_context and friends.
+		2.04 (02/04/2024) Added `cs_cull_duplicates` helper for removing extra plays
+		                  to the same sound on the exact same update tick.
+		2.05 (03/27/2023) Added cs_get_global_context and friends, and extra accessors
+		                  for panning and similar.
+		2.06 (06/23/2024) Looping sounds play seamlessly.
 
 
 	CONTRIBUTORS
@@ -103,6 +114,7 @@
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
+		Brie              2.06 - Looping sound rollover
 
 
 	DOCUMENTATION (very quick intro)
@@ -315,6 +327,13 @@ void cs_free_audio_source(cs_audio_source_t* audio);
 #endif // SDL_rwops_h_
 
 // -------------------------------------------------------------------------------------------------
+// Audio source accessors.
+
+int cs_get_sample_rate(const cs_audio_source_t* audio);
+int cs_get_sample_count(const cs_audio_source_t* audio);
+int cs_get_channel_count(const cs_audio_source_t* audio);
+
+// -------------------------------------------------------------------------------------------------
 // Music sounds.
 
 void cs_music_play(cs_audio_source_t* audio, float fade_in_time /* = 0 */);
@@ -322,6 +341,7 @@ void cs_music_stop(float fade_out_time /* = 0 */);
 void cs_music_pause();
 void cs_music_resume();
 void cs_music_set_volume(float volume_0_to_1);
+void cs_music_set_pitch(float pitch); // Do not call this each frame -- slow.
 void cs_music_set_loop(bool true_to_loop);
 void cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 void cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
@@ -332,6 +352,7 @@ cs_error_t cs_music_set_sample_index(uint64_t sample_index);
 // Playing sounds.
 
 typedef struct cs_playing_sound_t { uint64_t id; } cs_playing_sound_t;
+#define CUTE_PLAYING_SOUND_INVALID (cs_playing_sound_t){ 0 }
 
 typedef struct cs_sound_params_t
 {
@@ -340,6 +361,7 @@ typedef struct cs_sound_params_t
 	float volume /* = 1.0f */;
 	float pan    /* = 0.5f */; // Can be from 0 to 1.
 	float delay  /* = 0 */;
+	float pitch  /* = 1.0f */;
 } cs_sound_params_t;
 
 cs_sound_params_t cs_sound_params_default();
@@ -350,14 +372,25 @@ bool cs_sound_is_active(cs_playing_sound_t sound);
 bool cs_sound_get_is_paused(cs_playing_sound_t sound);
 bool cs_sound_get_is_looped(cs_playing_sound_t sound);
 float cs_sound_get_volume(cs_playing_sound_t sound);
+float cs_sound_get_pan(cs_playing_sound_t sound);
 uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound);
 void cs_sound_set_is_paused(cs_playing_sound_t sound, bool true_for_paused);
 void cs_sound_set_is_looped(cs_playing_sound_t sound, bool true_for_looped);
 void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1);
+void cs_sound_set_pan(cs_playing_sound_t sound, float pan_0_to_1);
+void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch);
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index);
+void cs_sound_stop(cs_playing_sound_t sound);
 
 void cs_set_playing_sounds_volume(float volume_0_to_1);
 void cs_stop_all_playing_sounds();
+
+/**
+ * Off by default. When enabled only one instance of audio can be created per audio update-tick. This
+ * does *not* take into account the starting sample index, so disable this feature if you want to spawn
+ * audio with dynamic sample indices, such as when syncing programmatically generated scores/sequences.
+ */
+void cs_cull_duplicates(bool true_to_enable);
 
 // -------------------------------------------------------------------------------------------------
 // Global context.
@@ -454,35 +487,36 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 #define CUTE_SOUND_APPLE   2
 #define CUTE_SOUND_SDL     3
 
-#if defined(_WIN32)
-
-	#if !defined _CRT_SECURE_NO_WARNINGS
-		#define _CRT_SECURE_NO_WARNINGS
-	#endif
-
-	#if !defined _CRT_NONSTDC_NO_DEPRECATE
-		#define _CRT_NONSTDC_NO_DEPRECATE
-	#endif
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
-
-#elif defined(__APPLE__)
-
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
-
-#else
-
-	// Just use SDL on other esoteric platforms.
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
+// Use CUTE_SOUND_FORCE_SDL as a way to force CUTE_SOUND_PLATFORM_SDL.
+#ifdef CUTE_SOUND_FORCE_SDL
+	#define CUTE_SOUND_PLATFORM_SDL
 #endif
 
-// Use CUTE_SOUND_FORCE_SDL to override the above macros and use the SDL port.
-#ifdef CUTE_SOUND_FORCE_SDL
-
-	#undef CUTE_SOUND_PLATFORM
-	#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
-
+#ifndef CUTE_SOUND_PLATFORM
+	// Check the specific platform defines.
+	#ifdef CUTE_SOUND_PLATFORM_WINDOWS
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+	#elif defined(CUTE_SOUND_PLATFORM_APPLE)
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+	#elif defined(CUTE_SOUND_PLATFORM_SDL)
+		#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+	#else
+		// Detect the platform automatically.
+		#if defined(_WIN32)
+			#if !defined _CRT_SECURE_NO_WARNINGS
+				#define _CRT_SECURE_NO_WARNINGS
+			#endif
+			#if !defined _CRT_NONSTDC_NO_DEPRECATE
+				#define _CRT_NONSTDC_NO_DEPRECATE
+			#endif
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_WINDOWS
+		#elif defined(__APPLE__)
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_APPLE
+		#else
+			// Just use SDL on other esoteric platforms.
+			#define CUTE_SOUND_PLATFORM CUTE_SOUND_SDL
+		#endif
+	#endif
 #endif
 
 // Platform specific file inclusions.
@@ -518,7 +552,11 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 	
 	#ifndef SDL_h_
-		#include <SDL.h>
+		// Define CUTE_SOUND_SDL_H to allow changing the SDL.h path.
+		#ifndef CUTE_SOUND_SDL_H
+			#define CUTE_SOUND_SDL_H <SDL.h>
+		#endif
+		#include CUTE_SOUND_SDL_H
 	#endif
 	#ifndef _WIN32
 		#include <alloca.h>
@@ -583,6 +621,16 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 		c.b = a.b + b.b;
 		c.c = a.c + b.c;
 		c.d = a.d + b.d;
+		return c;
+	}
+
+	cs__m128 cs_mm_sub_ps(cs__m128 a, cs__m128 b)
+	{
+		cs__m128 c;
+		c.a = a.a - b.a;
+		c.b = a.b - b.b;
+		c.c = a.c - b.c;
+		c.d = a.d - b.d;
 		return c;
 	}
 
@@ -653,8 +701,8 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 
 	#define cs_mm_set_ps _mm_set_ps
 	#define cs_mm_set1_ps _mm_set1_ps
-	#define cs_mm_load_ps _mm_load_ps
 	#define cs_mm_add_ps _mm_add_ps
+	#define cs_mm_sub_ps _mm_sub_ps
 	#define cs_mm_mul_ps _mm_mul_ps
 	#define cs_mm_cvtps_epi32 _mm_cvtps_epi32
 	#define cs_mm_unpacklo_epi32 _mm_unpacklo_epi32
@@ -706,20 +754,20 @@ before you include this file in *one* C/C++ file to create the implementation.
 
 typedef struct hashtable_t hashtable_t;
 
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx );
-void hashtable_term( hashtable_t* table );
+static void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx );
+static void hashtable_term( hashtable_t* table );
 
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item );
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key );
-void hashtable_clear( hashtable_t* table );
+static void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item );
+static void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key );
+static void hashtable_clear( hashtable_t* table );
 
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key );
+static void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key );
 
-int hashtable_count( hashtable_t const* table );
-void* hashtable_items( hashtable_t const* table );
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
+static int hashtable_count( hashtable_t const* table );
+static void* hashtable_items( hashtable_t const* table );
+static HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
 
-void hashtable_swap( hashtable_t* table, int index_a, int index_b );
+static void hashtable_swap( hashtable_t* table, int index_a, int index_b );
 
 
 #endif /* hashtable_h */
@@ -816,7 +864,7 @@ static HASHTABLE_U32 hashtable_internal_pow2ceil( HASHTABLE_U32 v )
     }
 
 
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx )
+static void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx )
     {
     initial_capacity = (int)hashtable_internal_pow2ceil( initial_capacity >=0 ? (HASHTABLE_U32) initial_capacity : 32U );
     table->memctx = memctx;
@@ -837,7 +885,7 @@ void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, vo
     }
 
 
-void hashtable_term( hashtable_t* table )
+static void hashtable_term( hashtable_t* table )
     {
     HASHTABLE_FREE( table->memctx, table->items_key );
     HASHTABLE_FREE( table->memctx, table->slots );
@@ -946,7 +994,7 @@ static void hashtable_internal_expand_items( hashtable_t* table )
     }
 
 
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item )
+static void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item )
     {
     HASHTABLE_ASSERT( hashtable_internal_find_slot( table, key ) < 0 );
 
@@ -993,7 +1041,7 @@ void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item 
     } 
 
 
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
+static void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
     {
     int const slot = hashtable_internal_find_slot( table, key );
     HASHTABLE_ASSERT( slot >= 0 );
@@ -1020,14 +1068,14 @@ void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
     } 
 
 
-void hashtable_clear( hashtable_t* table )
+static void hashtable_clear( hashtable_t* table )
     {
     table->count = 0;
     HASHTABLE_MEMSET( table->slots, 0, table->slot_capacity * sizeof( *table->slots ) );
     }
 
 
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
+static void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
     {
     int const slot = hashtable_internal_find_slot( table, key );
     if( slot < 0 ) return 0;
@@ -1038,25 +1086,25 @@ void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
     }
 
 
-int hashtable_count( hashtable_t const* table )
+static int hashtable_count( hashtable_t const* table )
     {
     return table->count;
     }
 
 
-void* hashtable_items( hashtable_t const* table )
+static void* hashtable_items( hashtable_t const* table )
     {
     return table->items_data;
     }
 
 
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table )
+static HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table )
     {
     return table->items_key;
     }
 
 
-void hashtable_swap( hashtable_t* table, int index_a, int index_b )
+static void hashtable_swap( hashtable_t* table, int index_a, int index_b )
     {
     if( index_a < 0 || index_a >= table->count || index_b < 0 || index_b >= table->count ) return;
 
@@ -1282,6 +1330,13 @@ typedef struct cs_audio_source_t
 	void* channels[2];
 } cs_audio_source_t;
 
+typedef struct cs_resampled_t
+{
+	float pitch;
+	int sample_count;
+	void* channels[2];
+} cs_resampled_t;
+
 typedef struct cs_sound_inst_t
 {
 	uint64_t id;
@@ -1292,8 +1347,10 @@ typedef struct cs_sound_inst_t
 	float volume;
 	float pan0;
 	float pan1;
+	float pitch;
 	uint64_t sample_index;
 	cs_audio_source_t* audio;
+	cs_resampled_t resampled;
 	cs_list_node_t node;
 } cs_sound_inst_t;
 
@@ -1323,7 +1380,12 @@ typedef struct cs_context_t
 	float global_volume /* = 1.0f */;
 	bool global_pause /* = false */;
 	float music_volume /* = 1.0f */;
+	float music_pitch /* = 1.0f */;
 	float sound_volume /* = 1.0f */;
+	bool cull_duplicates /* = false */;
+	void** duplicates /* = NULL */;
+	int duplicate_count /* = 0 */;
+	int duplicate_capacity /* = 0 */;
 
 	bool music_paused /* = false */;
 	bool music_looped /* = true */;
@@ -1411,10 +1473,9 @@ void cs_sleep(int milliseconds)
 #endif
 }
 
-static void* cs_malloc16(size_t size, void* mem_ctx)
+static void* cs_malloc16(size_t size)
 {
-	(void)mem_ctx;
-	void* p = CUTE_SOUND_ALLOC(size + 16, mem_ctx);
+	void* p = CUTE_SOUND_ALLOC(size + 16, s_mem_ctx);
 	if (!p) return 0;
 	unsigned char offset = (size_t)p & 15;
 	p = (void*)CUTE_SOUND_ALIGN(p + 1, 16);
@@ -1423,11 +1484,10 @@ static void* cs_malloc16(size_t size, void* mem_ctx)
 	return p;
 }
 
-static void cs_free16(void* p, void* mem_ctx)
+static void cs_free16(void* p)
 {
-	(void)mem_ctx;
 	if (!p) return;
-	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF), NULL);
+	CUTE_SOUND_FREE((char*)p - (((size_t)*((char*)p - 1)) & 0xFF), s_mem_ctx);
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL || CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
@@ -1700,6 +1760,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->global_volume = 1.0f;
 	s_ctx->global_pause = false;
 	s_ctx->music_volume = 1.0f;
+	s_ctx->music_pitch = 1.0f;
 	s_ctx->sound_volume = 1.0f;
 	s_ctx->music_looped = true;
 	s_ctx->music_paused = false;
@@ -1724,9 +1785,9 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->Hz = play_frequency_in_Hz;
 	s_ctx->bps = bps;
 	s_ctx->wide_count = wide_count;
-	s_ctx->floatA = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_mem_ctx);
-	s_ctx->floatB = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count, s_mem_ctx);
-	s_ctx->samples = (cs__m128i*)cs_malloc16(sizeof(cs__m128i) * wide_count, s_mem_ctx);
+	s_ctx->floatA = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count);
+	s_ctx->floatB = (cs__m128*)cs_malloc16(sizeof(cs__m128) * wide_count);
+	s_ctx->samples = (cs__m128i*)cs_malloc16(sizeof(cs__m128i) * wide_count);
 	s_ctx->running = true;
 	s_ctx->separate_thread = false;
 	s_ctx->sleep_milliseconds = 0;
@@ -1775,7 +1836,9 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->mutex = SDL_CreateMutex();
 
 #endif
-
+	s_ctx->duplicate_capacity = 0;
+	s_ctx->duplicate_count = 0;
+	s_ctx->duplicates = NULL;
 	return CUTE_SOUND_ERROR_NONE;
 }
 
@@ -1827,18 +1890,16 @@ void cs_shutdown()
 
 	for (int i = 0; i < s_ctx->audio_sources_to_free_size; ++i) {
 		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
-		cs_free16(audio->channels[0], s_mem_ctx);
+		cs_free16(audio->channels[0]);
 		CUTE_SOUND_FREE(audio, s_mem_ctx);
 	}
 	CUTE_SOUND_FREE(s_ctx->audio_sources_to_free, s_mem_ctx);
 
-	cs_free16(s_ctx->floatA, s_mem_ctx);
-	cs_free16(s_ctx->floatB, s_mem_ctx);
-	cs_free16(s_ctx->samples, s_mem_ctx);
+	cs_free16(s_ctx->floatA);
+	cs_free16(s_ctx->floatB);
+	cs_free16(s_ctx->samples);
 	hashtable_term(&s_ctx->instance_map);
-	void* mem_ctx = s_mem_ctx;
-	(void)mem_ctx;
-	CUTE_SOUND_FREE(s_ctx, mem_ctx);
+	CUTE_SOUND_FREE(s_ctx, s_mem_ctx);
 	s_ctx = NULL;
 }
 
@@ -2086,6 +2147,157 @@ void cs_dsound_dont_run_too_fast()
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
+// This function can potentially be replaced with a SIMD on-the-fly resampling
+// algorithm within the mixer itself. However, that's pretty tough to implement
+// since the resampling
+static void s_resample(cs_sound_inst_t* inst)
+{
+	cs_resampled_t* resampled = &inst->resampled;
+
+	// Read this here once to avoid the user modulating the pitch on another thread
+	// in the middle of resampling.
+	float pitch = inst->pitch;
+	bool was_resampled_prior = resampled->channels[0] ? true : false;
+
+	// Delete old samples.
+	cs_free16(resampled->channels[0]);
+
+	// Perform resampling with basic linear interpolation.
+	cs_audio_source_t* audio = inst->audio;
+	int old_sample_count = audio->sample_count;
+	int new_sample_count = (int)(old_sample_count * pitch);
+	int new_wide_count = (int)CUTE_SOUND_ALIGN(new_sample_count, 4) / 4;
+	float ratio = (float)old_sample_count / (float)new_sample_count;
+	__m128 ratio_vec = _mm_set1_ps(ratio);
+
+	switch (audio->channel_count) {
+	case 1:
+	{
+		resampled->channels[0] = cs_malloc16(new_wide_count * sizeof(cs__m128));
+		resampled->channels[1] = 0;
+		CUTE_SOUND_MEMSET(resampled->channels[0], 0, new_wide_count * sizeof(cs__m128));
+		float* srcA = (float*)audio->channels[0];
+		cs__m128* dstA = (cs__m128*)resampled->channels[0];
+
+		for (int i = 0, j = 0; i < new_wide_count - 1; ++i, j += 4)
+		{
+			cs__m128 index_vec = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
+			index_vec = cs_mm_mul_ps(index_vec, ratio_vec);
+			cs__m128i index_int = _mm_cvttps_epi32(index_vec);
+			cs__m128 index_frac = cs_mm_sub_ps(index_vec, _mm_cvtepi32_ps(index_int));
+			int i0 = _mm_extract_epi32(index_int, 3);
+			int i1 = _mm_extract_epi32(index_int, 2);
+			int i2 = _mm_extract_epi32(index_int, 1);
+			int i3 = _mm_extract_epi32(index_int, 0);
+
+			cs__m128 loA = _mm_set_ps(
+				srcA[i0],
+				srcA[i1],
+				srcA[i2],
+				srcA[i3]
+			);
+			cs__m128 hiA = _mm_set_ps(
+				srcA[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
+				srcA[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
+				srcA[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
+				srcA[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
+			);
+
+			dstA[i] = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
+		}
+
+		// Handle the last 0-3 elements in scalar.
+		for (int i = 0, end = new_sample_count % 4; i < end; ++i) {
+			int index = i + new_sample_count - end;
+			float float_index = ((float)index / (float)new_sample_count) * (float)old_sample_count;
+			int lo = (int)float_index;
+			int hi = lo + 1 > old_sample_count ? old_sample_count : lo + 1;
+			float t = float_index - (int)float_index;
+			float loA = srcA[lo];
+			float hiA = srcA[hi];
+			((float*)dstA)[index] = loA + (hiA - loA) * t;
+		}
+		break;
+	}
+	case 2:
+	{
+		resampled->channels[0] = cs_malloc16(new_wide_count * sizeof(cs__m128) * 2);
+		resampled->channels[1] = (cs__m128*)resampled->channels[0] + new_wide_count;
+		CUTE_SOUND_MEMSET(resampled->channels[0], 0, new_wide_count * sizeof(cs__m128) * 2);
+		float* srcA = (float*)audio->channels[0];
+		float* srcB = (float*)audio->channels[1];
+		cs__m128* dstA = (cs__m128*)resampled->channels[0];
+		cs__m128* dstB = (cs__m128*)resampled->channels[1];
+
+		for (int i = 0, j = 0; i < new_wide_count - 1; ++i, j += 4)
+		{
+			cs__m128 index_vec = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
+			index_vec = cs_mm_mul_ps(index_vec, ratio_vec);
+			cs__m128i index_int = _mm_cvttps_epi32(index_vec);
+			cs__m128 index_frac = cs_mm_sub_ps(index_vec, _mm_cvtepi32_ps(index_int));
+			int i0 = _mm_extract_epi32(index_int, 3);
+			int i1 = _mm_extract_epi32(index_int, 2);
+			int i2 = _mm_extract_epi32(index_int, 1);
+			int i3 = _mm_extract_epi32(index_int, 0);
+
+			cs__m128 loA = _mm_set_ps(
+				srcA[i0],
+				srcA[i1],
+				srcA[i2],
+				srcA[i3]
+			);
+			cs__m128 hiA = _mm_set_ps(
+				srcA[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
+				srcA[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
+				srcA[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
+				srcA[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
+			);
+
+			cs__m128 loB = _mm_set_ps(
+				srcB[i0],
+				srcB[i1],
+				srcB[i2],
+				srcB[i3]
+			);
+			cs__m128 hiB = _mm_set_ps(
+				srcB[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
+				srcB[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
+				srcB[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
+				srcB[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
+			);
+
+			dstA[i] = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
+			dstB[i] = cs_mm_add_ps(loB, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiB, loB)));
+		}
+
+		// Handle the last 0-3 elements in scalar.
+		for (int i = 0, end = new_sample_count % 4; i < end; ++i) {
+			int index = i + new_sample_count - end;
+			float float_index = ((float)index / (float)new_sample_count) * (float)old_sample_count;
+			int lo = (int)float_index;
+			int hi = lo + 1 > old_sample_count ? old_sample_count : lo + 1;
+			float t = float_index - (int)float_index;
+			float loA = srcA[lo];
+			float hiA = srcA[hi];
+			float loB = srcB[lo];
+			float hiB = srcB[hi];
+			((float*)dstA)[index] = loA + (hiA - loA) * t;
+			((float*)dstB)[index] = loB + (hiB - loB) * t;
+		}
+		break;
+	}
+	}
+
+	// Adjust sample index to the resampled size.
+	if (was_resampled_prior) {
+		inst->sample_index = (int)(((float)inst->sample_index / (float)resampled->sample_count) * (float)new_sample_count);
+	} else {
+		inst->sample_index = (int)(((float)inst->sample_index / (float)audio->sample_count) * (float)new_sample_count);
+	}
+	inst->resampled.pitch = pitch;
+	inst->resampled.sample_count = new_sample_count;
+}
+
 void cs_mix()
 {
 	cs__m128i* samples;
@@ -2094,6 +2306,7 @@ void cs_mix()
 	cs__m128 zero;
 	int wide_count;
 	int samples_to_write;
+	int write_offset = 0;
 
 	cs_lock();
 
@@ -2135,23 +2348,49 @@ void cs_mix()
 			cs_list_node_t* next_node = playing_node->next;
 			cs_sound_inst_t* playing = CUTE_SOUND_LIST_HOST(cs_sound_inst_t, node, playing_node);
 			cs_audio_source_t* audio = playing->audio;
+			int audio_sample_count = audio->sample_count;
 
 			if (!playing->active || !s_ctx->running) goto remove;
 			if (!audio) goto remove;
 			if (playing->paused) goto get_next_playing_sound;
+			if (s_ctx->cull_duplicates) {
+				for (int i = 0; i < s_ctx->duplicate_count; ++i) {
+					if (s_ctx->duplicates[i] == (void*)audio) {
+						goto remove;
+					}
+				}
+				if (s_ctx->duplicate_count == s_ctx->duplicate_capacity) {
+					int new_capacity = s_ctx->duplicate_capacity ? s_ctx->duplicate_capacity * 2 : 1024;
+					void* duplicates = CUTE_SOUND_ALLOC(sizeof(void*) * new_capacity, s_ctx->mem_ctx);
+					CUTE_SOUND_MEMCPY(duplicates, s_ctx->duplicates, sizeof(void*) * s_ctx->duplicate_count);
+					CUTE_SOUND_FREE(s_ctx->duplicates, s_ctx->mem_ctx);
+					s_ctx->duplicates = (void**)duplicates;
+					s_ctx->duplicate_capacity = new_capacity;
+				}
+				s_ctx->duplicates[s_ctx->duplicate_count++] = (void*)audio;
+			}
 
 			{
 				cs__m128* cA = (cs__m128*)audio->channels[0];
 				cs__m128* cB = (cs__m128*)audio->channels[1];
 
+				// Look up channels for whatever pitch was requested.
+				if (playing->pitch != 1.0f) {
+					if (playing->pitch != playing->resampled.pitch) s_resample(playing);
+					cA = (cs__m128*)playing->resampled.channels[0];
+					cB = (cs__m128*)playing->resampled.channels[1];
+					audio_sample_count = playing->resampled.sample_count;
+				}
+
 				// Attempted to play a sound with no audio.
 				// Make sure the audio file was loaded properly.
 				CUTE_SOUND_ASSERT(cA);
 
-				int mix_count = samples_to_write;
+				int mix_count = samples_to_write - write_offset;
 				int offset = (int)playing->sample_index;
-				int remaining = audio->sample_count - offset;
+				int remaining = audio_sample_count - offset;
 				if (remaining < mix_count) mix_count = remaining;
+				if (remaining <= 0) __debugbreak();
 				CUTE_SOUND_ASSERT(remaining > 0);
 
 				float gpan0 = 1.0f - s_ctx->global_pan;
@@ -2190,6 +2429,7 @@ void cs_mix()
 				int mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
 				int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
 				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
+				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
 				int sample_count = (mix_wide - 2 * delay_wide) * 4;
 				(void)sample_count;
 
@@ -2201,8 +2441,8 @@ void cs_mix()
 						cs__m128 A = cA[i + offset_wide];
 						cs__m128 B = cs_mm_mul_ps(A, vB);
 						A = cs_mm_mul_ps(A, vA);
-						floatA[i] = cs_mm_add_ps(floatA[i], A);
-						floatB[i] = cs_mm_add_ps(floatB[i], B);
+						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
+						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
 					}
 					break;
 
@@ -2215,19 +2455,20 @@ void cs_mix()
 
 						A = cs_mm_mul_ps(A, vA);
 						B = cs_mm_mul_ps(B, vB);
-						floatA[i] = cs_mm_add_ps(floatA[i], A);
-						floatB[i] = cs_mm_add_ps(floatB[i], B);
+						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
+						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
 					}
 				}	break;
 				}
 
 				// playing list logic
 				playing->sample_index += mix_count;
-				CUTE_SOUND_ASSERT(playing->sample_index <= audio->sample_count);
-				if (playing->sample_index == audio->sample_count) {
+				CUTE_SOUND_ASSERT(playing->sample_index <= audio_sample_count);
+				if (playing->sample_index == audio_sample_count) {
 					if (playing->looped) {
 						playing->sample_index = 0;
-						goto get_next_playing_sound;
+						write_offset += mix_count;
+						continue;
 					}
 
 					goto remove;
@@ -2236,6 +2477,7 @@ void cs_mix()
 
 		get_next_playing_sound:
 			playing_node = next_node;
+			write_offset = 0;
 			continue;
 
 		remove:
@@ -2253,11 +2495,15 @@ void cs_mix()
 
 			cs_list_remove(playing_node);
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
+			cs_free16(playing->resampled.channels[0]);
 			hashtable_remove(&s_ctx->instance_map, playing->id);
 			playing_node = next_node;
+			write_offset = 0;
 			continue;
 		} while (playing_node != end_node);
 	}
+
+	s_ctx->duplicate_count = 0;
 
 	// load all floats into 16 bit packed interleaved samples
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
@@ -2296,7 +2542,7 @@ void cs_mix()
 	for (int i = 0; i < s_ctx->audio_sources_to_free_size;) {
 		cs_audio_source_t* audio = s_ctx->audio_sources_to_free[i];
 		if (audio->playing_count == 0) {
-			cs_free16(audio->channels[0], s_mem_ctx);
+			cs_free16(audio->channels[0]);
 			CUTE_SOUND_FREE(audio, s_mem_ctx);
 			s_ctx->audio_sources_to_free[i] = s_ctx->audio_sources_to_free[--s_ctx->audio_sources_to_free_size];
 		} else {
@@ -2339,9 +2585,8 @@ void cs_set_context_ptr(void* ctx)
 // -------------------------------------------------------------------------------------------------
 // Loaded sounds.
 
-static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
+static void* cs_read_file_to_memory(const char* path, int* size)
 {
-	(void)mem_ctx;
 	void* data = 0;
 	CUTE_SOUND_FILE* fp = CUTE_SOUND_FOPEN(path, "rb");
 	int sizeNum = 0;
@@ -2350,7 +2595,7 @@ static void* cs_read_file_to_memory(const char* path, int* size, void* mem_ctx)
 		CUTE_SOUND_FSEEK(fp, 0, CUTE_SOUND_SEEK_END);
 		sizeNum = (int)CUTE_SOUND_FTELL(fp);
 		CUTE_SOUND_FSEEK(fp, 0, CUTE_SOUND_SEEK_SET);
-		data = CUTE_SOUND_ALLOC(sizeNum, mem_ctx);
+		data = CUTE_SOUND_ALLOC(sizeNum, s_mem_ctx);
 		CUTE_SOUND_FREAD(data, sizeNum, 1, fp);
 		CUTE_SOUND_FCLOSE(fp);
 	}
@@ -2396,7 +2641,7 @@ static void cs_last_element(cs__m128* a, int i, int j, int16_t* samples, int off
 cs_audio_source_t* cs_load_wav(const char* path, cs_error_t* err /* = NULL */)
 {
 	int size;
-	void* wav = cs_read_file_to_memory(path, &size, s_mem_ctx);
+	void* wav = cs_read_file_to_memory(path, &size);
 	if (!wav) return NULL;
 	cs_audio_source_t* audio = cs_read_mem_wav(wav, size, err);
 	CUTE_SOUND_FREE(wav, s_mem_ctx);
@@ -2461,52 +2706,30 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 		audio->sample_count = sample_count;
 		audio->channel_count = fmt.nChannels;
 
-		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4);
-		wide_count /= 4;
+		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 		int wide_offset = sample_count & 3;
 		int16_t* samples = (int16_t*)(data + 8);
-		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
-		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 
 		switch (audio->channel_count) {
 		case 1:
 		{
-			audio->channels[0] = cs_malloc16(wide_count * sizeof(cs__m128), NULL);
+			audio->channels[0] = cs_malloc16(wide_count * sizeof(cs__m128));
 			audio->channels[1] = 0;
 			cs__m128* a = (cs__m128*)audio->channels[0];
-
-			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4)
-			{
-				sample[0] = (float)samples[j];
-				sample[1] = (float)samples[j + 1];
-				sample[2] = (float)samples[j + 2];
-				sample[3] = (float)samples[j + 3];
-				a[i] = cs_mm_load_ps(sample);
+			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4) {
+				a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
 			}
-
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 		}	break;
 
 		case 2:
 		{
-			cs__m128* a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2, NULL);
+			cs__m128* a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2);
 			cs__m128* b = a + wide_count;
-
-			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
-			{
-				sample[0] = (float)samples[j];
-				sample[1] = (float)samples[j + 2];
-				sample[2] = (float)samples[j + 4];
-				sample[3] = (float)samples[j + 6];
-				a[i] = cs_mm_load_ps(sample);
-
-				sample[0] = (float)samples[j + 1];
-				sample[1] = (float)samples[j + 3];
-				sample[2] = (float)samples[j + 5];
-				sample[3] = (float)samples[j + 7];
-				b[i] = cs_mm_load_ps(sample);
+			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8){
+				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
+				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
 			audio->channels[0] = a;
@@ -2528,7 +2751,7 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 	if (s_ctx) {
 		cs_lock();
 		if (audio->playing_count == 0) {
-			cs_free16(audio->channels[0], s_mem_ctx);
+			cs_free16(audio->channels[0]);
 			CUTE_SOUND_FREE(audio, s_mem_ctx);
 		} else {
 			if (s_ctx->audio_sources_to_free_size == s_ctx->audio_sources_to_free_capacity) {
@@ -2544,19 +2767,34 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 		cs_unlock();
 	} else {
 		CUTE_SOUND_ASSERT(audio->playing_count == 0);
-		cs_free16(audio->channels[0], NULL);
+		cs_free16(audio->channels[0]);
 		CUTE_SOUND_FREE(audio, s_mem_ctx);
 	}
+}
+
+int cs_get_sample_rate(const cs_audio_source_t* audio)
+{
+	return audio->sample_rate;   
+}
+
+int cs_get_sample_count(const cs_audio_source_t* audio)
+{
+	return audio->sample_count;
+}
+
+int cs_get_channel_count(const cs_audio_source_t* audio)
+{
+	return audio->channel_count;
 }
 
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL && defined(SDL_rwops_h_) && defined(CUTE_SOUND_SDL_RWOPS)
 
 	// Load an SDL_RWops object's data into memory.
 	// Ripped straight from: https://wiki.libsdl.org/SDL_RWread
-	static void* cs_read_rw_to_memory(SDL_RWops* rw, int* size, void* mem_ctx)
+	static void* cs_read_rw_to_memory(SDL_RWops* rw, int* size)
 	{
 		Sint64 res_size = SDL_RWsize(rw);
-		char* data = (char*)CUTE_SOUND_ALLOC((size_t)(res_size + 1), mem_ctx);
+		char* data = (char*)CUTE_SOUND_ALLOC((size_t)(res_size + 1), s_mem_ctx);
 
 		Sint64 nb_read_total = 0, nb_read = 1;
 		char* buf = data;
@@ -2571,7 +2809,7 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 
 		if (nb_read_total != res_size)
 		{
-			CUTE_SOUND_FREE(data, NULL);
+			CUTE_SOUND_FREE(data, s_mem_ctx);
 			return NULL;
 		}
 
@@ -2582,7 +2820,7 @@ void cs_free_audio_source(cs_audio_source_t* audio)
 	cs_audio_source_t* cs_load_wav_rw(SDL_RWops* context, cs_error_t* err)
 	{
 		int size;
-		char* wav = (char*)cs_read_rw_to_memory(context, &size, s_mem_ctx);
+		char* wav = (char*)cs_read_rw_to_memory(context, &size);
 		if (!memory) return NULL;
 		cs_audio_source_t* audio = cs_read_mem_wav(wav, length, err);
 		CUTE_SOUND_FREE(wav, s_mem_ctx);
@@ -2609,8 +2847,6 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 	{
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 		int wide_offset = sample_count & 3;
-		float* sample = (float*)alloca(sizeof(float) * 4 + 16);
-		sample = (float*)CUTE_SOUND_ALIGN(sample, 16);
 		cs__m128* a = NULL;
 		cs__m128* b = NULL;
 
@@ -2618,40 +2854,21 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		{
 		case 1:
 		{
-			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128), NULL);
+			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128));
 			b = 0;
-
-			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4)
-			{
-				sample[0] = (float)samples[j];
-				sample[1] = (float)samples[j + 1];
-				sample[2] = (float)samples[j + 2];
-				sample[3] = (float)samples[j + 3];
-				a[i] = cs_mm_load_ps(sample);
+			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4) {
+				a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
 			}
-
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 		}	break;
 
 		case 2:
-			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2, NULL);
+			a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2);
 			b = a + wide_count;
-
-			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8)
-			{
-				sample[0] = (float)samples[j];
-				sample[1] = (float)samples[j + 2];
-				sample[2] = (float)samples[j + 4];
-				sample[3] = (float)samples[j + 6];
-				a[i] = cs_mm_load_ps(sample);
-
-				sample[0] = (float)samples[j + 1];
-				sample[1] = (float)samples[j + 3];
-				sample[2] = (float)samples[j + 5];
-				sample[3] = (float)samples[j + 7];
-				b[i] = cs_mm_load_ps(sample);
+			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8) {
+				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
+				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-
 			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
 			break;
@@ -2667,7 +2884,7 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 		audio->channels[0] = a;
 		audio->channels[1] = b;
 		audio->playing_count = 0;
-		free(samples);
+		CUTE_SOUND_FREE(samples, s_mem_ctx);
 	}
 
 	if (err) *err = CUTE_SOUND_ERROR_NONE;
@@ -2677,10 +2894,10 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 cs_audio_source_t* cs_load_ogg(const char* path, cs_error_t* err)
 {
 	int length;
-	void* memory = cs_read_file_to_memory(path, &length, NULL);
+	void* memory = cs_read_file_to_memory(path, &length);
 	if (!memory) return NULL;
 	cs_audio_source_t* audio = cs_read_mem_ogg(memory, length, err);
-	CUTE_SOUND_FREE(memory, NULL);
+	CUTE_SOUND_FREE(memory, s_mem_ctx);
 	return audio;
 }
 
@@ -2689,7 +2906,7 @@ cs_audio_source_t* cs_load_ogg(const char* path, cs_error_t* err)
 	cs_audio_source_t* cs_load_ogg_rw(SDL_RWops* rw, cs_error_t* err)
 	{
 		int length;
-		void* memory = cs_read_rw_to_memory(rw, &length, s_mem_ctx);
+		void* memory = cs_read_rw_to_memory(rw, &length);
 		if (!memory) return NULL;
 		cs_audio_source_t* audio = cs_read_ogg_wav(memory, length, err);
 		CUTE_SOUND_FREE(memory, s_mem_ctx);
@@ -2709,8 +2926,7 @@ static void s_insert(cs_sound_inst_t* inst)
 	inst->audio->playing_count += 1;
 	inst->active = true;
 	inst->id = s_ctx->instance_id_gen++;
-	hashtable_insert(&s_ctx->instance_map, inst->id, inst);
-	// s_on_make_playing(inst);
+	hashtable_insert(&s_ctx->instance_map, inst->id, &inst);
 	cs_unlock();
 }
 
@@ -2727,8 +2943,11 @@ static cs_sound_inst_t* s_inst_music(cs_audio_source_t* src, float volume)
 	inst->volume = volume;
 	inst->pan0 = 0.5f;
 	inst->pan1 = 0.5f;
+	inst->pitch = 1.0f;
+	CUTE_SOUND_MEMSET(&inst->resampled, 0, sizeof(inst->resampled));
 	inst->audio = src;
 	inst->sample_index = 0;
+	if (inst->pitch != 1.0f) s_resample(inst);
 	cs_list_init_node(&inst->node);
 	s_insert(inst);
 	return inst;
@@ -2752,6 +2971,8 @@ static cs_sound_inst_t* s_inst(cs_audio_source_t* src, cs_sound_params_t params)
 	inst->volume = params.volume;
 	inst->pan0 = panl;
 	inst->pan1 = panr;
+	inst->pitch = params.pitch;
+	CUTE_SOUND_MEMSET(&inst->resampled, 0, sizeof(inst->resampled));
 	inst->audio = src;
 	inst->sample_index = 0;
 	cs_list_init_node(&inst->node);
@@ -2850,6 +3071,13 @@ void cs_music_set_volume(float volume_0_to_1)
 	s_ctx->music_volume = volume_0_to_1;
 	if (s_ctx->music_playing) s_ctx->music_playing->volume = volume_0_to_1;
 	if (s_ctx->music_next) s_ctx->music_next->volume = volume_0_to_1;
+}
+
+void cs_music_set_pitch(float pitch)
+{
+	s_ctx->music_pitch = pitch;
+	if (s_ctx->music_playing) s_ctx->music_playing->pitch = pitch;
+	if (s_ctx->music_next) s_ctx->music_next->pitch = pitch;
 }
 
 void cs_music_set_loop(bool true_to_loop)
@@ -3043,12 +3271,15 @@ cs_sound_params_t cs_sound_params_default()
 	params.volume = 1.0f;
 	params.pan = 0.5f;
 	params.delay = 0.0f;
+	params.pitch = 1.0f;
 	return params;
 }
 
 static cs_sound_inst_t* s_get_inst(cs_playing_sound_t sound)
 {
-	return (cs_sound_inst_t*)hashtable_find(&s_ctx->instance_map, sound.id);
+	cs_sound_inst_t** inst = (cs_sound_inst_t**)hashtable_find(&s_ctx->instance_map, sound.id);
+	if (inst) return *inst;
+	return NULL;
 }
 
 cs_playing_sound_t cs_play_sound(cs_audio_source_t* audio, cs_sound_params_t params)
@@ -3086,6 +3317,13 @@ float cs_sound_get_volume(cs_playing_sound_t sound)
 	return inst->volume;
 }
 
+float cs_sound_get_pan(cs_playing_sound_t sound)
+{
+	cs_sound_inst_t* inst = s_get_inst(sound);
+	if (!inst) return 0;
+	return inst->pan1;
+}
+
 uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
@@ -3115,6 +3353,23 @@ void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1)
 	inst->volume = volume_0_to_1;
 }
 
+void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch)
+{
+	cs_sound_inst_t* inst = s_get_inst(sound);
+	if (!inst) return;
+	inst->pitch = pitch;
+}
+
+void cs_sound_set_pan(cs_playing_sound_t sound, float pan_0_to_1)
+{
+	if (pan_0_to_1 < 0) pan_0_to_1 = 0;
+	if (pan_0_to_1 > 1) pan_0_to_1 = 1;
+	cs_sound_inst_t* inst = s_get_inst(sound);
+	if (!inst) return;
+	inst->pan0 = 1.0f - pan_0_to_1;
+	inst->pan1 = pan_0_to_1;
+}
+
 cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
@@ -3122,6 +3377,13 @@ cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_i
 	if (sample_index > inst->audio->sample_count) return CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT;
 	inst->sample_index = sample_index;
 	return CUTE_SOUND_ERROR_NONE;
+}
+
+void cs_sound_stop(cs_playing_sound_t sound)
+{
+	cs_sound_inst_t* inst = s_get_inst(sound);
+	if (!inst) return;
+	inst->active = false;
 }
 
 void cs_set_playing_sounds_volume(float volume_0_to_1)
@@ -3154,6 +3416,11 @@ void cs_stop_all_playing_sounds()
 	cs_unlock();
 }
 
+void cs_cull_duplicates(bool true_to_enable)
+{
+	s_ctx->cull_duplicates = true_to_enable;
+}
+
 void* cs_get_global_context()
 {
 	return s_ctx;
@@ -3161,7 +3428,7 @@ void* cs_get_global_context()
 
 void cs_set_global_context(void* context)
 {
-	s_ctx = context;
+	s_ctx = (cs_context_t*)context;
 }
 
 void* cs_get_global_user_allocator_context()
