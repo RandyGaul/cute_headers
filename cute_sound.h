@@ -101,6 +101,7 @@
 		2.05 (03/27/2023) Added cs_get_global_context and friends, and extra accessors
 		                  for panning and similar.
 		2.06 (06/23/2024) Looping sounds play seamlessly.
+		2.07 (06/23/2024) Added pitch shifting support, removed delay support.
 
 
 	CONTRIBUTORS
@@ -341,12 +342,12 @@ void cs_music_stop(float fade_out_time /* = 0 */);
 void cs_music_pause();
 void cs_music_resume();
 void cs_music_set_volume(float volume_0_to_1);
-void cs_music_set_pitch(float pitch); // Do not call this each frame -- slow.
+void cs_music_set_pitch(float pitch /* = 1.0f */);
 void cs_music_set_loop(bool true_to_loop);
 void cs_music_switch_to(cs_audio_source_t* audio, float fade_out_time /* = 0 */, float fade_in_time /* = 0 */);
 void cs_music_crossfade(cs_audio_source_t* audio, float cross_fade_time /* = 0 */);
-uint64_t cs_music_get_sample_index();
-cs_error_t cs_music_set_sample_index(uint64_t sample_index);
+int cs_music_get_sample_index();
+cs_error_t cs_music_set_sample_index(int sample_index);
 
 // -------------------------------------------------------------------------------------------------
 // Playing sounds.
@@ -360,7 +361,6 @@ typedef struct cs_sound_params_t
 	bool looped  /* = false */;
 	float volume /* = 1.0f */;
 	float pan    /* = 0.5f */; // Can be from 0 to 1.
-	float delay  /* = 0 */;
 	float pitch  /* = 1.0f */;
 } cs_sound_params_t;
 
@@ -373,13 +373,13 @@ bool cs_sound_get_is_paused(cs_playing_sound_t sound);
 bool cs_sound_get_is_looped(cs_playing_sound_t sound);
 float cs_sound_get_volume(cs_playing_sound_t sound);
 float cs_sound_get_pan(cs_playing_sound_t sound);
-uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound);
+int cs_sound_get_sample_index(cs_playing_sound_t sound);
 void cs_sound_set_is_paused(cs_playing_sound_t sound, bool true_for_paused);
 void cs_sound_set_is_looped(cs_playing_sound_t sound, bool true_for_looped);
 void cs_sound_set_volume(cs_playing_sound_t sound, float volume_0_to_1);
 void cs_sound_set_pan(cs_playing_sound_t sound, float pan_0_to_1);
 void cs_sound_set_pitch(cs_playing_sound_t sound, float pitch);
-cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index);
+cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, int sample_index);
 void cs_sound_stop(cs_playing_sound_t sound);
 
 void cs_set_playing_sounds_volume(float volume_0_to_1);
@@ -389,6 +389,7 @@ void cs_stop_all_playing_sounds();
  * Off by default. When enabled only one instance of audio can be created per audio update-tick. This
  * does *not* take into account the starting sample index, so disable this feature if you want to spawn
  * audio with dynamic sample indices, such as when syncing programmatically generated scores/sequences.
+ * This also does not take into account pitch differences.
  */
 void cs_cull_duplicates(bool true_to_enable);
 
@@ -647,10 +648,10 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 	cs__m128i cs_mm_cvtps_epi32(cs__m128 a)
 	{
 		cs__m128i b;
-		b.a = a.a;
-		b.b = a.b;
-		b.c = a.c;
-		b.d = a.d;
+		b.a = (int32_t)a.a;
+		b.b = (int32_t)a.b;
+		b.c = (int32_t)a.c;
+		b.d = (int32_t)a.d;
 		return b;
 	}
 
@@ -691,6 +692,37 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 		return dst.m;
 	}
 
+	cs__m128i cs_mm_cvttps_epi32(cs__m128 a)
+	{
+		cs__m128i b;
+		b.a = (int32_t)a.a;
+		b.b = (int32_t)a.b;
+		b.c = (int32_t)a.c;
+		b.d = (int32_t)a.d;
+		return b;
+	}
+
+	cs__m128 cs_mm_cvtepi32_ps(cs__m128i a)
+	{
+		cs__m128 b;
+		b.a = (float)a.a;
+		b.b = (float)a.b;
+		b.c = (float)a.c;
+		b.d = (float)a.d;
+		return b;
+	}
+
+	int32_t cs_mm_extract_epi32(cs__m128i a, const int imm8)
+	{
+		switch (imm8) {
+			case 0: return a.a;
+			case 1: return a.b;
+			case 2: return a.c;
+			case 3: return a.d;
+			default: return 0;
+		}
+	}
+
 #else // CUTE_SOUND_SCALAR_MODE
 
 	#include <xmmintrin.h>
@@ -708,6 +740,9 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 	#define cs_mm_unpacklo_epi32 _mm_unpacklo_epi32
 	#define cs_mm_unpackhi_epi32 _mm_unpackhi_epi32
 	#define cs_mm_packs_epi32 _mm_packs_epi32
+	#define cs_mm_cvttps_epi32 _mm_cvttps_epi32
+	#define cs_mm_cvtepi32_ps _mm_cvtepi32_ps
+	#define cs_mm_extract_epi32 _mm_extract_epi32
 
 #endif // CUTE_SOUND_SCALAR_MODE
 
@@ -1330,13 +1365,6 @@ typedef struct cs_audio_source_t
 	void* channels[2];
 } cs_audio_source_t;
 
-typedef struct cs_resampled_t
-{
-	float pitch;
-	int sample_count;
-	void* channels[2];
-} cs_resampled_t;
-
 typedef struct cs_sound_inst_t
 {
 	uint64_t id;
@@ -1348,9 +1376,8 @@ typedef struct cs_sound_inst_t
 	float pan0;
 	float pan1;
 	float pitch;
-	uint64_t sample_index;
+	int sample_index;
 	cs_audio_source_t* audio;
-	cs_resampled_t resampled;
 	cs_list_node_t node;
 } cs_sound_inst_t;
 
@@ -1839,6 +1866,7 @@ cs_error_t cs_init(void* os_handle, unsigned play_frequency_in_Hz, int buffered_
 	s_ctx->duplicate_capacity = 0;
 	s_ctx->duplicate_count = 0;
 	s_ctx->duplicates = NULL;
+	s_ctx->cull_duplicates = false;
 	return CUTE_SOUND_ERROR_NONE;
 }
 
@@ -2147,165 +2175,12 @@ void cs_dsound_dont_run_too_fast()
 
 #endif // CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
-// This function can potentially be replaced with a SIMD on-the-fly resampling
-// algorithm within the mixer itself. However, that's pretty tough to implement
-// since the resampling
-static void s_resample(cs_sound_inst_t* inst)
-{
-	cs_resampled_t* resampled = &inst->resampled;
-
-	// Read this here once to avoid the user modulating the pitch on another thread
-	// in the middle of resampling.
-	float pitch = inst->pitch;
-	bool was_resampled_prior = resampled->channels[0] ? true : false;
-
-	// Delete old samples.
-	cs_free16(resampled->channels[0]);
-
-	// Perform resampling with basic linear interpolation.
-	cs_audio_source_t* audio = inst->audio;
-	int old_sample_count = audio->sample_count;
-	int new_sample_count = (int)(old_sample_count * pitch);
-	int new_wide_count = (int)CUTE_SOUND_ALIGN(new_sample_count, 4) / 4;
-	float ratio = (float)old_sample_count / (float)new_sample_count;
-	__m128 ratio_vec = _mm_set1_ps(ratio);
-
-	switch (audio->channel_count) {
-	case 1:
-	{
-		resampled->channels[0] = cs_malloc16(new_wide_count * sizeof(cs__m128));
-		resampled->channels[1] = 0;
-		CUTE_SOUND_MEMSET(resampled->channels[0], 0, new_wide_count * sizeof(cs__m128));
-		float* srcA = (float*)audio->channels[0];
-		cs__m128* dstA = (cs__m128*)resampled->channels[0];
-
-		for (int i = 0, j = 0; i < new_wide_count - 1; ++i, j += 4)
-		{
-			cs__m128 index_vec = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
-			index_vec = cs_mm_mul_ps(index_vec, ratio_vec);
-			cs__m128i index_int = _mm_cvttps_epi32(index_vec);
-			cs__m128 index_frac = cs_mm_sub_ps(index_vec, _mm_cvtepi32_ps(index_int));
-			int i0 = _mm_extract_epi32(index_int, 3);
-			int i1 = _mm_extract_epi32(index_int, 2);
-			int i2 = _mm_extract_epi32(index_int, 1);
-			int i3 = _mm_extract_epi32(index_int, 0);
-
-			cs__m128 loA = _mm_set_ps(
-				srcA[i0],
-				srcA[i1],
-				srcA[i2],
-				srcA[i3]
-			);
-			cs__m128 hiA = _mm_set_ps(
-				srcA[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
-				srcA[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
-				srcA[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
-				srcA[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
-			);
-
-			dstA[i] = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
-		}
-
-		// Handle the last 0-3 elements in scalar.
-		for (int i = 0, end = new_sample_count % 4; i < end; ++i) {
-			int index = i + new_sample_count - end;
-			float float_index = ((float)index / (float)new_sample_count) * (float)old_sample_count;
-			int lo = (int)float_index;
-			int hi = lo + 1 > old_sample_count ? old_sample_count : lo + 1;
-			float t = float_index - (int)float_index;
-			float loA = srcA[lo];
-			float hiA = srcA[hi];
-			((float*)dstA)[index] = loA + (hiA - loA) * t;
-		}
-		break;
-	}
-	case 2:
-	{
-		resampled->channels[0] = cs_malloc16(new_wide_count * sizeof(cs__m128) * 2);
-		resampled->channels[1] = (cs__m128*)resampled->channels[0] + new_wide_count;
-		CUTE_SOUND_MEMSET(resampled->channels[0], 0, new_wide_count * sizeof(cs__m128) * 2);
-		float* srcA = (float*)audio->channels[0];
-		float* srcB = (float*)audio->channels[1];
-		cs__m128* dstA = (cs__m128*)resampled->channels[0];
-		cs__m128* dstB = (cs__m128*)resampled->channels[1];
-
-		for (int i = 0, j = 0; i < new_wide_count - 1; ++i, j += 4)
-		{
-			cs__m128 index_vec = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
-			index_vec = cs_mm_mul_ps(index_vec, ratio_vec);
-			cs__m128i index_int = _mm_cvttps_epi32(index_vec);
-			cs__m128 index_frac = cs_mm_sub_ps(index_vec, _mm_cvtepi32_ps(index_int));
-			int i0 = _mm_extract_epi32(index_int, 3);
-			int i1 = _mm_extract_epi32(index_int, 2);
-			int i2 = _mm_extract_epi32(index_int, 1);
-			int i3 = _mm_extract_epi32(index_int, 0);
-
-			cs__m128 loA = _mm_set_ps(
-				srcA[i0],
-				srcA[i1],
-				srcA[i2],
-				srcA[i3]
-			);
-			cs__m128 hiA = _mm_set_ps(
-				srcA[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
-				srcA[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
-				srcA[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
-				srcA[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
-			);
-
-			cs__m128 loB = _mm_set_ps(
-				srcB[i0],
-				srcB[i1],
-				srcB[i2],
-				srcB[i3]
-			);
-			cs__m128 hiB = _mm_set_ps(
-				srcB[i0 + 1 > old_sample_count ? old_sample_count : i0 + 1],
-				srcB[i1 + 1 > old_sample_count ? old_sample_count : i1 + 1],
-				srcB[i2 + 1 > old_sample_count ? old_sample_count : i2 + 1],
-				srcB[i3 + 1 > old_sample_count ? old_sample_count : i3 + 1]
-			);
-
-			dstA[i] = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
-			dstB[i] = cs_mm_add_ps(loB, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiB, loB)));
-		}
-
-		// Handle the last 0-3 elements in scalar.
-		for (int i = 0, end = new_sample_count % 4; i < end; ++i) {
-			int index = i + new_sample_count - end;
-			float float_index = ((float)index / (float)new_sample_count) * (float)old_sample_count;
-			int lo = (int)float_index;
-			int hi = lo + 1 > old_sample_count ? old_sample_count : lo + 1;
-			float t = float_index - (int)float_index;
-			float loA = srcA[lo];
-			float hiA = srcA[hi];
-			float loB = srcB[lo];
-			float hiB = srcB[hi];
-			((float*)dstA)[index] = loA + (hiA - loA) * t;
-			((float*)dstB)[index] = loB + (hiB - loB) * t;
-		}
-		break;
-	}
-	}
-
-	// Adjust sample index to the resampled size.
-	if (was_resampled_prior) {
-		inst->sample_index = (int)(((float)inst->sample_index / (float)resampled->sample_count) * (float)new_sample_count);
-	} else {
-		inst->sample_index = (int)(((float)inst->sample_index / (float)audio->sample_count) * (float)new_sample_count);
-	}
-	inst->resampled.pitch = pitch;
-	inst->resampled.sample_count = new_sample_count;
-}
-
 void cs_mix()
 {
 	cs__m128i* samples;
 	cs__m128* floatA;
 	cs__m128* floatB;
-	cs__m128 zero;
-	int wide_count;
-	int samples_to_write;
+	int samples_needed;
 	int write_offset = 0;
 
 	cs_lock();
@@ -2317,28 +2192,22 @@ void cs_mix()
 	cs_dsound_get_bytes_to_fill(&byte_to_lock, &bytes_to_write);
 
 	if (bytes_to_write < (int)s_ctx->latency_samples) goto unlock;
-	samples_to_write = bytes_to_write / s_ctx->bps;
+	samples_needed = bytes_to_write / s_ctx->bps;
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE || CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	int bytes_to_write;
-	samples_to_write = cs_samples_to_mix();
-	if (!samples_to_write) goto unlock;
-	bytes_to_write = samples_to_write * s_ctx->bps;
+	samples_needed = cs_samples_to_mix();
+	if (!samples_needed) goto unlock;
+	bytes_to_write = samples_needed * s_ctx->bps;
 
 #endif
 
 	// Clear mixer buffers.
-	wide_count = (int)CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
-
 	floatA = s_ctx->floatA;
 	floatB = s_ctx->floatB;
-	zero = cs_mm_set1_ps(0.0f);
-
-	for (int i = 0; i < wide_count; ++i) {
-		floatA[i] = zero;
-		floatB[i] = zero;
-	}
+	CUTE_SOUND_MEMSET(floatA, 0, sizeof(cs__m128) * s_ctx->wide_count);
+	CUTE_SOUND_MEMSET(floatB, 0, sizeof(cs__m128) * s_ctx->wide_count);
 
 	// Mix all playing sounds into the mixer buffers.
 	if (!s_ctx->global_pause && !cs_list_empty(&s_ctx->playing_sounds)) {
@@ -2348,10 +2217,9 @@ void cs_mix()
 			cs_list_node_t* next_node = playing_node->next;
 			cs_sound_inst_t* playing = CUTE_SOUND_LIST_HOST(cs_sound_inst_t, node, playing_node);
 			cs_audio_source_t* audio = playing->audio;
-			int audio_sample_count = audio->sample_count;
 
-			if (!playing->active || !s_ctx->running) goto remove;
 			if (!audio) goto remove;
+			if (!playing->active || !s_ctx->running) goto remove;
 			if (playing->paused) goto get_next_playing_sound;
 			if (s_ctx->cull_duplicates) {
 				for (int i = 0; i < s_ctx->duplicate_count; ++i) {
@@ -2370,28 +2238,17 @@ void cs_mix()
 				s_ctx->duplicates[s_ctx->duplicate_count++] = (void*)audio;
 			}
 
+			// Jump here for looping sounds if we need to wrap-around the audio source
+			// and continue mixing more samples.
+			mix_more:
+
 			{
 				cs__m128* cA = (cs__m128*)audio->channels[0];
 				cs__m128* cB = (cs__m128*)audio->channels[1];
 
-				// Look up channels for whatever pitch was requested.
-				if (playing->pitch != 1.0f) {
-					if (playing->pitch != playing->resampled.pitch) s_resample(playing);
-					cA = (cs__m128*)playing->resampled.channels[0];
-					cB = (cs__m128*)playing->resampled.channels[1];
-					audio_sample_count = playing->resampled.sample_count;
-				}
-
 				// Attempted to play a sound with no audio.
 				// Make sure the audio file was loaded properly.
 				CUTE_SOUND_ASSERT(cA);
-
-				int mix_count = samples_to_write - write_offset;
-				int offset = (int)playing->sample_index;
-				int remaining = audio_sample_count - offset;
-				if (remaining < mix_count) mix_count = remaining;
-				if (remaining <= 0) __debugbreak();
-				CUTE_SOUND_ASSERT(remaining > 0);
 
 				float gpan0 = 1.0f - s_ctx->global_pan;
 				float gpan1 = s_ctx->global_pan;
@@ -2407,68 +2264,145 @@ void cs_mix()
 				cs__m128 vA = cs_mm_set1_ps(vA0);
 				cs__m128 vB = cs_mm_set1_ps(vB0);
 
-				// Skip sound if it's delay is longer than mix_count and
-				// handle various delay cases.
-				int delay_offset = 0;
-				if (offset < 0) {
-					int samples_till_positive = -offset;
-					int mix_leftover = mix_count - samples_till_positive;
-
-					if (mix_leftover <= 0) {
-						playing->sample_index += mix_count;
-						goto get_next_playing_sound;
-					} else {
-						offset = 0;
-						delay_offset = samples_till_positive;
-						mix_count = mix_leftover;
-					}
+				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
+				int samples_to_read = (int)(samples_needed * playing->pitch);
+				if (samples_to_read + playing->sample_index > audio->sample_count) {
+					samples_to_read = audio->sample_count - playing->sample_index;
 				}
-				CUTE_SOUND_ASSERT(!(delay_offset & 3));
-
-				// SIMD offets.
-				int mix_wide = (int)CUTE_SOUND_ALIGN(mix_count, 4) / 4;
-				int offset_wide = (int)CUTE_SOUND_TRUNC(offset, 4) / 4;
-				int delay_wide = (int)CUTE_SOUND_ALIGN(delay_offset, 4) / 4;
+				int samples_to_write = (int)(samples_to_read / playing->pitch);
+				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
-				int sample_count = (mix_wide - 2 * delay_wide) * 4;
-				(void)sample_count;
+				static int written_so_far = 0;
+				written_so_far += samples_to_read;
 
-				// apply volume, load samples into float buffers
-				switch (audio->channel_count) {
-				case 1:
-					for (int i = delay_wide; i < mix_wide - delay_wide; ++i)
+				// Do the actual mixing: Apply volume, load samples into float buffers.
+				if (playing->pitch != 1.0f) {
+					// Pitch shifting -- We read in samples at a resampled rate (multiply by pitch). These samples
+					// are read in one at a time in scalar mode, but then mixed together via SIMD.
+					cs__m128 pitch = cs_mm_set1_ps(playing->pitch);
+					cs__m128 index_offset = cs_mm_set1_ps((float)playing->sample_index);
+					switch (audio->channel_count) {
+					case 1:
 					{
-						cs__m128 A = cA[i + offset_wide];
-						cs__m128 B = cs_mm_mul_ps(A, vB);
-						A = cs_mm_mul_ps(A, vA);
-						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
-						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
-					}
-					break;
+						for (int i = 0, j = 0; i < write_wide; ++i, j += 4) {
+							cs__m128 index = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
+							index = cs_mm_add_ps(cs_mm_mul_ps(index, pitch), index_offset);
+							cs__m128i index_int = cs_mm_cvttps_epi32(index);
+							cs__m128 index_frac = cs_mm_sub_ps(index, cs_mm_cvtepi32_ps(index_int));
+							int i0 = cs_mm_extract_epi32(index_int, 3);
+							int i1 = cs_mm_extract_epi32(index_int, 2);
+							int i2 = cs_mm_extract_epi32(index_int, 1);
+							int i3 = cs_mm_extract_epi32(index_int, 0);
 
-				case 2:
-				{
-					for (int i = delay_wide; i < mix_wide - delay_wide; ++i)
+							cs__m128 loA = cs_mm_set_ps(
+								i0 > audio->sample_count ? 0 : ((float*)cA)[i0],
+								i1 > audio->sample_count ? 0 : ((float*)cA)[i1],
+								i2 > audio->sample_count ? 0 : ((float*)cA)[i2],
+								i3 > audio->sample_count ? 0 : ((float*)cA)[i3]
+							);
+							cs__m128 hiA = cs_mm_set_ps(
+								i0 + 1 > audio->sample_count ? 0 : ((float*)cA)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : ((float*)cA)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : ((float*)cA)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : ((float*)cA)[i3 + 1]
+							);
+
+							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
+							cs__m128 B = cs_mm_mul_ps(A, vB);
+							A = cs_mm_mul_ps(A, vA);
+							floatA[i + write_offset_wide] = cs_mm_add_ps(floatA[i + write_offset_wide], A);
+							floatB[i + write_offset_wide] = cs_mm_add_ps(floatB[i + write_offset_wide], B);
+						}
+						break;
+					}
+					case 2:
 					{
-						cs__m128 A = cA[i + offset_wide];
-						cs__m128 B = cB[i + offset_wide];
+						for (int i = 0, j = 0; i < write_wide; ++i, j += 4) {
+							cs__m128 index = cs_mm_set_ps((float)j + 3, (float)j + 2, (float)j + 1, (float)j);
+							index = cs_mm_add_ps(cs_mm_mul_ps(index, pitch), index_offset);
+							cs__m128i index_int = cs_mm_cvttps_epi32(index);
+							cs__m128 index_frac = cs_mm_sub_ps(index, cs_mm_cvtepi32_ps(index_int));
+							int i0 = cs_mm_extract_epi32(index_int, 3);
+							int i1 = cs_mm_extract_epi32(index_int, 2);
+							int i2 = cs_mm_extract_epi32(index_int, 1);
+							int i3 = cs_mm_extract_epi32(index_int, 0);
 
-						A = cs_mm_mul_ps(A, vA);
-						B = cs_mm_mul_ps(B, vB);
-						floatA[i+write_offset_wide] = cs_mm_add_ps(floatA[i+write_offset_wide], A);
-						floatB[i+write_offset_wide] = cs_mm_add_ps(floatB[i+write_offset_wide], B);
+							cs__m128 loA = cs_mm_set_ps(
+								i0 > audio->sample_count ? 0 : ((float*)cA)[i0],
+								i1 > audio->sample_count ? 0 : ((float*)cA)[i1],
+								i2 > audio->sample_count ? 0 : ((float*)cA)[i2],
+								i3 > audio->sample_count ? 0 : ((float*)cA)[i3]
+							);
+							cs__m128 hiA = cs_mm_set_ps(
+								i0 + 1 > audio->sample_count ? 0 : ((float*)cA)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : ((float*)cA)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : ((float*)cA)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : ((float*)cA)[i3 + 1]
+							);
+
+							cs__m128 loB = cs_mm_set_ps(
+								i0 > audio->sample_count ? 0 : ((float*)cB)[i0],
+								i1 > audio->sample_count ? 0 : ((float*)cB)[i1],
+								i2 > audio->sample_count ? 0 : ((float*)cB)[i2],
+								i3 > audio->sample_count ? 0 : ((float*)cB)[i3]
+							);
+							cs__m128 hiB = cs_mm_set_ps(
+								i0 + 1 > audio->sample_count ? 0 : ((float*)cB)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : ((float*)cB)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : ((float*)cB)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : ((float*)cB)[i3 + 1]
+							);
+
+							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
+							cs__m128 B = cs_mm_add_ps(loB, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiB, loB)));
+
+							A = cs_mm_mul_ps(A, vA);
+							B = cs_mm_mul_ps(B, vB);
+							floatA[i + write_offset_wide] = cs_mm_add_ps(floatA[i + write_offset_wide], A);
+							floatB[i + write_offset_wide] = cs_mm_add_ps(floatB[i + write_offset_wide], B);
+						}
+					}	break;
 					}
-				}	break;
+				} else {
+					// No pitch shifting, just add samples together.
+					switch (audio->channel_count) {
+					case 1:
+					{
+						for (int i = 0; i < write_wide; ++i) {
+							cs__m128 A = cA[i + sample_index_wide];
+							cs__m128 B = cs_mm_mul_ps(A, vB);
+							A = cs_mm_mul_ps(A, vA);
+							floatA[i + write_offset_wide] = cs_mm_add_ps(floatA[i + write_offset_wide], A);
+							floatB[i + write_offset_wide] = cs_mm_add_ps(floatB[i + write_offset_wide], B);
+						}
+						break;
+					}
+					case 2:
+					{
+						for (int i = 0; i < write_wide; ++i) {
+							cs__m128 A = cA[i + sample_index_wide];
+							cs__m128 B = cB[i + sample_index_wide];
+
+							A = cs_mm_mul_ps(A, vA);
+							B = cs_mm_mul_ps(B, vB);
+							floatA[i + write_offset_wide] = cs_mm_add_ps(floatA[i + write_offset_wide], A);
+							floatB[i + write_offset_wide] = cs_mm_add_ps(floatB[i + write_offset_wide], B);
+						}
+					}	break;
+					}
 				}
 
 				// playing list logic
-				playing->sample_index += mix_count;
-				CUTE_SOUND_ASSERT(playing->sample_index <= audio_sample_count);
-				if (playing->sample_index == audio_sample_count) {
+				playing->sample_index += samples_to_read;
+				CUTE_SOUND_ASSERT(playing->sample_index <= audio->sample_count);
+				if (playing->sample_index == audio->sample_count) {
 					if (playing->looped) {
 						playing->sample_index = 0;
-						write_offset += mix_count;
-						continue;
+						write_offset += samples_to_write;
+						samples_needed -= samples_to_write;
+						CUTE_SOUND_ASSERT(samples_needed >= 0);
+						if (samples_needed == 0) break;
+						goto mix_more;
 					}
 
 					goto remove;
@@ -2495,7 +2429,6 @@ void cs_mix()
 
 			cs_list_remove(playing_node);
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
-			cs_free16(playing->resampled.channels[0]);
 			hashtable_remove(&s_ctx->instance_map, playing->id);
 			playing_node = next_node;
 			write_offset = 0;
@@ -2509,7 +2442,7 @@ void cs_mix()
 #if CUTE_SOUND_PLATFORM == CUTE_SOUND_WINDOWS
 
 	samples = s_ctx->samples;
-	for (int i = 0; i < wide_count; ++i) {
+	for (int i = 0; i < s_ctx->wide_count; ++i) {
 		cs__m128i a = cs_mm_cvtps_epi32(floatA[i]);
 		cs__m128i b = cs_mm_cvtps_epi32(floatB[i]);
 		cs__m128i a0b0a1b1 = cs_mm_unpacklo_epi32(a, b);
@@ -2526,7 +2459,7 @@ void cs_mix()
 	// the final samples. Then a single ring buffer push can be used
 	// afterwards. Pretty hacky, but whatever :)
 	samples = (cs__m128i*)floatA;
-	for (int i = 0; i < wide_count; ++i) {
+	for (int i = 0; i < s_ctx->wide_count; ++i) {
 		cs__m128i a = cs_mm_cvtps_epi32(floatA[i]);
 		cs__m128i b = cs_mm_cvtps_epi32(floatB[i]);
 		cs__m128i a0b0a1b1 = cs_mm_unpacklo_epi32(a, b);
@@ -2944,10 +2877,8 @@ static cs_sound_inst_t* s_inst_music(cs_audio_source_t* src, float volume)
 	inst->pan0 = 0.5f;
 	inst->pan1 = 0.5f;
 	inst->pitch = 1.0f;
-	CUTE_SOUND_MEMSET(&inst->resampled, 0, sizeof(inst->resampled));
 	inst->audio = src;
 	inst->sample_index = 0;
-	if (inst->pitch != 1.0f) s_resample(inst);
 	cs_list_init_node(&inst->node);
 	s_insert(inst);
 	return inst;
@@ -2972,7 +2903,6 @@ static cs_sound_inst_t* s_inst(cs_audio_source_t* src, cs_sound_params_t params)
 	inst->pan0 = panl;
 	inst->pan1 = panr;
 	inst->pitch = params.pitch;
-	CUTE_SOUND_MEMSET(&inst->resampled, 0, sizeof(inst->resampled));
 	inst->audio = src;
 	inst->sample_index = 0;
 	cs_list_init_node(&inst->node);
@@ -3246,13 +3176,13 @@ void cs_music_crossfade(cs_audio_source_t* audio_source, float cross_fade_time)
 	}
 }
 
-uint64_t cs_music_get_sample_index()
+int cs_music_get_sample_index()
 {
 	if (s_ctx->music_playing) return 0;
 	else return s_ctx->music_playing->sample_index;
 }
 
-cs_error_t cs_music_set_sample_index(uint64_t sample_index)
+cs_error_t cs_music_set_sample_index(int sample_index)
 {
 	if (s_ctx->music_playing) return CUTE_SOUND_ERROR_INVALID_SOUND;
 	if (sample_index > s_ctx->music_playing->audio->sample_count) return CUTE_SOUND_ERROR_TRIED_TO_SET_SAMPLE_INDEX_BEYOND_THE_AUDIO_SOURCES_SAMPLE_COUNT;
@@ -3270,7 +3200,6 @@ cs_sound_params_t cs_sound_params_default()
 	params.looped = false;
 	params.volume = 1.0f;
 	params.pan = 0.5f;
-	params.delay = 0.0f;
 	params.pitch = 1.0f;
 	return params;
 }
@@ -3324,7 +3253,7 @@ float cs_sound_get_pan(cs_playing_sound_t sound)
 	return inst->pan1;
 }
 
-uint64_t cs_sound_get_sample_index(cs_playing_sound_t sound)
+int cs_sound_get_sample_index(cs_playing_sound_t sound)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
 	if (!inst) return 0;
@@ -3370,7 +3299,7 @@ void cs_sound_set_pan(cs_playing_sound_t sound, float pan_0_to_1)
 	inst->pan1 = pan_0_to_1;
 }
 
-cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, uint64_t sample_index)
+cs_error_t cs_sound_set_sample_index(cs_playing_sound_t sound, int sample_index)
 {
 	cs_sound_inst_t* inst = s_get_inst(sound);
 	if (!inst) return CUTE_SOUND_ERROR_INVALID_SOUND;

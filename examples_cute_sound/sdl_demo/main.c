@@ -27,7 +27,6 @@ int main(int argc, char *args[])
 
 	printf("Jump five times...\n");
 	cs_sleep(500);
-
 	int count = 5;
 	while (count--) {
 		cs_sleep(500);
@@ -35,11 +34,11 @@ int main(int argc, char *args[])
 		cs_play_sound(jump, params);
 		printf("Jump!\n");
 	}
-
+	
 	cs_sleep(500);
 	printf("Jump five times with various pitches...\n");
 	cs_sleep(1000);
-
+	
 	count = 5;
 	while (count--) {
 		cs_sleep(500);
@@ -86,13 +85,13 @@ int main(int argc, char *args[])
 		cs_sleep(1);
 	}
 
-	printf("Play music with 25%% higher pitch.\n");
+	printf("Modulate music pitch.\n");
 
 	elapsed = 0;
 	while (elapsed < 5) {
 		float dt = ct_time();
 		elapsed += dt;
-		cs_music_set_pitch(elapsed / 5.0f + 0.25f);
+		cs_music_set_pitch(elapsed / 5.0f + 0.3f);
 		cs_update(dt);
 		cs_sleep(1);
 	}
