@@ -2264,10 +2264,15 @@ void cs_mix()
 				cs__m128 vA = cs_mm_set1_ps(vA0);
 				cs__m128 vB = cs_mm_set1_ps(vB0);
 
+				int prev_playing_sample_index = playing->sample_index;
 				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
 				int samples_to_read = (int)(samples_needed * playing->pitch);
 				if (samples_to_read + playing->sample_index > audio->sample_count) {
 					samples_to_read = audio->sample_count - playing->sample_index;
+				} else if (samples_to_read + playing->sample_index < 0) {
+					// When pitch shifting is negative, samples_to_read is also negative so that offset needs to
+					// be accounted for otherwise the sample index cursor gets stuck at sample count.
+					playing->sample_index = audio->sample_count + samples_to_read + playing->sample_index;
 				}
 				int samples_to_write = (int)(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
@@ -2295,16 +2300,16 @@ void cs_mix()
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
 							cs__m128 loA = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : ((float*)cA)[i0],
-								i1 > audio->sample_count ? 0 : ((float*)cA)[i1],
-								i2 > audio->sample_count ? 0 : ((float*)cA)[i2],
-								i3 > audio->sample_count ? 0 : ((float*)cA)[i3]
+								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cA)[i0],
+								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cA)[i1],
+								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cA)[i2],
+								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cA)[i3]
 							);
 							cs__m128 hiA = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : ((float*)cA)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : ((float*)cA)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : ((float*)cA)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : ((float*)cA)[i3 + 1]
+								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cA)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cA)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cA)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cA)[i3 + 1]
 							);
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
@@ -2328,29 +2333,29 @@ void cs_mix()
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
 							cs__m128 loA = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : ((float*)cA)[i0],
-								i1 > audio->sample_count ? 0 : ((float*)cA)[i1],
-								i2 > audio->sample_count ? 0 : ((float*)cA)[i2],
-								i3 > audio->sample_count ? 0 : ((float*)cA)[i3]
+								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cA)[i0],
+								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cA)[i1],
+								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cA)[i2],
+								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cA)[i3]
 							);
 							cs__m128 hiA = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : ((float*)cA)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : ((float*)cA)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : ((float*)cA)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : ((float*)cA)[i3 + 1]
+								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cA)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cA)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cA)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cA)[i3 + 1]
 							);
 
 							cs__m128 loB = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : ((float*)cB)[i0],
-								i1 > audio->sample_count ? 0 : ((float*)cB)[i1],
-								i2 > audio->sample_count ? 0 : ((float*)cB)[i2],
-								i3 > audio->sample_count ? 0 : ((float*)cB)[i3]
+								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cB)[i0],
+								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cB)[i1],
+								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cB)[i2],
+								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cB)[i3]
 							);
 							cs__m128 hiB = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : ((float*)cB)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : ((float*)cB)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : ((float*)cB)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : ((float*)cB)[i3 + 1]
+								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cB)[i0 + 1],
+								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cB)[i1 + 1],
+								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cB)[i2 + 1],
+								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cB)[i3 + 1]
 							);
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
@@ -2395,7 +2400,21 @@ void cs_mix()
 				// playing list logic
 				playing->sample_index += samples_to_read;
 				CUTE_SOUND_ASSERT(playing->sample_index <= audio->sample_count);
-				if (playing->sample_index == audio->sample_count) {
+				if (playing->pitch < 0) {
+					// When pitch shifting is negative adjust the timing a bit further back from sample count to avoid any clipping.
+					if (prev_playing_sample_index - playing->sample_index < 0) {
+						if (playing->looped) {
+							playing->sample_index = audio->sample_count - samples_needed;
+							write_offset += samples_to_write;
+							samples_needed -= samples_to_write;
+							CUTE_SOUND_ASSERT(samples_needed >= 0);
+							if (samples_needed == 0) break;
+							goto mix_more;
+						}
+
+						goto remove;
+					}
+				} else if (playing->sample_index == audio->sample_count) {
 					if (playing->looped) {
 						playing->sample_index = 0;
 						write_offset += samples_to_write;
