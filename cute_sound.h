@@ -116,6 +116,7 @@
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
 		Brie              2.06 - Looping sound rollover
+  	        ogam              x.xx - Lots of bugfixes over time, including support negative pitch
 
 
 	DOCUMENTATION (very quick intro)
