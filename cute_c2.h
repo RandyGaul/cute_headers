@@ -321,6 +321,7 @@ CUTE_C2_API void c2PolytoPolyManifold(const c2Poly* A, const c2x* ax, const c2Po
 
 typedef enum
 {
+	C2_TYPE_NONE,
 	C2_TYPE_CIRCLE,
 	C2_TYPE_AABB,
 	C2_TYPE_CAPSULE,

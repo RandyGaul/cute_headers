@@ -11,7 +11,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_sound](cute_sound.h)** | Load/play/loop (with plugin)/pan WAV + OGG (stb_vorbis wrapper for OGG) in mono/stereo, high performance custom mixer, music + crossfade support | 2.07 | C/C++
 **[cute_math](cute_math.h)** | Professional level 3D vector math via SSE intrinsics | 1.02 | C++
 **[cute_png](cute_png.h)** | load/save PNG, texture atlas compiler, DEFLATE compliant decompressor | 1.05 | C/C++
-**[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.04 | C/C++
+**[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.06 | C/C++
 **[cute_sync](cute_sync.h)** | Collection of practical synchronization primitives, including read/write lock and threadpool/task system | 1.01 | C/C++
 **[cute_tls](cute_tls.h)** | Create a TLS connection to a website over TCP, useful for HTTPS requests. | 1.01 | C/C++/Obj-C
 

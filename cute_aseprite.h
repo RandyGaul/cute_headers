@@ -837,10 +837,9 @@ static char* s_fopen(const char* path, int* size, void* mem_ctx)
 	CUTE_ASEPRITE_FILE* fp = CUTE_ASEPRITE_FOPEN(path, "rb");
 	int sz = 0;
 
-	if (fp)
-	{
+	if (fp) {
 		CUTE_ASEPRITE_FSEEK(fp, 0, CUTE_ASEPRITE_SEEK_END);
-		sz = CUTE_ASEPRITE_FTELL(fp);
+		sz = (int)CUTE_ASEPRITE_FTELL(fp);
 		CUTE_ASEPRITE_FSEEK(fp, 0, CUTE_ASEPRITE_SEEK_SET);
 		data = (char*)CUTE_ASEPRITE_ALLOC(sz + 1, mem_ctx);
 		CUTE_ASEPRITE_FREAD(data, sz, 1, fp);

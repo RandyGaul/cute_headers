@@ -1245,7 +1245,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
 		int bytes_written = 0;
 		while (bytes_written < size) {
-			int w = s2n_send(ctx->connection, data + bytes_written, size - bytes_written, &blocked);
+			int w = s2n_send(ctx->connection, (const void*)((uintptr_t)data + bytes_written), size - bytes_written, &blocked);
 			if (w >= 0) {
 				bytes_written += w;
 			} else if (s2n_error_get_type(s2n_errno) != S2N_ERR_T_BLOCKED) {
