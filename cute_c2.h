@@ -1791,20 +1791,22 @@ void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m)
 	c2v n;
 	float depth;
 	c2v p;
+	float offset;
 
 	// x axis overlap is smaller
 	if (dx < dy)
 	{
 		depth = dx;
+		offset = c2Min(A.max.y, B.max.y) - mid_a.y;
 		if (d.x < 0)
 		{
 			n = c2V(-1.0f, 0);
-			p = c2Sub(mid_a, c2V(eA.x, 0));
+			p = c2Sub(mid_a, c2V(eA.x, -offset));
 		}
 		else
 		{
 			n = c2V(1.0f, 0);
-			p = c2Add(mid_a, c2V(eA.x, 0));
+			p = c2Add(mid_a, c2V(eA.x, offset));
 		}
 	}
 
@@ -1812,15 +1814,16 @@ void c2AABBtoAABBManifold(c2AABB A, c2AABB B, c2Manifold* m)
 	else
 	{
 		depth = dy;
+		offset = c2Min(A.max.x, B.max.x) - mid_a.x;
 		if (d.y < 0)
 		{
 			n = c2V(0, -1.0f);
-			p = c2Sub(mid_a, c2V(0, eA.y));
+			p = c2Sub(mid_a, c2V(-offset, eA.y));
 		}
 		else
 		{
 			n = c2V(0, 1.0f);
-			p = c2Add(mid_a, c2V(0, eA.y));
+			p = c2Add(mid_a, c2V(offset, eA.y));
 		}
 	}
 
