@@ -1128,7 +1128,12 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 	result.toi = 1.0f;
 	result.iterations = 0;
 
-	while (result.iterations < 20 && c2Len(v) - radius > tolerance)
+	if (!(c2Len(v) - radius > tolerance)) {
+		result.hit = 1;
+		return result;
+	}
+
+	while (result.iterations < 20)
 	{
 		iA = c2Support(pA.verts, pA.count, c2MulrvT(ax.r, c2Neg(v)));
 		sA = c2Mulxv(ax, pA.verts[iA]);

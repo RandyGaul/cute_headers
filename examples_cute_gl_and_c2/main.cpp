@@ -1849,6 +1849,29 @@ void c2_toi_kyavi_already_intersecting()
 	DrawAABB(c2_b.min, c2_b.max);
 }
 
+void c2_toi_kyavi_already_intersecting2()
+{
+	float x = 319.0f;
+	float y = 223.0f;
+	c2AABB c2_a = { c2V(319.0f-x, 223.0f-y), c2V(351.0f-x, 255.0f-y) };
+	c2Circle c2_b = { c2V(322.928192f-x, 229.071793f-y), 16 };
+
+	c2TOIResult result = c2TOI(
+			(const void*)&c2_a, C2_TYPE_AABB, nullptr, { 0, 0 },
+			(const void*)&c2_b, C2_TYPE_CIRCLE, nullptr, { 0, 0 },
+			true
+	);
+
+	if (result.hit) {
+		gl_line_color(ctx, 1, 0, 0);
+	} else {
+		gl_line_color(ctx, 1, 1, 1);
+	}
+
+	DrawAABB(c2_a.min, c2_a.max);
+	DrawCircle(c2_b.p, c2_b.r);
+}
+
 int main()
 {
 	// glfw and glad setup
@@ -1940,8 +1963,8 @@ int main()
 
 		if (wheel) Rotate((c2v*)&user_capsule, (c2v*)&user_capsule, 2);
 
-		static int code = 27;
-		if (arrow_pressed) code = (code + 1) % 28;
+		static int code = 28;
+		if (arrow_pressed) code = (code + 1) % 29;
 		switch (code)
 		{
 		case 0: TestDrawPrim(); break;
@@ -1972,6 +1995,7 @@ int main()
 		case 25: c2toi_jeff(); break;
 		case 26: poly_box_collided_aguywhocodes(); break;
 		case 27: c2_toi_kyavi_already_intersecting(); break;
+		case 28: c2_toi_kyavi_already_intersecting2(); break;
 		}
 
 		// push a draw call to tinygl
