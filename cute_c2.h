@@ -1162,6 +1162,8 @@ c2TOIResult c2TOI(const void* A, C2_TYPE typeA, const c2x* ax_ptr, c2v vA, const
 		}
 
 		if (s.count == 3) {
+			result.toi = t;
+			result.hit = 1;
 			return result;
 		}
 
