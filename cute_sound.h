@@ -2292,7 +2292,6 @@ void cs_mix()
 				cs__m128 vB = cs_mm_set1_ps(vB0);
 
 				int prev_playing_sample_index = playing->sample_index;
-				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
 				int samples_to_read = (int)(samples_needed * playing->pitch);
 				if (samples_to_read + playing->sample_index > audio->sample_count) {
 					samples_to_read = audio->sample_count - playing->sample_index;
@@ -2301,6 +2300,7 @@ void cs_mix()
 					// be accounted for otherwise the sample index cursor gets stuck at sample count.
 					playing->sample_index = audio->sample_count + samples_to_read + playing->sample_index;
 				}
+				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
 				int samples_to_write = (int)(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
