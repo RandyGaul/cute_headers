@@ -2247,7 +2247,7 @@ void cs_mix()
 
 			if (!audio) goto remove;
 			if (!playing->active || !s_ctx->running) goto remove;
-			if (playing->paused) goto get_next_playing_sound;
+			if (playing->paused || playing->pitch==0.0f) goto get_next_playing_sound;
 			if (s_ctx->cull_duplicates) {
 				for (int i = 0; i < s_ctx->duplicate_count; ++i) {
 					if (s_ctx->duplicates[i] == (void*)audio) {
