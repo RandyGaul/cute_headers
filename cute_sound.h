@@ -119,6 +119,7 @@
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
 		Brie              2.06 - Looping sound rollover
 		ogam              x.xx - Lots of bugfixes over time, including support negative pitch
+		renex             x.xx - Fixes to popping issues and a crash in the mixer.
 
 
 	DOCUMENTATION (very quick intro)
@@ -2247,7 +2248,7 @@ void cs_mix()
 
 			if (!audio) goto remove;
 			if (!playing->active || !s_ctx->running) goto remove;
-			if (playing->paused) goto get_next_playing_sound;
+			if (playing->paused || playing->pitch==0.0f) goto get_next_playing_sound;
 			if (s_ctx->cull_duplicates) {
 				for (int i = 0; i < s_ctx->duplicate_count; ++i) {
 					if (s_ctx->duplicates[i] == (void*)audio) {
@@ -2292,7 +2293,6 @@ void cs_mix()
 				cs__m128 vB = cs_mm_set1_ps(vB0);
 
 				int prev_playing_sample_index = playing->sample_index;
-				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
 				int samples_to_read = (int)(samples_needed * playing->pitch);
 				if (samples_to_read + playing->sample_index > audio->sample_count) {
 					samples_to_read = audio->sample_count - playing->sample_index;
@@ -2301,6 +2301,7 @@ void cs_mix()
 					// be accounted for otherwise the sample index cursor gets stuck at sample count.
 					playing->sample_index = audio->sample_count + samples_to_read + playing->sample_index;
 				}
+				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
 				int samples_to_write = (int)(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
@@ -2688,7 +2689,9 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	{
 		int sample_size = *((uint32_t*)(data + 4));
 		int sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
-		audio->sample_count = sample_count;
+		//to account for interpolation in the pitch shifter, we lie about length
+		//this fixes random popping at the end of sounds
+		audio->sample_count = sample_count-1;
 		audio->channel_count = fmt.nChannels;
 
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
