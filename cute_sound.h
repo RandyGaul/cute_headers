@@ -169,8 +169,8 @@
 		* PCM mono/stereo format is the only formats the LoadWAV function supports. I don't
 		  guarantee it will work for all kinds of wav files, but it certainly does for the common
 		  kind (and can be changed fairly easily if someone wanted to extend it).
-		* Only supports 16 bits per sample.
-		* Mixer does not do any fancy clipping. The algorithm is to convert all 16 bit samples
+		* Only supports (unsigned) 8 and (signed) 16 bits per sample.
+		* Mixer does not do any fancy clipping. The algorithm is to convert all samples
 		  to float, mix all samples, and write back to audio API as 16 bit integers. In
 		  practice this works very well and clipping is not often a big problem.
 
@@ -186,18 +186,19 @@
 		Q : Does this library support audio streaming? Something like System::createStream in FMOD.
 		A : No. Typically music files aren't that large (in the megabytes). Compare this to a typical
 		    DXT texture of 1024x1024, at 0.5MB of memory. Now say an average music file for a game is three
-		    minutes long. Loading this file into memory and storing it as raw 16bit samples with two channels,
+		    minutes long. Loading this file into memory and storing it as float samples with two channels,
 		    would be:
 
 		        num_samples = 3 * 60 * 44100 * 2
-		        num_bits = num_samples * 16
-		        num_bytes = num_bits / 8
+		        num_bytes = num_samples * 4 (size of a float)
 		        num_megabytes = num_bytes / (1024 * 1024)
-		        or 30.3mb
+		        or 60.5mb
 
-		    So say the user has 2gb of spare RAM. That means we could fit 67 different three minute length
-		    music files in there simultaneously. That is a ridiculous amount of spare memory. 30mb is nothing
-		    nowadays. Just load your music file into memory all at once and then play it.
+		    So say the user has 2gb of spare RAM. That means we could fit 33 different three minute length
+		    music files in there simultaneously. That is a ridiculous amount of tracks to load at once.
+		    60mb is nothing nowadays, just load your music file into memory all at once and then play it.
+		    Additionally, decoding music at load time also means you get negative pitch support for playing
+		    it backwards, which is normally impossible in a streaming decoder.
 
 		Q : But I really need streaming of audio files from disk to save memory! Also loading my audio
 		    files (like .OGG) takes a long time (multiple seconds).
