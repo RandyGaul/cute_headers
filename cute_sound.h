@@ -119,7 +119,8 @@
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
 		Brie              2.06 - Looping sound rollover
 		ogam              x.xx - Lots of bugfixes over time, including support negative pitch
-		renex             x.xx - Fixes to popping issues and a crash in the mixer.
+		renex             x.xx - Fixes to popping issues, a crash in the mixer, and
+		                         8-bit pcm wav support
 
 
 	DOCUMENTATION (very quick intro)
@@ -250,7 +251,7 @@ typedef enum cs_error_t
 	CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND,
 	CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED,
 	CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED,
-	CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED,
+	CUTE_SOUND_ERROR_WAV_ONLY_16_AND_8_BITS_PER_SAMPLE_SUPPORTED,
 	CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED,
 	CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED,
 	CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED,
@@ -1355,7 +1356,7 @@ const char* cs_error_as_string(cs_error_t error) {
 	case CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND: return "CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND";
 	case CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED: return "CUTE_SOUND_ERROR_ONLY_PCM_WAV_FILES_ARE_SUPPORTED";
 	case CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED";
-	case CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED";
+	case CUTE_SOUND_ERROR_WAV_ONLY_16_AND_8_BITS_PER_SAMPLE_SUPPORTED: return "CUTE_SOUND_ERROR_WAV_ONLY_16_AND_8_BITS_PER_SAMPLE_SUPPORTED";
 	case CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_SWITCH_MUSIC_WHILE_PAUSED";
 	case CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_CROSSFADE_WHILE_MUSIC_IS_PAUSED";
 	case CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED: return "CUTE_SOUND_ERROR_CANNOT_FADEOUT_WHILE_MUSIC_IS_PAUSED";
@@ -2607,19 +2608,39 @@ static void cs_last_element(cs__m128* a, int i, int j, int16_t* samples, int off
 {
 	switch (offset) {
 	case 1:
-		a[i] = cs_mm_set_ps(samples[j], 0.0f, 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps((float)samples[j], 0.0f, 0.0f, 0.0f);
 		break;
 
 	case 2:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps((float)samples[j], (float)samples[j + 1], 0.0f, 0.0f);
 		break;
 
 	case 3:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], 0.0f);
+		a[i] = cs_mm_set_ps((float)samples[j], (float)samples[j + 1], (float)samples[j + 2], 0.0f);
 		break;
 
 	case 0:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], samples[j + 3]);
+		a[i] = cs_mm_set_ps((float)samples[j], (float)samples[j + 1], (float)samples[j + 2], (float)samples[j + 3]);
+		break;
+	}
+}
+static void cs_last_element8(cs__m128* a, int i, int j, uint8_t* samples8, int offset)
+{
+	switch (offset) {
+	case 1:
+		a[i] = cs_mm_set_ps((float)((samples8[j]-127)*512), 0.0f, 0.0f, 0.0f);
+		break;
+
+	case 2:
+		a[i] = cs_mm_set_ps((float)((samples8[j]-127)*512), (float)((samples8[j+1]-127)*512), 0.0f, 0.0f);
+		break;
+
+	case 3:
+		a[i] = cs_mm_set_ps((float)((samples8[j]-127)*512), (float)((samples8[j+1]-127)*512), (float)((samples8[j+2]-127)*512), 0.0f);
+		break;
+
+	case 0:
+		a[i] = cs_mm_set_ps((float)((samples8[j]-127)*512), (float)((samples8[j+1]-127)*512), (float)((samples8[j+2]-127)*512), (float)((samples8[j+3]-127)*512));
 		break;
 	}
 }
@@ -2673,8 +2694,8 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	fmt = *(Fmt*)(data + 8);
 	if (fmt.wFormatTag != 1) { if (err) *err = CUTE_SOUND_ERROR_WAV_FILE_FORMAT_CHUNK_NOT_FOUND; return NULL; }
 	if (!(fmt.nChannels == 1 || fmt.nChannels == 2)) { if (err) *err = CUTE_SOUND_ERROR_WAV_ONLY_MONO_OR_STEREO_IS_SUPPORTED; return NULL; }
-	if (!(fmt.wBitsPerSample == 16)) { if (err) *err = CUTE_SOUND_ERROR_WAV_ONLY_16_BITS_PER_SAMPLE_SUPPORTED; return NULL; }
-	if (!(fmt.nBlockAlign == fmt.nChannels * 2)) { if (err) *err = CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB; return NULL; }
+	if (!(fmt.wBitsPerSample == 16 || fmt.wBitsPerSample == 8)) { if (err) *err = CUTE_SOUND_ERROR_WAV_ONLY_16_AND_8_BITS_PER_SAMPLE_SUPPORTED; return NULL; }
+	if (!(fmt.nBlockAlign == fmt.nChannels * (fmt.wBitsPerSample/8))) { if (err) *err = CUTE_SOUND_ERROR_IMPLEMENTATION_ERROR_PLEASE_REPORT_THIS_ON_GITHUB; return NULL; }
 
 	while (1) {
 		if (!(end > data)) { if (err) *err = CUTE_SOUND_ERROR_WAV_DATA_CHUNK_NOT_FOUND; return NULL; }
@@ -2686,9 +2707,11 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	CUTE_SOUND_MEMSET(audio, 0, sizeof(*audio));
 	audio->sample_rate = (int)fmt.nSamplesPerSec;
 
+	bool is_8bit = (fmt.wBitsPerSample==8);
+
 	{
 		int sample_size = *((uint32_t*)(data + 4));
-		int sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
+		int sample_count = sample_size / (fmt.nChannels * (fmt.wBitsPerSample/8));
 		//to account for interpolation in the pitch shifter, we lie about length
 		//this fixes random popping at the end of sounds
 		audio->sample_count = sample_count-1;
@@ -2696,6 +2719,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
 		int wide_offset = sample_count & 3;
+		uint8_t* samples8 = (uint8_t*)(data + 8);
 		int16_t* samples = (int16_t*)(data + 8);
 
 		switch (audio->channel_count) {
@@ -2705,9 +2729,11 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 			audio->channels[1] = 0;
 			cs__m128* a = (cs__m128*)audio->channels[0];
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4) {
-				a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
+				if (is_8bit) a[i] = cs_mm_set_ps((float)((samples8[j+3]-127)*512), (float)((samples8[j+2]-127)*512), (float)((samples8[j+1]-127)*512), (float)((samples8[j]-127)*512));
+				else a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
+			if (is_8bit) cs_last_element8(a, wide_count - 1, (wide_count - 1) * 4, samples8, wide_offset);
+			else cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
 		}	break;
 
 		case 2:
@@ -2715,11 +2741,21 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 			cs__m128* a = (cs__m128*)cs_malloc16(wide_count * sizeof(cs__m128) * 2);
 			cs__m128* b = a + wide_count;
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 8){
-				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
-				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
+				if (is_8bit) {
+					a[i] = cs_mm_set_ps((float)((samples8[j+6]-127)*512), (float)((samples8[j+4]-127)*512), (float)((samples8[j+2]-127)*512), (float)((samples8[j]-127)*512));
+					b[i] = cs_mm_set_ps((float)((samples8[j+7]-127)*512), (float)((samples8[j+5]-127)*512), (float)((samples8[j+3]-127)*512), (float)((samples8[j+1]-127)*512));
+				} else {
+					a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
+					b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
+				}
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
-			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
+			if (is_8bit) {
+					cs_last_element8(a, wide_count - 1, (wide_count - 1) * 4, samples8, wide_offset);
+					cs_last_element8(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples8, wide_offset);
+				} else {
+					cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
+					cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
+				}
 			audio->channels[0] = a;
 			audio->channels[1] = b;
 		}	break;
