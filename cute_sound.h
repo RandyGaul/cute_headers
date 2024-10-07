@@ -119,6 +119,7 @@
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
 		Brie              2.06 - Looping sound rollover
 		ogam              x.xx - Lots of bugfixes over time, including support negative pitch
+		renex             x.xx - Fixes to popping issues and a crash in the mixer.
 
 
 	DOCUMENTATION (very quick intro)
@@ -2688,7 +2689,9 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	{
 		int sample_size = *((uint32_t*)(data + 4));
 		int sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
-		audio->sample_count = sample_count;
+		//to account for interpolation in the pitch shifter, we lie about length
+		//this fixes random popping at the end of sounds
+		audio->sample_count = sample_count-1;
 		audio->channel_count = fmt.nChannels;
 
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
