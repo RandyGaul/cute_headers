@@ -14,6 +14,7 @@ Various single-file cross-platform C/C++ headers implementing self-contained lib
 **[cute_spritebatch](cute_spritebatch.h)** | Run-time 2d sprite batcher. Builds atlases on-the-fly in-memory. Useful to implement a sprite batcher for any purpose (like 2D games) for high-performance rendering, without the need to precompile texture atlases on-disk. | 1.06 | C/C++
 **[cute_sync](cute_sync.h)** | Collection of practical synchronization primitives, including read/write lock and threadpool/task system | 1.01 | C/C++
 **[cute_tls](cute_tls.h)** | Create a TLS connection to a website over TCP, useful for HTTPS requests. | 1.01 | C/C++/Obj-C
+**[cute_airlib](cute_airlib.h)** | Terminal utilities from Airib. | 1.00 | C/C++
 
 How to Use
 ----------
