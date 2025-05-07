@@ -2475,9 +2475,7 @@ void cs_mix()
 
 			cs_list_remove(playing_node);
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
-
-			s_ctx->ctx_insts[playing->id & 1023] = NULL;
-			s_ctx->ctx_insts_used[playing->id & 1023] = 0;
+			cs_hashtableremove(&s_ctx->instance_map, playing->id);
 
 			playing_node = next_node;
 			write_offset = 0;
