@@ -2476,9 +2476,14 @@ void cs_mix()
 			cs_list_remove(playing_node);
 			cs_list_push_front(&s_ctx->free_sounds, playing_node);
 			cs_hashtableremove(&s_ctx->instance_map, playing->id);
-
 			playing_node = next_node;
 			write_offset = 0;
+			if (s_ctx->on_finish && !playing->is_music) {
+				cs_playing_sound_t snd = { playing->id };
+				s_ctx->on_finish(snd, s_ctx->on_finish_udata);
+			} else if (s_ctx->on_music_finish && playing->is_music) {
+				s_ctx->on_music_finish(s_ctx->on_music_finish_udata);
+			}
 			continue;
 		} while (playing_node != end_node);
 	}
