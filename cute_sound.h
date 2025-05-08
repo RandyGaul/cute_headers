@@ -2430,7 +2430,7 @@ void cs_mix()
 						if (playing->looped) {
 							// Due to SAMPLE_MOD, we may have already played some of
 							// the first samples, so when we loop, we skip those
-							playing->sample_index = audio->sample_count - (4 - (audio->sample_count % 4));
+							playing->sample_index = audio->sample_count - (4 - (audio->sample_count & 3));
 
 							write_offset += samples_to_write;
 							if (write_offset >= samples_needed) break;
@@ -2444,7 +2444,7 @@ void cs_mix()
 					if (playing->looped) {
 						// Due to SAMPLE_MOD, we may have already played some of
 						// the first samples, so when we loop, we skip those
-						playing->sample_index = (4 - (audio->sample_count % 4));
+						playing->sample_index = (4 - (audio->sample_count & 3));
 
 						write_offset += samples_to_write;
 						if (write_offset >= samples_needed) break;
