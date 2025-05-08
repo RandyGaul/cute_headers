@@ -2715,8 +2715,8 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
 				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, 2, samples, wide_offset);
-			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 1, 2, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 8, 2, samples, wide_offset);
+			cs_last_element(b, wide_count - 1, (wide_count - 1) * 8 + 1, 2, samples, wide_offset);
 			audio->channels[0] = a;
 			audio->channels[1] = b;
 		}	break;
@@ -2854,8 +2854,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
 				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, 2, samples, wide_offset);
-			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 1, 2, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 8, 2, samples, wide_offset);
+			cs_last_element(b, wide_count - 1, (wide_count - 1) * 8 + 1, 2, samples, wide_offset);
 			break;
 
 		default:
