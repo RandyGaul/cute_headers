@@ -766,6 +766,7 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 
 #endif // CUTE_SOUND_SCALAR_MODE
 
+#define CUTE_SOUND_LOOP(X, Y) ((X) < 0 ? Y - (((X) + 1) / (Y) * (Y) - (X)) : (X) % (Y))
 #define CUTE_SOUND_ALIGN(X, Y) ((((size_t)X) + ((Y) - 1)) & ~((Y) - 1))
 #define CUTE_SOUND_TRUNC(X, Y) ((size_t)(X) & ~((Y) - 1))
 
@@ -2298,13 +2299,12 @@ void cs_mix()
 				} else if (samples_to_read + playing->sample_index < 0) {
 					samples_to_read = -playing->sample_index;
 					// Wrap the index cursor so that we don't get stuck on zero
-					// This will put us 1 step over the end of the array, thankfully our
-					// resampler already handles overflows like this!
-					playing->sample_index = ((playing->sample_index + audio->sample_count - 1) % audio->sample_count) + 1;
+					if (playing->sample_index == 0)
+						playing->sample_index = audio->sample_count - 1;
 				}
 
 				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
-				int samples_to_write = (int)(samples_to_read / playing->pitch);
+				int samples_to_write = (int)ceilf(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
 				static int written_so_far = 0;
@@ -2314,8 +2314,8 @@ void cs_mix()
 				if (playing->pitch != 1.0f) {
 					// To avoid bloating the code I've macro-ed the channel sampling
 					// In SAMPLE_CLAMP I'm casting the index to unsigned to underflow it, to avoid doing multiple bounds checks
-					// Although it seems like negative indices don't happen in the first place
-					#define SAMPLE_MOD(channel, index) ((float*)channel)[(index) % audio->sample_count]
+					// Although it seems like negative indices don't happen on unlooped sounds in the first place
+					#define SAMPLE_LOOP(channel, index) ((float*)channel)[CUTE_SOUND_LOOP(index, audio->sample_count)]
 					#define SAMPLE_CLAMP(channel, index) (unsigned int)(index) >= audio->sample_count ? 0.f : ((float*)cA)[index]
 					
 					// Pitch shifting -- We read in samples at a resampled rate (multiply by pitch). These samples
@@ -2336,11 +2336,11 @@ void cs_mix()
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
 							cs__m128 loA = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cA, i0), SAMPLE_MOD(cA, i1), SAMPLE_MOD(cA, i2), SAMPLE_MOD(cA, i3)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0), SAMPLE_LOOP(cA, i1), SAMPLE_LOOP(cA, i2), SAMPLE_LOOP(cA, i3)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0), SAMPLE_CLAMP(cA, i1), SAMPLE_CLAMP(cA, i2), SAMPLE_CLAMP(cA, i3));
 
 							cs__m128 hiA = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cA, i0 + 1), SAMPLE_MOD(cA, i1 + 1), SAMPLE_MOD(cA, i2 + 1), SAMPLE_MOD(cA, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0 + 1), SAMPLE_LOOP(cA, i1 + 1), SAMPLE_LOOP(cA, i2 + 1), SAMPLE_LOOP(cA, i3 + 1)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0 + 1), SAMPLE_CLAMP(cA, i1 + 1), SAMPLE_CLAMP(cA, i2 + 1), SAMPLE_CLAMP(cA, i3 + 1));
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
@@ -2364,19 +2364,19 @@ void cs_mix()
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
 							cs__m128 loA = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cA, i0), SAMPLE_MOD(cA, i1), SAMPLE_MOD(cA, i2), SAMPLE_MOD(cA, i3)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0), SAMPLE_LOOP(cA, i1), SAMPLE_LOOP(cA, i2), SAMPLE_LOOP(cA, i3)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0), SAMPLE_CLAMP(cA, i1), SAMPLE_CLAMP(cA, i2), SAMPLE_CLAMP(cA, i3));
 							
 							cs__m128 hiA = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cA, i0 + 1), SAMPLE_MOD(cA, i1 + 1), SAMPLE_MOD(cA, i2 + 1), SAMPLE_MOD(cA, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0 + 1), SAMPLE_LOOP(cA, i1 + 1), SAMPLE_LOOP(cA, i2 + 1), SAMPLE_LOOP(cA, i3 + 1)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0 + 1), SAMPLE_CLAMP(cA, i1 + 1), SAMPLE_CLAMP(cA, i2 + 1), SAMPLE_CLAMP(cA, i3 + 1));
 							
 							cs__m128 loB = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cB, i0), SAMPLE_MOD(cB, i1), SAMPLE_MOD(cB, i2), SAMPLE_MOD(cB, i3)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cB, i0), SAMPLE_LOOP(cB, i1), SAMPLE_LOOP(cB, i2), SAMPLE_LOOP(cB, i3)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cB, i0), SAMPLE_CLAMP(cB, i1), SAMPLE_CLAMP(cB, i2), SAMPLE_CLAMP(cB, i3));
 							
 							cs__m128 hiB = playing->looped ?
-								cs_mm_set_ps(SAMPLE_MOD(cB, i0 + 1), SAMPLE_MOD(cB, i1 + 1), SAMPLE_MOD(cB, i2 + 1), SAMPLE_MOD(cB, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_LOOP(cB, i0 + 1), SAMPLE_LOOP(cB, i1 + 1), SAMPLE_LOOP(cB, i2 + 1), SAMPLE_LOOP(cB, i3 + 1)) :
 								cs_mm_set_ps(SAMPLE_CLAMP(cB, i0 + 1), SAMPLE_CLAMP(cB, i1 + 1), SAMPLE_CLAMP(cB, i2 + 1), SAMPLE_CLAMP(cB, i3 + 1));
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
@@ -2388,10 +2388,10 @@ void cs_mix()
 							floatB[i + write_offset_wide] = cs_mm_add_ps(floatB[i + write_offset_wide], B);
 						}
 					}	break;
-
-					#undef SAMPLE_MOD
-					#undef SAMPLE_CLAMP
 					}
+
+					#undef SAMPLE_LOOP
+					#undef SAMPLE_CLAMP
 				} else {
 					// No pitch shifting, just add samples together.
 					switch (audio->channel_count) {
@@ -2422,15 +2422,13 @@ void cs_mix()
 				}
 
 				// playing list logic
+				int next_sample = (int)((float)(write_wide * 4) * playing->pitch) + playing->sample_index;
 				playing->sample_index += samples_to_read;
 				CUTE_SOUND_ASSERT(playing->sample_index <= audio->sample_count);
 				if (playing->pitch < 0) {
-					// When pitch shifting is negative adjust the timing a bit further back from sample count to avoid any clipping.
 					if (playing->sample_index == 0) {
 						if (playing->looped) {
-							// Due to SAMPLE_MOD, we may have already played some of
-							// the first samples, so when we loop, we skip those
-							playing->sample_index = audio->sample_count - (4 - (audio->sample_count & 3));
+							playing->sample_index = CUTE_SOUND_LOOP(next_sample, audio->sample_count);
 
 							write_offset += samples_to_write;
 							if (write_offset >= samples_needed) break;
@@ -2442,9 +2440,7 @@ void cs_mix()
 				}
 				else if (playing->sample_index == audio->sample_count) {
 					if (playing->looped) {
-						// Due to SAMPLE_MOD, we may have already played some of
-						// the first samples, so when we loop, we skip those
-						playing->sample_index = (4 - (audio->sample_count & 3));
+						playing->sample_index = CUTE_SOUND_LOOP(next_sample, audio->sample_count);
 
 						write_offset += samples_to_write;
 						if (write_offset >= samples_needed) break;
