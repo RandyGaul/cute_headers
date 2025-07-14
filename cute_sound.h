@@ -117,7 +117,7 @@
 		                         interface needs and use-cases
 		fluffrabbit       1.11 - scalar SIMD mode and various compiler warning/error fixes
 		Daniel Guzman     2.01 - compilation fixes for clang/llvm on MAC. 
-		Brie              2.06 - Looping sound rollover
+		Brie              2.06 - Looping sound rollover, seamless resampling
 		ogam              x.xx - Lots of bugfixes over time, including support negative pitch
 		renex             x.xx - Fixes to popping issues and a crash in the mixer.
 
@@ -766,6 +766,7 @@ void cs_set_global_user_allocator_context(void* user_allocator_context);
 
 #endif // CUTE_SOUND_SCALAR_MODE
 
+#define CUTE_SOUND_LOOP(X, Y) ((X) < 0 ? Y - (((X) + 1) / (Y) * (Y) - (X)) : (X) % (Y))
 #define CUTE_SOUND_ALIGN(X, Y) ((((size_t)X) + ((Y) - 1)) & ~((Y) - 1))
 #define CUTE_SOUND_TRUNC(X, Y) ((size_t)(X) & ~((Y) - 1))
 
@@ -2292,17 +2293,18 @@ void cs_mix()
 				cs__m128 vA = cs_mm_set1_ps(vA0);
 				cs__m128 vB = cs_mm_set1_ps(vB0);
 
-				int prev_playing_sample_index = playing->sample_index;
-				int samples_to_read = (int)(samples_needed * playing->pitch);
+				int samples_to_read = (int)((samples_needed - write_offset) * playing->pitch);
 				if (samples_to_read + playing->sample_index > audio->sample_count) {
 					samples_to_read = audio->sample_count - playing->sample_index;
 				} else if (samples_to_read + playing->sample_index < 0) {
-					// When pitch shifting is negative, samples_to_read is also negative so that offset needs to
-					// be accounted for otherwise the sample index cursor gets stuck at sample count.
-					playing->sample_index = audio->sample_count + samples_to_read + playing->sample_index;
+					samples_to_read = -playing->sample_index;
+					// Wrap the index cursor so that we don't get stuck on zero
+					if (playing->sample_index == 0)
+						playing->sample_index = audio->sample_count - 1;
 				}
+
 				int sample_index_wide = (int)CUTE_SOUND_TRUNC(playing->sample_index, 4) / 4;
-				int samples_to_write = (int)(samples_to_read / playing->pitch);
+				int samples_to_write = (int)ceilf(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
 				static int written_so_far = 0;
@@ -2310,6 +2312,12 @@ void cs_mix()
 
 				// Do the actual mixing: Apply volume, load samples into float buffers.
 				if (playing->pitch != 1.0f) {
+					// To avoid bloating the code I've macro-ed the channel sampling
+					// In SAMPLE_CLAMP I'm casting the index to unsigned to underflow it, to avoid doing multiple bounds checks
+					// Although it seems like negative indices don't happen on unlooped sounds in the first place
+					#define SAMPLE_LOOP(channel, index) ((float*)channel)[CUTE_SOUND_LOOP(index, audio->sample_count)]
+					#define SAMPLE_CLAMP(channel, index) (unsigned int)(index) >= audio->sample_count ? 0.f : ((float*)cA)[index]
+					
 					// Pitch shifting -- We read in samples at a resampled rate (multiply by pitch). These samples
 					// are read in one at a time in scalar mode, but then mixed together via SIMD.
 					cs__m128 pitch = cs_mm_set1_ps(playing->pitch);
@@ -2327,18 +2335,13 @@ void cs_mix()
 							int i2 = cs_mm_extract_epi32(index_int, 1);
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
-							cs__m128 loA = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cA)[i0],
-								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cA)[i1],
-								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cA)[i2],
-								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cA)[i3]
-							);
-							cs__m128 hiA = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cA)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cA)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cA)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cA)[i3 + 1]
-							);
+							cs__m128 loA = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0), SAMPLE_LOOP(cA, i1), SAMPLE_LOOP(cA, i2), SAMPLE_LOOP(cA, i3)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0), SAMPLE_CLAMP(cA, i1), SAMPLE_CLAMP(cA, i2), SAMPLE_CLAMP(cA, i3));
+
+							cs__m128 hiA = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0 + 1), SAMPLE_LOOP(cA, i1 + 1), SAMPLE_LOOP(cA, i2 + 1), SAMPLE_LOOP(cA, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0 + 1), SAMPLE_CLAMP(cA, i1 + 1), SAMPLE_CLAMP(cA, i2 + 1), SAMPLE_CLAMP(cA, i3 + 1));
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
 							cs__m128 B = cs_mm_mul_ps(A, vB);
@@ -2360,31 +2363,21 @@ void cs_mix()
 							int i2 = cs_mm_extract_epi32(index_int, 1);
 							int i3 = cs_mm_extract_epi32(index_int, 0);
 
-							cs__m128 loA = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cA)[i0],
-								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cA)[i1],
-								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cA)[i2],
-								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cA)[i3]
-							);
-							cs__m128 hiA = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cA)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cA)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cA)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cA)[i3 + 1]
-							);
-
-							cs__m128 loB = cs_mm_set_ps(
-								i0 > audio->sample_count ? 0 : i0 < 0 ? audio->sample_count : ((float*)cB)[i0],
-								i1 > audio->sample_count ? 0 : i1 < 0 ? audio->sample_count : ((float*)cB)[i1],
-								i2 > audio->sample_count ? 0 : i2 < 0 ? audio->sample_count : ((float*)cB)[i2],
-								i3 > audio->sample_count ? 0 : i3 < 0 ? audio->sample_count : ((float*)cB)[i3]
-							);
-							cs__m128 hiB = cs_mm_set_ps(
-								i0 + 1 > audio->sample_count ? 0 : i0 + 1 < 0 ? audio->sample_count : ((float*)cB)[i0 + 1],
-								i1 + 1 > audio->sample_count ? 0 : i1 + 1 < 0 ? audio->sample_count : ((float*)cB)[i1 + 1],
-								i2 + 1 > audio->sample_count ? 0 : i2 + 1 < 0 ? audio->sample_count : ((float*)cB)[i2 + 1],
-								i3 + 1 > audio->sample_count ? 0 : i3 + 1 < 0 ? audio->sample_count : ((float*)cB)[i3 + 1]
-							);
+							cs__m128 loA = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0), SAMPLE_LOOP(cA, i1), SAMPLE_LOOP(cA, i2), SAMPLE_LOOP(cA, i3)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0), SAMPLE_CLAMP(cA, i1), SAMPLE_CLAMP(cA, i2), SAMPLE_CLAMP(cA, i3));
+							
+							cs__m128 hiA = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cA, i0 + 1), SAMPLE_LOOP(cA, i1 + 1), SAMPLE_LOOP(cA, i2 + 1), SAMPLE_LOOP(cA, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cA, i0 + 1), SAMPLE_CLAMP(cA, i1 + 1), SAMPLE_CLAMP(cA, i2 + 1), SAMPLE_CLAMP(cA, i3 + 1));
+							
+							cs__m128 loB = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cB, i0), SAMPLE_LOOP(cB, i1), SAMPLE_LOOP(cB, i2), SAMPLE_LOOP(cB, i3)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cB, i0), SAMPLE_CLAMP(cB, i1), SAMPLE_CLAMP(cB, i2), SAMPLE_CLAMP(cB, i3));
+							
+							cs__m128 hiB = playing->looped ?
+								cs_mm_set_ps(SAMPLE_LOOP(cB, i0 + 1), SAMPLE_LOOP(cB, i1 + 1), SAMPLE_LOOP(cB, i2 + 1), SAMPLE_LOOP(cB, i3 + 1)) :
+								cs_mm_set_ps(SAMPLE_CLAMP(cB, i0 + 1), SAMPLE_CLAMP(cB, i1 + 1), SAMPLE_CLAMP(cB, i2 + 1), SAMPLE_CLAMP(cB, i3 + 1));
 
 							cs__m128 A = cs_mm_add_ps(loA, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiA, loA)));
 							cs__m128 B = cs_mm_add_ps(loB, cs_mm_mul_ps(index_frac, cs_mm_sub_ps(hiB, loB)));
@@ -2396,6 +2389,9 @@ void cs_mix()
 						}
 					}	break;
 					}
+
+					#undef SAMPLE_LOOP
+					#undef SAMPLE_CLAMP
 				} else {
 					// No pitch shifting, just add samples together.
 					switch (audio->channel_count) {
@@ -2426,29 +2422,28 @@ void cs_mix()
 				}
 
 				// playing list logic
+				int next_sample = (int)((float)(write_wide * 4) * playing->pitch) + playing->sample_index;
 				playing->sample_index += samples_to_read;
 				CUTE_SOUND_ASSERT(playing->sample_index <= audio->sample_count);
 				if (playing->pitch < 0) {
-					// When pitch shifting is negative adjust the timing a bit further back from sample count to avoid any clipping.
-					if (prev_playing_sample_index - playing->sample_index < 0) {
+					if (playing->sample_index == 0) {
 						if (playing->looped) {
-							playing->sample_index = audio->sample_count - samples_needed;
+							playing->sample_index = CUTE_SOUND_LOOP(next_sample, audio->sample_count);
+
 							write_offset += samples_to_write;
-							samples_needed -= samples_to_write;
-							CUTE_SOUND_ASSERT(samples_needed >= 0);
-							if (samples_needed == 0) break;
+							if (write_offset >= samples_needed) break;
 							goto mix_more;
 						}
 
 						goto remove;
 					}
-				} else if (playing->sample_index == audio->sample_count) {
+				}
+				else if (playing->sample_index == audio->sample_count) {
 					if (playing->looped) {
-						playing->sample_index = 0;
+						playing->sample_index = CUTE_SOUND_LOOP(next_sample, audio->sample_count);
+
 						write_offset += samples_to_write;
-						samples_needed -= samples_to_write;
-						CUTE_SOUND_ASSERT(samples_needed >= 0);
-						if (samples_needed == 0) break;
+						if (write_offset >= samples_needed) break;
 						goto mix_more;
 					}
 
@@ -2603,23 +2598,23 @@ static char* cs_next(char* data)
 	return data + 8 + size;
 }
 
-static void cs_last_element(cs__m128* a, int i, int j, int16_t* samples, int offset)
+static void cs_last_element(cs__m128* a, int i, int j, int m, int16_t* samples, int offset)
 {
 	switch (offset) {
 	case 1:
-		a[i] = cs_mm_set_ps(samples[j], 0.0f, 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps(0.0f, 0.0f, 0.0f, samples[j]);
 		break;
 
 	case 2:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], 0.0f, 0.0f);
+		a[i] = cs_mm_set_ps(0.f, 0.f, samples[j + m], samples[j]);
 		break;
 
 	case 3:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], 0.0f);
+		a[i] = cs_mm_set_ps(0.f, samples[j + m*2], samples[j + m], samples[j]);
 		break;
 
 	case 0:
-		a[i] = cs_mm_set_ps(samples[j], samples[j + 1], samples[j + 2], samples[j + 3]);
+		a[i] = cs_mm_set_ps(samples[j + m*3], samples[j + m*2], samples[j + m], samples[j]);
 		break;
 	}
 }
@@ -2689,9 +2684,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 	{
 		int sample_size = *((uint32_t*)(data + 4));
 		int sample_count = sample_size / (fmt.nChannels * sizeof(uint16_t));
-		//to account for interpolation in the pitch shifter, we lie about length
-		//this fixes random popping at the end of sounds
-		audio->sample_count = sample_count-1;
+		audio->sample_count = sample_count;
 		audio->channel_count = fmt.nChannels;
 
 		int wide_count = (int)CUTE_SOUND_ALIGN(sample_count, 4) / 4;
@@ -2707,7 +2700,7 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4) {
 				a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, 1, samples, wide_offset);
 		}	break;
 
 		case 2:
@@ -2718,8 +2711,8 @@ cs_audio_source_t* cs_read_mem_wav(const void* memory, size_t size, cs_error_t* 
 				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
 				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
-			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 8, 2, samples, wide_offset);
+			cs_last_element(b, wide_count - 1, (wide_count - 1) * 8 + 1, 2, samples, wide_offset);
 			audio->channels[0] = a;
 			audio->channels[1] = b;
 		}	break;
@@ -2847,7 +2840,7 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 			for (int i = 0, j = 0; i < wide_count - 1; ++i, j += 4) {
 				a[i] = cs_mm_set_ps((float)samples[j+3], (float)samples[j+2], (float)samples[j+1], (float)samples[j]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, 1, samples, wide_offset);
 		}	break;
 
 		case 2:
@@ -2857,8 +2850,8 @@ cs_audio_source_t* cs_read_mem_ogg(const void* memory, size_t length, cs_error_t
 				a[i] = cs_mm_set_ps((float)samples[j+6], (float)samples[j+4], (float)samples[j+2], (float)samples[j]);
 				b[i] = cs_mm_set_ps((float)samples[j+7], (float)samples[j+5], (float)samples[j+3], (float)samples[j+1]);
 			}
-			cs_last_element(a, wide_count - 1, (wide_count - 1) * 4, samples, wide_offset);
-			cs_last_element(b, wide_count - 1, (wide_count - 1) * 4 + 4, samples, wide_offset);
+			cs_last_element(a, wide_count - 1, (wide_count - 1) * 8, 2, samples, wide_offset);
+			cs_last_element(b, wide_count - 1, (wide_count - 1) * 8 + 1, 2, samples, wide_offset);
 			break;
 
 		default:
