@@ -577,6 +577,8 @@ static int cp_decode(cp_state_t* s, uint32_t* tree, int hi)
 	return (key >> 4) & 0xFFF;
 }
 
+#define MAX_LEN 384
+
 // 3.2.7
 static int cp_dynamic(cp_state_t* s)
 {
@@ -586,22 +588,52 @@ static int cp_dynamic(cp_state_t* s)
 	int ndst = 1 + cp_read_bits(s, 5);
 	int nlen = 4 + cp_read_bits(s, 4);
 
-	for (int i = 0 ; i < nlen; ++i)
+	for (int i = 0; i < nlen; ++i)
 		lenlens[cp_permutation_order[i]] = (uint8_t)cp_read_bits(s, 3);
 
-	// Build the tree for decoding code lengths
 	s->nlen = cp_build(0, s->len, lenlens, 19);
-	uint8_t lens[288 + 32];
+	uint8_t lens[MAX_LEN];
 
 	for (int n = 0; n < nlit + ndst;)
 	{
+		if (n >= sizeof(lens)) {
+			return 0;
+		}
+
 		int sym = cp_decode(s, s->len, s->nlen);
 		switch (sym)
 		{
-		case 16: for (int i =  3 + cp_read_bits(s, 2); i; --i, ++n) lens[n] = lens[n - 1]; break;
-		case 17: for (int i =  3 + cp_read_bits(s, 3); i; --i, ++n) lens[n] = 0; break;
-		case 18: for (int i = 11 + cp_read_bits(s, 7); i; --i, ++n) lens[n] = 0; break;
-		default: lens[n++] = (uint8_t)sym; break;
+		case 16:
+		{
+			if (n <= 0) return 0;
+			int repeat = 3 + cp_read_bits(s, 2);
+			if (n + repeat > MAX_LEN) return 0;
+			for (int i = 0; i < repeat; ++i, ++n)
+				lens[n] = lens[n - 1];
+			break;
+		}
+		case 17:
+		{
+			int repeat = 3 + cp_read_bits(s, 3);
+			if (n + repeat > MAX_LEN) return 0;
+			for (int i = 0; i < repeat; ++i, ++n)
+				lens[n] = 0;
+			break;
+		}
+		case 18:
+		{
+			int repeat = 11 + cp_read_bits(s, 7);
+			if (n + repeat > MAX_LEN) return 0;
+			for (int i = 0; i < repeat; ++i, ++n)
+				lens[n] = 0;
+			break;
+		}
+		default:
+		{
+			if (n >= MAX_LEN) return 0;
+			lens[n++] = (uint8_t)sym;
+			break;
+		}
 		}
 	}
 
@@ -1175,7 +1207,7 @@ cp_image_t cp_load_png_mem(const void* png_data, int png_length)
 	CUTE_PNG_CHECK(cp_out_size(&img, bpp) >= 1, "invalid image size found");
 
 	out = (uint8_t*)img.pix + cp_out_size(&img, 4) - cp_out_size(&img, bpp);
-	CUTE_PNG_CHECK(cp_inflate(data + 2, datalen - 6, out, pix_bytes), "DEFLATE algorithm failed");
+	CUTE_PNG_CHECK(cp_inflate(data + 2, datalen - 6, out, ((uint8_t*)img.pix + pix_bytes) - out), "DEFLATE algorithm failed");
 	CUTE_PNG_CHECK(cp_unfilter(img.w, img.h, bpp, out), "invalid filter byte found");
 
 	if (color_type == 3)
@@ -1390,7 +1422,7 @@ cp_indexed_image_t cp_load_indexed_png_mem(const void *png_data, int png_length)
 	CUTE_PNG_CHECK(!(data[1] & 0x20), "preset dictionary is present and not supported");
 
 	out = img.pix;
-	CUTE_PNG_CHECK(cp_inflate(data + 2, datalen - 6, out, pix_bytes), "DEFLATE algorithm failed");
+	CUTE_PNG_CHECK(cp_inflate(data + 2, datalen - 6, out, ((uint8_t*)img.pix + pix_bytes) - out), "DEFLATE algorithm failed");
 	CUTE_PNG_CHECK(cp_unfilter(img.w, img.h, bpp, out), "invalid filter byte found");
 	cp_unpack_indexed_rows(img.w, img.h, out, img.pix);
 
