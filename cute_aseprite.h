@@ -98,6 +98,10 @@
 #ifndef CUTE_ASEPRITE_H
 #define CUTE_ASEPRITE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct ase_t ase_t;
 
 ase_t* cute_aseprite_load_from_file(const char* path, void* mem_ctx);
@@ -306,11 +310,19 @@ struct ase_t
 	void* mem_ctx;
 };
 
+#ifdef __cplusplus
+}
+#endif
+
 #endif // CUTE_ASEPRITE_H
 
 #ifdef CUTE_ASEPRITE_IMPLEMENTATION
 #ifndef CUTE_ASEPRITE_IMPLEMENTATION_ONCE
 #define CUTE_ASEPRITE_IMPLEMENTATION_ONCE
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef _CRT_SECURE_NO_WARNINGS
 	#define _CRT_SECURE_NO_WARNINGS
@@ -1313,6 +1325,10 @@ void cute_aseprite_free(ase_t* ase)
 	CUTE_ASEPRITE_FREE(ase->frames, ase->mem_ctx);
 	CUTE_ASEPRITE_FREE(ase, ase->mem_ctx);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CUTE_ASEPRITE_IMPLEMENTATION_ONCE
 #endif // CUTE_ASEPRITE_IMPLEMENTATION
