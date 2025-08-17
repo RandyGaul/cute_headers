@@ -480,6 +480,8 @@ static void tls_recv(TLS_Context* ctx)
 				break;
 			} else {
 				ctx->received += r;
+				if (ctx->received == sizeof(ctx->incoming))
+					break;
 			}
 		}
 	#endif // TLS_WINDOWS

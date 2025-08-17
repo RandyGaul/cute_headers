@@ -335,6 +335,11 @@ struct cute_tiled_layer_t
 	int repeatx;                         // Repeat image in the X direction
 	int repeaty;                         // Repeat image in the Y direction
 	int id;                              // ID of the layer.
+	
+	// used for image-layer
+	int imagewidth;
+	int imageheight;
+
 	cute_tiled_layer_t* next;            // Pointer to the next layer. NULL if final layer.
 };
 
@@ -2254,6 +2259,20 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		case 3133932603199444032U: // id
 			cute_tiled_read_int(m, &layer->id);
+			break;
+
+		case 7796197983149768626: // image-layer imagewidth
+			cute_tiled_read_int(m, &layer->imagewidth);
+			break;
+	
+		case 2114495263010514843: // image-layer imageheight
+			cute_tiled_read_int(m, &layer->imageheight);
+			break;
+
+	case 4827327220562374952: // object-layer color
+		cute_tiled_expect(m, '"');
+		cute_tiled_read_hex_int(m, &layer->tintcolor);
+		cute_tiled_expect(m, '"');
 		break;
 
 		default:
