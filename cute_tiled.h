@@ -1476,6 +1476,13 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), error); \
 	} while (0)
 
+#define cute_tiled_unknown_identifier(m, h) \
+	do { \
+		static char error[256]; \
+		CUTE_TILED_SNPRINTF(error, sizeof(error), "Unknown identifier found: %s, hash: %llu.", m->scratch, h); \
+		CUTE_TILED_CHECK(0, error); \
+    } while (0)
+
 char cute_tiled_parse_char(char c)
 {
 	switch (c)
@@ -2096,7 +2103,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+            cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2276,7 +2283,7 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 		break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2401,7 +2408,7 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2438,7 +2445,7 @@ int cute_tiled_read_point_internal(cute_tiled_map_internal_t* m, int* point_x, i
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2625,7 +2632,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2756,7 +2763,7 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		break;
 
 	default:
-		CUTE_TILED_CHECK(0, "Unknown identifier found.");
+		cute_tiled_unknown_identifier(m, h);
 	}
 
 	return 1;
