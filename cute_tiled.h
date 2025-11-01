@@ -422,7 +422,7 @@ struct cute_tiled_map_t
 	cute_tiled_property_t* properties;   // Array of properties.
 	cute_tiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
     cute_tiled_string_t staggeraxis;     // Which axis is staggered (staggered and hexagonal maps).
-	/* staggerindex */                   // Not currently supported.
+	cute_tiled_string_t staggerindex;    // Whether the “even” or “odd” indexes along the staggered axis are shifted (staggered/hexagonal).
 	cute_tiled_string_t tiledversion;    // The Tiled version used to save the file.
 	int tileheight;                      // Map grid height.
 	cute_tiled_tileset_t* tilesets;      // Linked list of tilesets.
@@ -2722,6 +2722,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
         cute_tiled_intern_string(m, &m->map.staggeraxis);
         break;
 
+    case 16693286153064272296U: // staggerindex
+        cute_tiled_intern_string(m, &m->map.staggerindex);
+        break;
+
 	case 1007832939408977147U: // tiledversion
 		cute_tiled_intern_string(m, &m->map.tiledversion);
 		break;
@@ -2857,6 +2861,7 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
     cute_tiled_deintern_string(m, &m->map.staggeraxis);
+    cute_tiled_deintern_string(m, &m->map.staggerindex);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);
 	cute_tiled_deintern_string(m, &m->map.type);
 	cute_tiled_deintern_properties(m, m->map.properties, m->map.property_count);
