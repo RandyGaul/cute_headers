@@ -421,7 +421,7 @@ struct cute_tiled_map_t
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
 	cute_tiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
-	/* staggeraxis */                    // Not currently supported.
+    cute_tiled_string_t staggeraxis;     // Which axis is staggered (staggered and hexagonal maps).
 	/* staggerindex */                   // Not currently supported.
 	cute_tiled_string_t tiledversion;    // The Tiled version used to save the file.
 	int tileheight;                      // Map grid height.
@@ -2714,6 +2714,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		cute_tiled_intern_string(m, &m->map.renderorder);
 		break;
 
+    case 18082816309487282231U: // staggeraxis
+        cute_tiled_intern_string(m, &m->map.staggeraxis);
+        break;
+
 	case 1007832939408977147U: // tiledversion
 		cute_tiled_intern_string(m, &m->map.tiledversion);
 		break;
@@ -2848,6 +2852,7 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 	cute_tiled_deintern_string(m, &m->map.class_);
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
+    cute_tiled_deintern_string(m, &m->map.staggeraxis);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);
 	cute_tiled_deintern_string(m, &m->map.type);
 	cute_tiled_deintern_properties(m, m->map.properties, m->map.property_count);
