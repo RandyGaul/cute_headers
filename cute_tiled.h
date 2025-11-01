@@ -413,7 +413,7 @@ struct cute_tiled_map_t
 	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t class_;          // The class of the map (since 1.9, optional).
 	int height;                          // Number of tile rows.
-	/* hexsidelength */                  // Not currently supported.
+	int hexsidelength;                   // Width or height (by staggered axis) of the tile’s edge, in pixels (hexagonal).
 	int infinite;                        // Whether the map has infinite dimensions.
 	cute_tiled_layer_t* layers;          // Linked list of layers. Can be NULL.
 	int nextobjectid;                    // Auto-increments for each placed object.
@@ -2678,6 +2678,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 	case 809651598226485190U: // height
 		cute_tiled_read_int(m, &m->map.height);
 		break;
+
+    case 5684465468058326115U: // hexsidelength
+        cute_tiled_read_int(m, &m->map.hexsidelength);
+        break;
 
 	case 16529928297377797591U: // infinite
 		cute_tiled_read_bool(m, &m->map.infinite);
