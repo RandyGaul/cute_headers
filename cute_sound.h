@@ -1918,6 +1918,14 @@ void cs_shutdown()
 	IDirectSoundBuffer_Release(s_ctx->dsound);
 
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_APPLE
+
+        if (s_ctx->inst) {
+                AudioOutputUnitStop(s_ctx->inst);
+                AudioUnitUninitialize(s_ctx->inst);
+                AudioComponentInstanceDispose(s_ctx->inst);
+                s_ctx->inst = NULL;
+        }
+        pthread_mutex_destroy(&s_ctx->mutex);
 #elif CUTE_SOUND_PLATFORM == CUTE_SOUND_SDL
 
 	SDL_DestroyMutex(s_ctx->mutex);
