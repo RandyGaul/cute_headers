@@ -2305,8 +2305,6 @@ void cs_mix()
 				int samples_to_write = (int)(samples_to_read / playing->pitch);
 				int write_wide = CUTE_SOUND_ALIGN(samples_to_write, 4) / 4;
 				int write_offset_wide = (int)CUTE_SOUND_ALIGN(write_offset, 4) / 4;
-				static int written_so_far = 0;
-				written_so_far += samples_to_read;
 
 				// Do the actual mixing: Apply volume, load samples into float buffers.
 				if (playing->pitch != 1.0f) {
