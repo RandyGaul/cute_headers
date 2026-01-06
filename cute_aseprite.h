@@ -39,6 +39,9 @@
 		Special thanks to Richard Mitton for the initial implementation of the
 		zlib inflater.
 
+		Special thanks to Mathew Mariani (@mathewmariani) for the initial
+		implementation of tilesets and tilemaps.
+
 
 	Revision history:
 		1.00 (08/25/2020) initial release
@@ -47,7 +50,7 @@
 		                  ette index, can parse 1.3 files (no tileset support)
 		1.03 (11/27/2023) fixed slice pivot parse bug
   		1.04 (02/20/2024) chunck 0x0004 support
-		1.05 (02/20/2024) support indexed and grayscaled color modes, tileset,
+		1.05 (01/06/2025) support indexed and grayscaled color modes, tileset,
 		                  and tilemaps
 */
 
