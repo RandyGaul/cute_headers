@@ -2900,7 +2900,7 @@ static void cute_tiled_free_map_internal(cute_tiled_map_internal_t* m)
 		while (desc)
 		{
 			if (desc->properties) CUTE_TILED_FREE(desc->properties, m->mem_ctx);
-			if (desc->animation) CUTE_TILED_FREE(desc->animation, mem_ctx);
+			if (desc->animation) CUTE_TILED_FREE(desc->animation, m->mem_ctx);
 			cute_tiled_free_layers(desc->objectgroup, m->mem_ctx);
 			desc = desc->next;
 		}
