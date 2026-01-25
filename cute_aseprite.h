@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_aseprite.h - v1.04
+	cute_aseprite.h - v1.05
 
 	To create implementation (the function definitions)
 		#define CUTE_ASEPRITE_IMPLEMENTATION
@@ -39,6 +39,9 @@
 		Special thanks to Richard Mitton for the initial implementation of the
 		zlib inflater.
 
+		Special thanks to Mathew Mariani (@mathewmariani) for the initial
+		implementation of tilesets and tilemaps.
+
 
 	Revision history:
 		1.00 (08/25/2020) initial release
@@ -47,6 +50,8 @@
 		                  ette index, can parse 1.3 files (no tileset support)
 		1.03 (11/27/2023) fixed slice pivot parse bug
   		1.04 (02/20/2024) chunck 0x0004 support
+		1.05 (01/06/2025) support indexed and grayscaled color modes, tileset,
+		                  and tilemaps
 */
 
 /*
@@ -116,21 +121,35 @@ void cute_aseprite_free(ase_t* aseprite);
 #include <stdint.h>
 
 typedef struct ase_color_t ase_color_t;
+typedef struct ase_grayscale_t ase_grayscale_t;
+typedef struct ase_index_t ase_index_t;
 typedef struct ase_frame_t ase_frame_t;
 typedef struct ase_layer_t ase_layer_t;
 typedef struct ase_cel_t ase_cel_t;
+typedef struct ase_tileset_t ase_tileset_t;
 typedef struct ase_tag_t ase_tag_t;
 typedef struct ase_slice_t ase_slice_t;
 typedef struct ase_palette_entry_t ase_palette_entry_t;
 typedef struct ase_palette_t ase_palette_t;
 typedef struct ase_udata_t ase_udata_t;
 typedef struct ase_cel_extra_chunk_t ase_cel_extra_chunk_t;
+typedef struct ase_cel_tilemap_t ase_cel_tilemap_t;
 typedef struct ase_color_profile_t ase_color_profile_t;
 typedef struct ase_fixed_t ase_fixed_t;
 
 struct ase_color_t
 {
 	uint8_t r, g, b, a;
+};
+
+struct ase_grayscale_t
+{
+	uint8_t v, a;
+};
+
+struct ase_index_t
+{
+	uint8_t i;
 };
 
 struct ase_fixed_t
@@ -171,6 +190,7 @@ struct ase_layer_t
 	const char* name;
 	ase_layer_t* parent;
 	float opacity;
+	int tileset_index;
 	ase_udata_t udata;
 };
 
@@ -182,10 +202,17 @@ struct ase_cel_extra_chunk_t
 	ase_fixed_t w, h;
 };
 
+struct ase_cel_tilemap_t {
+	uint32_t bitmask_id;
+	uint32_t bitmask_xflip;
+	uint32_t bitmask_yflip;
+	uint32_t bitmask_rot;
+};
+
 struct ase_cel_t
 {
 	ase_layer_t* layer;
-	void* pixels;
+	union { void *pixels, *tiles; };
 	int w, h;
 	int x, y;
 	float opacity;
@@ -193,6 +220,18 @@ struct ase_cel_t
 	uint16_t linked_frame_index;
 	int has_extra;
 	ase_cel_extra_chunk_t extra;
+	int is_tilemap;
+	ase_cel_tilemap_t tilemap;
+	ase_udata_t udata;
+};
+
+struct ase_tileset_t {
+	int tile_count;
+	int tile_w;
+	int tile_h;
+	uint16_t base_index;
+	const char *name;
+	void *pixels;
 	ase_udata_t udata;
 };
 
@@ -200,7 +239,7 @@ struct ase_frame_t
 {
 	ase_t* ase;
 	int duration_milliseconds;
-	ase_color_t* pixels;
+	void* pixels;
 	int cel_count;
 	ase_cel_t cels[CUTE_ASEPRITE_MAX_LAYERS];
 };
@@ -294,6 +333,7 @@ struct ase_t
 	int has_color_profile;
 	ase_color_profile_t color_profile;
 	ase_palette_t palette;
+	ase_tileset_t tileset;
 
 	int layer_count;
 	ase_layer_t layers[CUTE_ASEPRITE_MAX_LAYERS];
@@ -910,31 +950,6 @@ static int s_max(int a, int b)
 	return a < b ? b : a;
 }
 
-static ase_color_t s_color(ase_t* ase, void* src, int index)
-{
-	ase_color_t result;
-	if (ase->mode == ASE_MODE_RGBA) {
-		result = ((ase_color_t*)src)[index];
-	} else if (ase->mode == ASE_MODE_GRAYSCALE) {
-		uint8_t saturation = ((uint8_t*)src)[index * 2];
-		uint8_t a = ((uint8_t*)src)[index * 2 + 1];
-		result.r = result.g = result.b = saturation;
-		result.a = a;
-	} else {
-		CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
-		uint8_t palette_index = ((uint8_t*)src)[index];
-		if (palette_index == ase->transparent_palette_entry_index) {
-			result.r = 0;
-			result.g = 0;
-			result.b = 0;
-			result.a = 0;
-		} else {
-			result = ase->palette.entries[palette_index].color;
-		}
-	}
-	return result;
-}
-
 ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ctx)
 {
 	ase_t* ase = (ase_t*)CUTE_ASEPRITE_ALLOC(sizeof(ase_t), mem_ctx);
@@ -979,6 +994,7 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 	ase_udata_t* last_udata = NULL;
 	int was_on_tags = 0;
+	int was_on_tileset = 0;
 	int tag_index = 0;
 
 	ase_layer_t* layer_stack[CUTE_ASEPRITE_MAX_LAYERS];
@@ -1049,6 +1065,9 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				s_skip(s, 3); // For future use (set to zero).
 				layer->name = s_read_string(s);
 				last_udata = &layer->udata;
+				if (layer->type == 2) {
+					layer->tileset_index = (int) s_read_uint32(s);
+				}
 			}	break;
 
 			case 0x2005: // Cel chunk.
@@ -1092,6 +1111,31 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 					int ret = s_inflate(pixels, deflate_bytes, pixels_decompressed, pixels_sz, mem_ctx);
 					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
 					cel->pixels = pixels_decompressed;
+					s_skip(s, deflate_bytes);
+				}	break;
+				case 3: // Compressed tilemap.
+				{
+					cel->is_tilemap = 1;
+					cel->w = s_read_uint16(s);
+					cel->h = s_read_uint16(s);
+					uint16_t bpt = s_read_uint16(s); // at the moment it's always 32-bit per tile
+					cel->tilemap.bitmask_id = s_read_uint32(s);
+					cel->tilemap.bitmask_xflip = s_read_uint32(s);
+					cel->tilemap.bitmask_yflip = s_read_uint32(s);
+					cel->tilemap.bitmask_rot = s_read_uint32(s);
+					s_skip(s, 10); // Reserved.
+					int zlib_byte0 = s_read_uint8(s);
+					int zlib_byte1 = s_read_uint8(s);
+					int deflate_bytes = (int) chunk_size - (int) (s->in - chunk_start);
+					void *tiles = s->in;
+					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0x0F) == 0x08); // Only zlib compression method (RFC 1950) is supported.
+					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0xF0) <= 0x70); // Innapropriate window size detected.
+					CUTE_ASEPRITE_ASSERT(!(zlib_byte1 &0x20)); // Preset dictionary is present and not supported.
+					int tiles_sz = cel->w * cel->h * bpt;
+					void *tiles_decompressed = CUTE_ASEPRITE_ALLOC(tiles_sz, mem_ctx);
+					int ret = s_inflate(tiles, deflate_bytes, tiles_decompressed, tiles_sz, mem_ctx);
+					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
+					cel->tiles = tiles_decompressed;
 					s_skip(s, deflate_bytes);
 				}	break;
 				}
@@ -1172,12 +1216,15 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 
 			case 0x2020: // Udata chunk.
 			{
-				CUTE_ASEPRITE_ASSERT(last_udata || was_on_tags);
+				CUTE_ASEPRITE_ASSERT(last_udata || was_on_tags || was_on_tileset);
 				if (was_on_tags && !last_udata) {
 					CUTE_ASEPRITE_ASSERT(tag_index < ase->tag_count);
 					last_udata = &ase->tags[tag_index++].udata;
 				}
-				int flags = (int)s_read_uint32(s);
+				if (was_on_tileset && !last_udata) {
+					last_udata = &ase->tileset.udata;
+				}
+				int flags = (int) s_read_uint32(s);
 				if (flags & 1) {
 					last_udata->has_text = 1;
 					last_udata->text = s_read_string(s);
@@ -1226,6 +1273,42 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 				}
 			}	break;
 
+			case 0x2023:// Tileset chunk.
+			{
+				ase_tileset_t *tileset = &ase->tileset;
+				int tileset_id = (int) s_read_uint32(s);
+				int tileset_flag = (int) s_read_uint32(s);
+				tileset->tile_count = (int) s_read_uint32(s);
+				tileset->tile_w = (int) s_read_int16(s);
+				tileset->tile_h = (int) s_read_int16(s);
+				tileset->base_index = s_read_int16(s);
+				s_skip(s, 14); // Reserved
+				tileset->name = s_read_string(s);
+
+				if (tileset_flag & 1) {
+					s_skip(s, (int) chunk_size); // Unsure how to handle this case
+				}
+				if (tileset_flag & 2) {
+					int compressed_data_length = (int) s_read_uint32(s);
+
+					int zlib_byte0 = s_read_uint8(s);
+					int zlib_byte1 = s_read_uint8(s);
+					int deflate_bytes = (int) chunk_size - (int) (s->in - chunk_start);
+					// int deflate_bytes = compressed_data_length;
+					void *tiles = s->in;
+					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0x0F) == 0x08); // Only zlib compression method (RFC 1950) is supported.
+					CUTE_ASEPRITE_ASSERT((zlib_byte0 & 0xF0) <=	0x70); // Innapropriate window size detected.
+					CUTE_ASEPRITE_ASSERT(!(zlib_byte1 & 0x20)); // Preset dictionary is present and not supported.
+					int tiles_sz = (tileset->tile_w * (tileset->tile_h * tileset->tile_count)) * bpp;
+					void *tiles_decompressed = CUTE_ASEPRITE_ALLOC(tiles_sz, mem_ctx);
+					int ret = s_inflate(tiles, deflate_bytes, tiles_decompressed, tiles_sz, mem_ctx);
+					if (!ret) CUTE_ASEPRITE_WARNING(s_error_reason);
+					tileset->pixels = tiles_decompressed;
+					s_skip(s, deflate_bytes);
+				}
+				was_on_tileset = 1;
+			} break;
+
 			default:
 				s_skip(s, (int)chunk_size);
 				break;
@@ -1239,9 +1322,18 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	// Blend all cel pixels into each of their respective frames, for convenience.
 	for (int i = 0; i < ase->frame_count; ++i) {
 		ase_frame_t* frame = ase->frames + i;
-		frame->pixels = (ase_color_t*)CUTE_ASEPRITE_ALLOC((int)(sizeof(ase_color_t)) * ase->w * ase->h, mem_ctx);
-		CUTE_ASEPRITE_MEMSET(frame->pixels, 0, sizeof(ase_color_t) * (size_t)ase->w * (size_t)ase->h);
-		ase_color_t* dst = frame->pixels;
+		int size;
+		if (ase->mode == ASE_MODE_RGBA) {
+			size = (int) (sizeof(ase_color_t)) * ase->w * ase->h;
+		} else if(ase->mode == ASE_MODE_GRAYSCALE) {
+			size = (int) (sizeof(ase_grayscale_t)) * ase->w * ase->h;
+		} else {
+			CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
+			size = (int) (sizeof(ase_index_t)) * ase->w * ase->h;
+		}
+		frame->pixels = CUTE_ASEPRITE_ALLOC(size, mem_ctx);
+		CUTE_ASEPRITE_MEMSET(frame->pixels, 0, size);
+		void* dst = frame->pixels;
 		for (int j = 0; j < frame->cel_count; ++j) {
 			ase_cel_t* cel = frame->cels + j;
 			if (!(cel->layer->flags & ASE_LAYER_FLAGS_VISIBLE)) {
@@ -1278,10 +1370,19 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			for (int dx = dl, sx = cl; dx < dr; dx++, sx++) {
 				for (int dy = dt, sy = ct; dy < db; dy++, sy++) {
 					int dst_index = aw * dy + dx;
-					ase_color_t src_color = s_color(ase, src, cw * sy + sx);
-					ase_color_t dst_color = dst[dst_index];
-					ase_color_t result = s_blend(src_color, dst_color, opacity);
-					dst[dst_index] = result;
+					if (ase->mode == ASE_MODE_RGBA) {
+						ase_color_t *d = (ase_color_t *) dst;
+						ase_color_t src_color = ((ase_color_t *) src)[cw * sy + sx];
+						ase_color_t dst_color = d[dst_index];
+						ase_color_t result = s_blend(src_color, dst_color, opacity);
+						d[dst_index] = result;
+					} else if (ase->mode == ASE_MODE_GRAYSCALE) {
+						ase_grayscale_t *d = (ase_grayscale_t *) dst;
+						d[dst_index] = ((ase_grayscale_t *) src)[cw * sy + sx];
+					} else {
+						ase_index_t *d = (ase_index_t *) dst;
+						d[dst_index] = ((ase_index_t *) src)[cw * sy + sx];
+					}
 				}
 			}
 		}
