@@ -33,6 +33,7 @@
 		1.05 (07/19/2020) support for Tiled 1.4.1 and tileset tile animations
 		1.06 (04/05/2021) support for Tiled 1.5.0 parallax
 		1.07 (03/01/2022) support for c89
+		1.08 (25/01/2026) added chunks for infinite maps
 */
 
 /*
@@ -42,6 +43,7 @@
 		tanis2000         1.03 - Help with updating to Tiled 1.2.1 JSON format
 		aganm             1.04 - Help with updating to Tiled 1.3.3 JSON format
 		mupf              1.07 - Adding support for C89
+		Ghoose            1.08 - Adding infinite map support
 */
 
 /*
@@ -73,6 +75,32 @@
 		Finally, free it like so:
 
 			cute_tiled_free_map(map);
+
+        To access fields in infinite maps you will need to loop through the chunks in each layer, e.g.:
+
+			// get map width and height
+			int w = map->width;
+			int h = map->height;
+
+			// loop over the map's layers
+			cute_tiled_layer_t* layer = map->layers;
+			while (layer)
+			{
+				cute_tiled_chunk_t* chunk = layer->chunks;
+				while (chunk)
+				{
+					int* data = chunk->data;
+					int data_count = chunk->data_count;
+
+					// do something with the tile data
+					UserFunction_HandleTiles(data, data_count);
+
+					chunk = chunk->next;
+				}
+
+				layer = layer->next;
+			}
+
 
 	LIMITATIONS
 
@@ -304,9 +332,21 @@ static CUTE_TILED_INLINE void cute_tiled_get_flags(int tile_data_gid, int* flip_
 	*flip_diagonal = !!(tile_data_gid & CUTE_TILED_FLIPPED_DIAGONALLY_FLAG);
 }
 
+struct cute_tiled_chunk_t
+{
+	int data_count;                      // number of integers in `data`
+	int* data;                           // Array of GIDs. `tilelayer` only. Only support CSV style exports.
+	int width;                           // Column count
+	int height;                          // Row count
+	int x;                               // Horizontal offset in tiles, aka the chunk's horizontal position
+	int y;                               // Vertical offset in tiles, aka the chunk's vertical position
+
+	cute_tiled_chunk_t* next;            // Pointer to the next chunk, NULL if final chunk
+};
+
 struct cute_tiled_layer_t
 {
-	/* chunks */                         // Not currently supported.
+	cute_tiled_chunk_t* chunks;          // Linked list of chunks. NULL if map is not infinite
 	cute_tiled_string_t class_;          // The class of the layer (since 1.9, optional).
 	/* compression; */                   // Not currently supported.
 	int data_count;                      // Number of integers in `data`.
@@ -320,6 +360,8 @@ struct cute_tiled_layer_t
 	float offsetx;                       // Horizontal layer offset.
 	float offsety;                       // Vertical layer offset.
 	float opacity;                       // Value between 0 and 1.
+	int startx;                          // X coordinate where layer content starts (for infinite maps)
+	int starty;                          // Y coordinate where layer content starts (for infinite maps)
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
 	uint32_t transparentcolor;           // Hex-formatted color (#AARRGGBB) (optional).
@@ -335,7 +377,7 @@ struct cute_tiled_layer_t
 	int repeatx;                         // Repeat image in the X direction
 	int repeaty;                         // Repeat image in the Y direction
 	int id;                              // ID of the layer.
-	
+
 	// used for image-layer
 	int imagewidth;
 	int imageheight;
@@ -2109,14 +2151,10 @@ cute_tiled_err:
 	return 0;
 }
 
-cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
-{
-	cute_tiled_layer_t* layer = (cute_tiled_layer_t*)cute_tiled_alloc(m, sizeof(cute_tiled_layer_t));
-	CUTE_TILED_MEMSET(layer, 0, sizeof(cute_tiled_layer_t));
-	layer->parallaxx = 1.0f;
-	layer->parallaxy = 1.0f;
-	layer->repeatx = 0;
-	layer->repeaty = 0;
+cute_tiled_chunk_t* cute_tiled_chunks(cute_tiled_map_internal_t* m) {
+	cute_tiled_chunk_t* chunk = (cute_tiled_chunk_t*)cute_tiled_alloc(m, sizeof(cute_tiled_chunk_t));
+
+	CUTE_TILED_MEMSET(chunk, 0, sizeof(cute_tiled_layer_t));
 
 	cute_tiled_expect(m, '{');
 
@@ -2129,6 +2167,76 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 
 		switch (h)
 		{
+		case 4430454992770877055U: // data
+			CUTE_TILED_CHECK(cute_tiled_peak(m) == '[', "The expected tile format is CSV (uncompressed). It looks like Base64 (uncompressed) was selected. Please see the docs if you are interested in compression.");
+			cute_tiled_expect(m, '[');
+			cute_tiled_read_csv_integers(m, &chunk->data_count, &chunk->data);
+			break;
+
+		case 809651598226485190U: // height
+			cute_tiled_read_int(m, &chunk->height);
+			break;
+
+		case 7400839267610537869U: // width
+			cute_tiled_read_int(m, &chunk->width);
+			break;
+
+		case 644252274336276709U: // x
+			cute_tiled_read_int(m, &chunk->x);
+			break;
+
+		case 643295699219922364U: // y
+			cute_tiled_read_int(m, &chunk->y);
+			break;
+        }
+
+		cute_tiled_try(m, ',');
+    }
+
+	cute_tiled_expect(m, '}');
+	return chunk;
+
+cute_tiled_err:
+	return 0;
+}
+
+cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
+{
+	cute_tiled_layer_t* layer = (cute_tiled_layer_t*)cute_tiled_alloc(m, sizeof(cute_tiled_layer_t));
+	CUTE_TILED_MEMSET(layer, 0, sizeof(cute_tiled_layer_t));
+	layer->parallaxx = 1.0f;
+	layer->parallaxy = 1.0f;
+	layer->repeatx = 0;
+	layer->repeaty = 0;
+
+	cute_tiled_expect(m, '{');
+
+
+	while (cute_tiled_peak(m) != '}')
+	{
+		CUTE_TILED_U64 h;
+		cute_tiled_read_string(m);
+		cute_tiled_expect(m, ':');
+		h = cute_tiled_FNV1a(m->scratch, m->scratch_len + 1);
+
+		switch (h)
+		{
+        case 16604818415630589433U: // chunks
+            cute_tiled_expect(m, '[');
+
+            while (cute_tiled_peak(m) != ']')
+            {
+                cute_tiled_chunk_t* chunk = cute_tiled_chunks(m);
+                CUTE_TILED_FAIL_IF(!chunk);
+                chunk->next = layer->chunks;
+                layer->chunks = chunk;
+                // layer->next = m->map.layers;
+                // m->map.layers = layer;
+                cute_tiled_try(m, ',');
+            }
+
+            cute_tiled_expect(m, ']');
+            break;
 		case 1485919047363370797U: // class
 			cute_tiled_intern_string(m, &layer->class_);
 			break;
@@ -2205,6 +2313,14 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 			cute_tiled_read_float(m, &layer->opacity);
 			break;
 
+        case 14335666674294018687U: // startX
+            cute_tiled_read_int(m, &layer->startx);
+            break;
+
+        case 14334710099177664342U: // startY
+            cute_tiled_read_int(m, &layer->starty);
+            break;
+
 		case 8368542207491637236U: // properties
 			cute_tiled_read_properties(m, &layer->properties, &layer->property_count);
 			break;
@@ -2264,7 +2380,7 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 		case 7796197983149768626: // image-layer imagewidth
 			cute_tiled_read_int(m, &layer->imagewidth);
 			break;
-	
+
 		case 2114495263010514843: // image-layer imageheight
 			cute_tiled_read_int(m, &layer->imageheight);
 			break;
@@ -2868,6 +2984,17 @@ static void cute_tiled_free_objects(cute_tiled_object_t* objects, void* mem_ctx)
 	}
 }
 
+static void cute_tiled_free_chunks(cute_tiled_chunk_t* chunks, void* mem_ctx)
+{
+	cute_tiled_chunk_t* chunk = chunks;
+	CUTE_TILED_UNUSED(mem_ctx);
+	while (chunk)
+	{
+		if (chunk->data) CUTE_TILED_FREE(chunk->data, mem_ctx);
+		chunk = chunk->next;
+	}
+}
+
 static void cute_tiled_free_layers(cute_tiled_layer_t* layers, void* mem_ctx)
 {
 	cute_tiled_layer_t* layer = layers;
@@ -2877,6 +3004,7 @@ static void cute_tiled_free_layers(cute_tiled_layer_t* layers, void* mem_ctx)
 		if (layer->data) CUTE_TILED_FREE(layer->data, mem_ctx);
 		if (layer->properties) CUTE_TILED_FREE(layer->properties, mem_ctx);
 		cute_tiled_free_layers(layer->layers, mem_ctx);
+		cute_tiled_free_chunks(layer->chunks, mem_ctx);
 		cute_tiled_free_objects(layer->objects, mem_ctx);
 		layer = layer->next;
 	}
@@ -2990,6 +3118,7 @@ cute_tiled_map_t* cute_tiled_load_map_from_memory(const void* memory, int size_i
 	while (layer)
 	{
 		CUTE_TILED_REVERSE_LIST(cute_tiled_object_t, layer->objects);
+		CUTE_TILED_REVERSE_LIST(cute_tiled_chunk_t, layer->chunks);
 		layer = layer->next;
 	}
 	while (tileset)
