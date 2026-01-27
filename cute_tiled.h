@@ -990,7 +990,6 @@ static void strpool_embedded_internal_expand_handles( strpool_embedded_t* pool )
 
 static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* pool, int size, int* alloc_size )
     {
-    char* data;
     int i;
     int offset;
     if( size < (int)sizeof( strpool_embedded_internal_free_block_t ) ) size = sizeof( strpool_embedded_internal_free_block_t );
@@ -1041,7 +1040,7 @@ static char* strpool_embedded_internal_get_data_storage( strpool_embedded_t* poo
 
     // Allocate a new block
     pool->current_block = strpool_embedded_internal_add_block( pool, size > pool->block_size ? size : pool->block_size );
-    data = pool->blocks[ pool->current_block ].tail;
+    char *data = pool->blocks[ pool->current_block ].tail;
     pool->blocks[ pool->current_block ].tail += size;
     *alloc_size = size;
     return data;
@@ -1055,8 +1054,6 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
     int base_count;
     int slot;
     int first_free;
-    int handle_index;
-    strpool_embedded_internal_entry_t* entry;
     int data_size;
     char* data;
     if( !string || length < 0 ) return 0;
@@ -1133,6 +1130,8 @@ STRPOOL_EMBEDDED_U64 strpool_embedded_inject( strpool_embedded_t* pool, char con
     pool->hash_table[ slot ].entry_index = pool->entry_count;
     ++pool->hash_table[ base_slot ].base_count;
 
+	int handle_index;
+    strpool_embedded_internal_entry_t* entry;
     if( pool->handle_count < pool->handle_capacity )
         {
         handle_index = pool->handle_count;
