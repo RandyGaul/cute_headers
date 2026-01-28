@@ -1,8 +1,21 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+void* dummy_alloc(size_t size, void* ctx) {
+    (void)ctx;
+    return malloc(size);
+}
+
+void dummy_free(void* ptr, void* ctx) {
+    (void)ctx;
+    free(ptr);
+}
+
 #define CUTE_TILED_IMPLEMENTATION
+#define CUTE_TILED_ALLOC(size, ctx) dummy_alloc(size, ctx)
+#define CUTE_TILED_FREE(ptr, ctx) dummy_free(ptr, ctx)
 #include "cute_tiled.h"
 
 int main() {
