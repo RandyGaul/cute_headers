@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_spritebatch.h - v1.06
+	cute_spritebatch.h - v1.08
 
 	To create implementation (the function definitions)
 		#define SPRITEBATCH_IMPLEMENTATION
@@ -144,6 +144,10 @@
 		                  etry in sprites. Added `spritebatch_register_premade_atlas`, a
 		                  way to inject premade atlases into spritebatch
 		1.06 (03/24/2023) added `spritebatch_invalidate`, useful for updating pixels NOW
+		1.07 (10/01/2024) Removed public `sort_bits` since it's not actually useful, and
+		                  reused it internally to implement stable sorting (bugfix).
+		1.08 (02/01/2026) Replaced external hashtable.h with simpler internal spritebatch_map_t,
+		                  fixed memory context bugs in spritebatch_term and get_pixels.
 */
 
 /*
@@ -202,8 +206,11 @@ struct spritebatch_sprite_t
 
 	// `texture_id` can be set to zero. This value will be overwritten with a valid
 	// texture id before batches are reported back to you. This id will map to an
-	// atlas created internally.
+	// atlas created internally. For premade atlases you must set this yourself.
 	SPRITEBATCH_U64 texture_id;
+
+	// For internal use. Will get overwritten.
+	int sort_bits;
 
 	// Contains all of the sprite's geometry. By default this is just a scale +
 	// translation + rotation. However, you can overload this macro to use your own
@@ -211,12 +218,8 @@ struct spritebatch_sprite_t
 	SPRITEBATCH_SPRITE_GEOMETRY geom;
 
 	int w, h;         // width and height of this sprite's image in pixels
-	float minx, miny; // u coordinate - this will be overwritten
-	float maxx, maxy; // v coordinate - this will be overwritten
-
-	// This field is *completely optional* -- just set it to zero if you don't want to bother.
-	// User-defined sorting key, see: http://realtimecollisiondetection.net/blog/?p=86
-	int sort_bits;
+	float minx, miny; // u coordinate - this will be overwritten, except for premade sprites
+	float maxx, maxy; // v coordinate - this will be overwritten, except for premade sprites
 
 	// This is a *completely optional* feature. You can insert your own user data
 	// struct into each sprite. It is *never* touched internally, and simply handed
@@ -227,7 +230,7 @@ struct spritebatch_sprite_t
 };
 
 // Pushes a sprite onto an internal buffer. Does no other logic.
-int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
+void spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite);
 
 // Ensures the image associated with your unique `image_id` is loaded up into spritebatch. This
 // function pretends to draw a sprite referencing `image_id` but doesn't actually do any
@@ -259,6 +262,10 @@ void spritebatch_tick(spritebatch_t* sb);
 // from the image via `get_pixels_fn` and request a texture handle via `generate_texture_handle_fn`.
 // Returns the number of batches created and submitted.
 int spritebatch_flush(spritebatch_t* sb);
+
+// Clears buffers from `spritebatch_flush` in case you need to bail on rendering for any reason, such
+// as working with deferred contexts.
+void spritebatch_clear(spritebatch_t* sb);
 
 // All textures created so far by `spritebatch_flush` will be considered as candidates for creating
 // new internal texture atlases. Internal texture atlases compress images together inside of one
@@ -330,9 +337,7 @@ typedef void (destroy_texture_handle_fn)(SPRITEBATCH_U64 texture_id, void* udata
 //     {
 //         std::sort(sprites, sprites + count,
 //         [](const spritebatch_sprite_t& a, const spritebatch_sprite_t& b) {
-//             if (a.sort_bits < b.sort_bits) return true;
-//             if (a.sort_bits == b.sort_bits && a.texture_id < b.texture_id) return true;
-//             return false;
+//             return a.texture_id < b.texture_id;
 //         });
 //     };
 typedef void (sprites_sorter_fn)(spritebatch_sprite_t* sprites, int count);
@@ -373,89 +378,28 @@ struct spritebatch_config_t
 
 #if !defined(SPRITE_BATCH_INTERNAL_H)
 
-// hashtable.h implementation by Mattias Gustavsson
-// See: http://www.mattiasgustavsson.com/ and https://github.com/mattiasgustavsson/libs/blob/master/hashtable.h
-// begin hashtable.h
+// spritebatch_map_t - A simple hash map for SPRITEBATCH_U64 keys to fixed-size values.
+// Uses open addressing with linear probing and maintains a dense item array for fast iteration.
 
-/*
-------------------------------------------------------------------------------
-          Licensing information can be found at the end of the file.
-------------------------------------------------------------------------------
+typedef struct spritebatch_map_slot_t
+{
+	unsigned key_hash;
+	int item_index;
+	int base_count;
+} spritebatch_map_slot_t;
 
-hashtable.h - v1.1 - Cache efficient hash table implementation for C/C++.
-
-Do this:
-    #define HASHTABLE_IMPLEMENTATION
-before you include this file in *one* C/C++ file to create the implementation.
-*/
-
-#ifndef hashtable_h
-#define hashtable_h
-
-#ifndef HASHTABLE_U64
-    #define HASHTABLE_U64 unsigned long long
-#endif
-
-typedef struct hashtable_t hashtable_t;
-
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx );
-void hashtable_term( hashtable_t* table );
-
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item );
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key );
-void hashtable_clear( hashtable_t* table );
-
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key );
-
-int hashtable_count( hashtable_t const* table );
-void* hashtable_items( hashtable_t const* table );
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table );
-
-void hashtable_swap( hashtable_t* table, int index_a, int index_b );
-
-
-#endif /* hashtable_h */
-
-/*
-----------------------
-    IMPLEMENTATION
-----------------------
-*/
-
-#ifndef hashtable_t_h
-#define hashtable_t_h
-
-#ifndef HASHTABLE_U32
-    #define HASHTABLE_U32 unsigned int
-#endif
-
-struct hashtable_internal_slot_t
-    {
-    HASHTABLE_U32 key_hash;
-    int item_index;
-    int base_count;
-    };
-
-struct hashtable_t
-    {
-    void* memctx;
-    int count;
-    int item_size;
-
-    struct hashtable_internal_slot_t* slots;
-    int slot_capacity;
-
-    HASHTABLE_U64* items_key;
-    int* items_slot;
-    void* items_data;
-    int item_capacity;
-
-    void* swap_temp;
-    };
-
-#endif /* hashtable_t_h */
-
-// end hashtable.h (more later)
+typedef struct spritebatch_map_t
+{
+	void* mem_ctx;
+	int count;
+	int item_size;
+	spritebatch_map_slot_t* slots;
+	int slot_capacity;
+	SPRITEBATCH_U64* keys;
+	int* item_slots;
+	void* items;
+	int item_capacity;
+} spritebatch_map_t;
 
 typedef struct spritebatch_internal_sprite_t
 {
@@ -483,7 +427,7 @@ typedef struct spritebatch_internal_atlas_t
 {
 	SPRITEBATCH_U64 texture_id;
 	float volume_ratio;
-	hashtable_t sprites_to_textures;
+	spritebatch_map_t sprites_to_textures;
 	struct spritebatch_internal_atlas_t* next;
 	struct spritebatch_internal_atlas_t* prev;
 } spritebatch_internal_atlas_t;
@@ -522,12 +466,13 @@ struct spritebatch_t
 	int pixel_buffer_size; // number of pixels
 	void* pixel_buffer;
 
-	hashtable_t sprites_to_premades;
-	hashtable_t sprites_to_lonely_textures;
-	hashtable_t sprites_to_atlases;
+	spritebatch_map_t sprites_to_premades;
+	spritebatch_map_t sprites_to_lonely_textures;
+	spritebatch_map_t sprites_to_atlases;
 
 	spritebatch_internal_atlas_t* atlases;
 
+	int sort_id;
 	int pixel_stride;
 	int atlas_width_in_pixels;
 	int atlas_height_in_pixels;
@@ -602,22 +547,6 @@ struct spritebatch_t
 	#endif
 #endif
 
-#ifndef HASHTABLE_MEMSET
-	#define HASHTABLE_MEMSET(ptr, val, n) SPRITEBATCH_MEMSET(ptr, val, n)
-#endif
-
-#ifndef HASHTABLE_MEMCPY
-	#define HASHTABLE_MEMCPY(dst, src, n) SPRITEBATCH_MEMCPY(dst, src, n)
-#endif
-
-#ifndef HASHTABLE_MALLOC
-	#define HASHTABLE_MALLOC(ctx, size) SPRITEBATCH_MALLOC(size, ctx)
-#endif
-
-#ifndef HASHTABLE_FREE
-	#define HASHTABLE_FREE(ctx, ptr) SPRITEBATCH_FREE(ptr, ctx)
-#endif
-
 #define SPRITE_BATCH_INTERNAL_H
 #endif
 
@@ -625,393 +554,245 @@ struct spritebatch_t
 #ifndef SPRITEBATCH_IMPLEMENTATION_ONCE
 #define SPRITEBATCH_IMPLEMENTATION_ONCE
 
-#define HASHTABLE_IMPLEMENTATION
-
-#ifdef HASHTABLE_IMPLEMENTATION
-#ifndef HASHTABLE_IMPLEMENTATION_ONCE
-#define HASHTABLE_IMPLEMENTATION_ONCE
-
-// hashtable.h implementation by Mattias Gustavsson
-// See: http://www.mattiasgustavsson.com/ and https://github.com/mattiasgustavsson/libs/blob/master/hashtable.h
-// begin hashtable.h (continuing from first time)
-
-#ifndef HASHTABLE_SIZE_T
-    #include <stddef.h>
-    #define HASHTABLE_SIZE_T size_t
-#endif
-
-#ifndef HASHTABLE_ASSERT
-    #include <assert.h>
-    #define HASHTABLE_ASSERT( x ) assert( x )
-#endif
-
-#ifndef HASHTABLE_MEMSET
-    #include <string.h>
-    #define HASHTABLE_MEMSET( ptr, val, cnt ) ( memset( ptr, val, cnt ) )
-#endif 
-
-#ifndef HASHTABLE_MEMCPY
-    #include <string.h>
-    #define HASHTABLE_MEMCPY( dst, src, cnt ) ( memcpy( dst, src, cnt ) )
-#endif 
-
-#ifndef HASHTABLE_MALLOC
-    #include <stdlib.h>
-    #define HASHTABLE_MALLOC( ctx, size ) ( malloc( size ) )
-    #define HASHTABLE_FREE( ctx, ptr ) ( free( ptr ) )
-#endif
-
-
-static HASHTABLE_U32 hashtable_internal_pow2ceil( HASHTABLE_U32 v )
-    {
-    --v;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    ++v;
-    v += ( v == 0 );
-    return v;
-    }
-
-
-void hashtable_init( hashtable_t* table, int item_size, int initial_capacity, void* memctx )
-    {
-    initial_capacity = (int)hashtable_internal_pow2ceil( initial_capacity >=0 ? (HASHTABLE_U32) initial_capacity : 32U );
-    table->memctx = memctx;
-    table->count = 0;
-    table->item_size = item_size;
-    table->slot_capacity = (int) hashtable_internal_pow2ceil( (HASHTABLE_U32) ( initial_capacity + initial_capacity / 2 ) );
-    int slots_size = (int)( table->slot_capacity * sizeof( *table->slots ) );
-    table->slots = (struct hashtable_internal_slot_t*) HASHTABLE_MALLOC( table->memctx, (HASHTABLE_SIZE_T) slots_size );
-    HASHTABLE_ASSERT( table->slots );
-    HASHTABLE_MEMSET( table->slots, 0, (HASHTABLE_SIZE_T) slots_size );
-    table->item_capacity = (int) hashtable_internal_pow2ceil( (HASHTABLE_U32) initial_capacity );
-    table->items_key = (HASHTABLE_U64*) HASHTABLE_MALLOC( table->memctx,
-        table->item_capacity * ( sizeof( *table->items_key ) + sizeof( *table->items_slot ) + table->item_size ) + table->item_size );
-    HASHTABLE_ASSERT( table->items_key );
-    table->items_slot = (int*)( table->items_key + table->item_capacity );
-    table->items_data = (void*)( table->items_slot + table->item_capacity );
-    table->swap_temp = (void*)( ( (uintptr_t) table->items_data ) + table->item_size * table->item_capacity ); 
-    }
-
-
-void hashtable_term( hashtable_t* table )
-    {
-    HASHTABLE_FREE( table->memctx, table->items_key );
-    HASHTABLE_FREE( table->memctx, table->slots );
-    }
-
-
-// from https://gist.github.com/badboy/6267743
-static HASHTABLE_U32 hashtable_internal_calculate_hash( HASHTABLE_U64 key )
-    {
-    key = ( ~key ) + ( key << 18 );
-    key = key ^ ( key >> 31 );
-    key = key * 21;
-    key = key ^ ( key >> 11 );
-    key = key + ( key << 6 );
-    key = key ^ ( key >> 22 );  
-    HASHTABLE_ASSERT( key );
-    return (HASHTABLE_U32) key;
-    }
-
-
-static int hashtable_internal_find_slot( hashtable_t const* table, HASHTABLE_U64 key )
-    {
-    int const slot_mask = table->slot_capacity - 1;
-    HASHTABLE_U32 const hash = hashtable_internal_calculate_hash( key );
-
-    int const base_slot = (int)( hash & (HASHTABLE_U32)slot_mask );
-    int base_count = table->slots[ base_slot ].base_count;
-    int slot = base_slot;
-
-    while( base_count > 0 )
-        {
-        HASHTABLE_U32 slot_hash = table->slots[ slot ].key_hash;
-        if( slot_hash )
-            {
-            int slot_base = (int)( slot_hash & (HASHTABLE_U32)slot_mask );
-            if( slot_base == base_slot ) 
-                {
-                HASHTABLE_ASSERT( base_count > 0 );
-                --base_count;
-                if( slot_hash == hash && table->items_key[ table->slots[ slot ].item_index ] == key )
-                    return slot;
-                }
-            }
-        slot = ( slot + 1 ) & slot_mask;
-        }   
-
-    return -1;
-    }
-
-
-static void hashtable_internal_expand_slots( hashtable_t* table )
-    {
-    int const old_capacity = table->slot_capacity;
-    struct hashtable_internal_slot_t* old_slots = table->slots;
-
-    table->slot_capacity *= 2;
-    int const slot_mask = table->slot_capacity - 1;
-
-    int const size = (int)( table->slot_capacity * sizeof( *table->slots ) );
-    table->slots = (struct hashtable_internal_slot_t*) HASHTABLE_MALLOC( table->memctx, (HASHTABLE_SIZE_T) size );
-    HASHTABLE_ASSERT( table->slots );
-    HASHTABLE_MEMSET( table->slots, 0, (HASHTABLE_SIZE_T) size );
-
-    for( int i = 0; i < old_capacity; ++i )
-        {
-        HASHTABLE_U32 const hash = old_slots[ i ].key_hash;
-        if( hash )
-            {
-            int const base_slot = (int)( hash & (HASHTABLE_U32)slot_mask );
-            int slot = base_slot;
-            while( table->slots[ slot ].key_hash )
-                slot = ( slot + 1 ) & slot_mask;
-            table->slots[ slot ].key_hash = hash;
-            int item_index = old_slots[ i ].item_index;
-            table->slots[ slot ].item_index = item_index;
-            table->items_slot[ item_index ] = slot; 
-            ++table->slots[ base_slot ].base_count;
-            }               
-        }
-
-    HASHTABLE_FREE( table->memctx, old_slots );
-    }
-
-
-static void hashtable_internal_expand_items( hashtable_t* table )
-    {
-    table->item_capacity *= 2;
-     HASHTABLE_U64* const new_items_key = (HASHTABLE_U64*) HASHTABLE_MALLOC( table->memctx, 
-         table->item_capacity * ( sizeof( *table->items_key ) + sizeof( *table->items_slot ) + table->item_size ) + table->item_size);
-    HASHTABLE_ASSERT( new_items_key );
-
-    int* const new_items_slot = (int*)( new_items_key + table->item_capacity );
-    void* const new_items_data = (void*)( new_items_slot + table->item_capacity );
-    void* const new_swap_temp = (void*)( ( (uintptr_t) new_items_data ) + table->item_size * table->item_capacity ); 
-
-    HASHTABLE_MEMCPY( new_items_key, table->items_key, table->count * sizeof( *table->items_key ) );
-    HASHTABLE_MEMCPY( new_items_slot, table->items_slot, table->count * sizeof( *table->items_key ) );
-    HASHTABLE_MEMCPY( new_items_data, table->items_data, (HASHTABLE_SIZE_T) table->count * table->item_size );
-    
-    HASHTABLE_FREE( table->memctx, table->items_key );
-
-    table->items_key = new_items_key;
-    table->items_slot = new_items_slot;
-    table->items_data = new_items_data;
-    table->swap_temp = new_swap_temp;
-    }
-
-
-void* hashtable_insert( hashtable_t* table, HASHTABLE_U64 key, void const* item )
-    {
-    HASHTABLE_ASSERT( hashtable_internal_find_slot( table, key ) < 0 );
-
-    if( table->count >= ( table->slot_capacity - table->slot_capacity / 3 ) )
-        hashtable_internal_expand_slots( table );
-        
-    int const slot_mask = table->slot_capacity - 1;
-    HASHTABLE_U32 const hash = hashtable_internal_calculate_hash( key );
-
-    int const base_slot = (int)( hash & (HASHTABLE_U32)slot_mask );
-    int base_count = table->slots[ base_slot ].base_count;
-    int slot = base_slot;
-    int first_free = slot;
-    while( base_count )
-        {
-        HASHTABLE_U32 const slot_hash = table->slots[ slot ].key_hash;
-        if( slot_hash == 0 && table->slots[ first_free ].key_hash != 0 ) first_free = slot;
-        int slot_base = (int)( slot_hash & (HASHTABLE_U32)slot_mask );
-        if( slot_base == base_slot ) 
-            --base_count;
-        slot = ( slot + 1 ) & slot_mask;
-        }       
-
-    slot = first_free;
-    while( table->slots[ slot ].key_hash )
-        slot = ( slot + 1 ) & slot_mask;
-
-    if( table->count >= table->item_capacity )
-        hashtable_internal_expand_items( table );
-
-    HASHTABLE_ASSERT( !table->slots[ slot ].key_hash && ( hash & (HASHTABLE_U32) slot_mask ) == (HASHTABLE_U32) base_slot );
-    HASHTABLE_ASSERT( hash );
-    table->slots[ slot ].key_hash = hash;
-    table->slots[ slot ].item_index = table->count;
-    ++table->slots[ base_slot ].base_count;
-
-
-    void* dest_item = (void*)( ( (uintptr_t) table->items_data ) + table->count * table->item_size );
-    memcpy( dest_item, item, (HASHTABLE_SIZE_T) table->item_size );
-    table->items_key[ table->count ] = key;
-    table->items_slot[ table->count ] = slot;
-    ++table->count;
-    return dest_item;
-    } 
-
-
-void hashtable_remove( hashtable_t* table, HASHTABLE_U64 key )
-    {
-    int const slot = hashtable_internal_find_slot( table, key );
-    HASHTABLE_ASSERT( slot >= 0 );
-
-    int const slot_mask = table->slot_capacity - 1;
-    HASHTABLE_U32 const hash = table->slots[ slot ].key_hash;
-    int const base_slot = (int)( hash & (HASHTABLE_U32) slot_mask );
-    HASHTABLE_ASSERT( hash );
-    --table->slots[ base_slot ].base_count;
-    table->slots[ slot ].key_hash = 0;
-
-    int index = table->slots[ slot ].item_index;
-    int last_index = table->count - 1;
-    if( index != last_index )
-        {
-        table->items_key[ index ] = table->items_key[ last_index ];
-        table->items_slot[ index ] = table->items_slot[ last_index ];
-        void* dst_item = (void*)( ( (uintptr_t) table->items_data ) + index * table->item_size );
-        void* src_item = (void*)( ( (uintptr_t) table->items_data ) + last_index * table->item_size );
-        HASHTABLE_MEMCPY( dst_item, src_item, (HASHTABLE_SIZE_T) table->item_size );
-        table->slots[ table->items_slot[ last_index ] ].item_index = index;
-        }
-    --table->count;
-    } 
-
-
-void hashtable_clear( hashtable_t* table )
-    {
-    table->count = 0;
-    HASHTABLE_MEMSET( table->slots, 0, table->slot_capacity * sizeof( *table->slots ) );
-    }
-
-
-void* hashtable_find( hashtable_t const* table, HASHTABLE_U64 key )
-    {
-    int const slot = hashtable_internal_find_slot( table, key );
-    if( slot < 0 ) return 0;
-
-    int const index = table->slots[ slot ].item_index;
-    void* const item = (void*)( ( (uintptr_t) table->items_data ) + index * table->item_size );
-    return item;
-    }
-
-
-int hashtable_count( hashtable_t const* table )
-    {
-    return table->count;
-    }
-
-
-void* hashtable_items( hashtable_t const* table )
-    {
-    return table->items_data;
-    }
-
-
-HASHTABLE_U64 const* hashtable_keys( hashtable_t const* table )
-    {
-    return table->items_key;
-    }
-
-
-void hashtable_swap( hashtable_t* table, int index_a, int index_b )
-    {
-    if( index_a < 0 || index_a >= table->count || index_b < 0 || index_b >= table->count ) return;
-
-    int slot_a = table->items_slot[ index_a ];
-    int slot_b = table->items_slot[ index_b ];
-
-    table->items_slot[ index_a ] = slot_b;
-    table->items_slot[ index_b ] = slot_a;
-
-    HASHTABLE_U64 temp_key = table->items_key[ index_a ];
-    table->items_key[ index_a ] = table->items_key[ index_b ];
-    table->items_key[ index_b ] = temp_key;
-
-    void* item_a = (void*)( ( (uintptr_t) table->items_data ) + index_a * table->item_size );
-    void* item_b = (void*)( ( (uintptr_t) table->items_data ) + index_b * table->item_size );
-    HASHTABLE_MEMCPY( table->swap_temp, item_a, table->item_size );
-    HASHTABLE_MEMCPY( item_a, item_b, table->item_size );
-    HASHTABLE_MEMCPY( item_b, table->swap_temp, table->item_size );
-
-    table->slots[ slot_a ].item_index = index_b;
-    table->slots[ slot_b ].item_index = index_a;
-    }
-
-
-#endif /* HASHTABLE_IMPLEMENTATION */
-#endif // HASHTABLE_IMPLEMENTATION_ONCE
-
-/*
-
-contributors:
-    Randy Gaul (hashtable_clear, hashtable_swap )
-
-revision history:
-    1.1     added hashtable_clear, hashtable_swap
-    1.0     first released version  
-
-*/
-
-/*
-------------------------------------------------------------------------------
-
-This software is available under 2 licenses - you may choose the one you like.
-
-------------------------------------------------------------------------------
-
-ALTERNATIVE A - MIT License
-
-Copyright (c) 2015 Mattias Gustavsson
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of 
-this software and associated documentation files (the "Software"), to deal in 
-the Software without restriction, including without limitation the rights to 
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
-of the Software, and to permit persons to whom the Software is furnished to do 
-so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all 
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
-SOFTWARE.
-
-------------------------------------------------------------------------------
-
-ALTERNATIVE B - Public Domain (www.unlicense.org)
-
-This is free and unencumbered software released into the public domain.
-
-Anyone is free to copy, modify, publish, use, compile, sell, or distribute this 
-software, either in source code form or as a compiled binary, for any purpose, 
-commercial or non-commercial, and by any means.
-
-In jurisdictions that recognize copyright laws, the author or authors of this 
-software dedicate any and all copyright interest in the software to the public 
-domain. We make this dedication for the benefit of the public at large and to 
-the detriment of our heirs and successors. We intend this dedication to be an 
-overt act of relinquishment in perpetuity of all present and future rights to 
-this software under copyright law.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN 
-ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION 
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-------------------------------------------------------------------------------
-*/
-
-// end of hashtable.h
+// spritebatch_map implementation
+
+static unsigned spritebatch_map_pow2ceil(unsigned v)
+{
+	--v;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+	++v;
+	v += (v == 0);
+	return v;
+}
+
+static unsigned spritebatch_map_hash(SPRITEBATCH_U64 key)
+{
+	key = (~key) + (key << 18);
+	key = key ^ (key >> 31);
+	key = key * 21;
+	key = key ^ (key >> 11);
+	key = key + (key << 6);
+	key = key ^ (key >> 22);
+	SPRITEBATCH_ASSERT(key);
+	return (unsigned)key;
+}
+
+static void spritebatch_map_init(spritebatch_map_t* map, int item_size, int initial_capacity, void* mem_ctx)
+{
+	initial_capacity = (int)spritebatch_map_pow2ceil(initial_capacity >= 0 ? (unsigned)initial_capacity : 32U);
+	map->mem_ctx = mem_ctx;
+	map->count = 0;
+	map->item_size = item_size;
+	map->slot_capacity = (int)spritebatch_map_pow2ceil((unsigned)(initial_capacity + initial_capacity / 2));
+	int slots_size = (int)(map->slot_capacity * sizeof(*map->slots));
+	map->slots = (spritebatch_map_slot_t*)SPRITEBATCH_MALLOC(slots_size, mem_ctx);
+	SPRITEBATCH_ASSERT(map->slots);
+	SPRITEBATCH_MEMSET(map->slots, 0, slots_size);
+	map->item_capacity = (int)spritebatch_map_pow2ceil((unsigned)initial_capacity);
+	map->keys = (SPRITEBATCH_U64*)SPRITEBATCH_MALLOC(map->item_capacity * (sizeof(*map->keys) + sizeof(*map->item_slots) + map->item_size), mem_ctx);
+	SPRITEBATCH_ASSERT(map->keys);
+	map->item_slots = (int*)(map->keys + map->item_capacity);
+	map->items = (void*)(map->item_slots + map->item_capacity);
+}
+
+
+static void spritebatch_map_term(spritebatch_map_t* map)
+{
+	SPRITEBATCH_FREE(map->keys, map->mem_ctx);
+	SPRITEBATCH_FREE(map->slots, map->mem_ctx);
+}
+
+static int spritebatch_map_find_slot(spritebatch_map_t const* map, SPRITEBATCH_U64 key)
+{
+	int slot_mask = map->slot_capacity - 1;
+	unsigned hash = spritebatch_map_hash(key);
+	int base_slot = (int)(hash & (unsigned)slot_mask);
+	int base_count = map->slots[base_slot].base_count;
+	int slot = base_slot;
+
+	while (base_count > 0) {
+		unsigned slot_hash = map->slots[slot].key_hash;
+		if (slot_hash) {
+			int slot_base = (int)(slot_hash & (unsigned)slot_mask);
+			if (slot_base == base_slot) {
+				--base_count;
+				if (slot_hash == hash && map->keys[map->slots[slot].item_index] == key)
+					return slot;
+			}
+		}
+		slot = (slot + 1) & slot_mask;
+	}
+	return -1;
+}
+
+static void spritebatch_map_expand_slots(spritebatch_map_t* map)
+{
+	int old_capacity = map->slot_capacity;
+	spritebatch_map_slot_t* old_slots = map->slots;
+
+	map->slot_capacity *= 2;
+	int slot_mask = map->slot_capacity - 1;
+	int size = (int)(map->slot_capacity * sizeof(*map->slots));
+	map->slots = (spritebatch_map_slot_t*)SPRITEBATCH_MALLOC(size, map->mem_ctx);
+	SPRITEBATCH_ASSERT(map->slots);
+	SPRITEBATCH_MEMSET(map->slots, 0, size);
+
+	for (int i = 0; i < old_capacity; ++i) {
+		unsigned hash = old_slots[i].key_hash;
+		if (hash) {
+			int base_slot = (int)(hash & (unsigned)slot_mask);
+			int slot = base_slot;
+			while (map->slots[slot].key_hash)
+				slot = (slot + 1) & slot_mask;
+			map->slots[slot].key_hash = hash;
+			int item_index = old_slots[i].item_index;
+			map->slots[slot].item_index = item_index;
+			map->item_slots[item_index] = slot;
+			++map->slots[base_slot].base_count;
+		}
+	}
+	SPRITEBATCH_FREE(old_slots, map->mem_ctx);
+}
+
+static void spritebatch_map_expand_items(spritebatch_map_t* map)
+{
+	map->item_capacity *= 2;
+	SPRITEBATCH_U64* new_keys = (SPRITEBATCH_U64*)SPRITEBATCH_MALLOC(
+		map->item_capacity * (sizeof(*map->keys) + sizeof(*map->item_slots) + map->item_size), map->mem_ctx);
+	SPRITEBATCH_ASSERT(new_keys);
+
+	int* new_item_slots = (int*)(new_keys + map->item_capacity);
+	void* new_items = (void*)(new_item_slots + map->item_capacity);
+
+	SPRITEBATCH_MEMCPY(new_keys, map->keys, map->count * sizeof(*map->keys));
+	SPRITEBATCH_MEMCPY(new_item_slots, map->item_slots, map->count * sizeof(*map->item_slots));
+	SPRITEBATCH_MEMCPY(new_items, map->items, (size_t)map->count * map->item_size);
+
+	SPRITEBATCH_FREE(map->keys, map->mem_ctx);
+	map->keys = new_keys;
+	map->item_slots = new_item_slots;
+	map->items = new_items;
+}
+
+static void* spritebatch_map_insert(spritebatch_map_t* map, SPRITEBATCH_U64 key, void const* item)
+{
+	SPRITEBATCH_ASSERT(spritebatch_map_find_slot(map, key) < 0);
+
+	if (map->count >= (map->slot_capacity - map->slot_capacity / 3))
+		spritebatch_map_expand_slots(map);
+
+	int slot_mask = map->slot_capacity - 1;
+	unsigned hash = spritebatch_map_hash(key);
+	int base_slot = (int)(hash & (unsigned)slot_mask);
+	int base_count = map->slots[base_slot].base_count;
+	int slot = base_slot;
+	int first_free = slot;
+
+	while (base_count) {
+		unsigned slot_hash = map->slots[slot].key_hash;
+		if (slot_hash == 0 && map->slots[first_free].key_hash != 0) first_free = slot;
+		int slot_base = (int)(slot_hash & (unsigned)slot_mask);
+		if (slot_base == base_slot) --base_count;
+		slot = (slot + 1) & slot_mask;
+	}
+
+	slot = first_free;
+	while (map->slots[slot].key_hash)
+		slot = (slot + 1) & slot_mask;
+
+	if (map->count >= map->item_capacity)
+		spritebatch_map_expand_items(map);
+
+	map->slots[slot].key_hash = hash;
+	map->slots[slot].item_index = map->count;
+	++map->slots[base_slot].base_count;
+
+	void* dest = (void*)((uintptr_t)map->items + map->count * map->item_size);
+	SPRITEBATCH_MEMCPY(dest, item, map->item_size);
+	map->keys[map->count] = key;
+	map->item_slots[map->count] = slot;
+	++map->count;
+	return dest;
+}
+
+static void spritebatch_map_remove(spritebatch_map_t* map, SPRITEBATCH_U64 key)
+{
+	int slot = spritebatch_map_find_slot(map, key);
+	SPRITEBATCH_ASSERT(slot >= 0);
+
+	int slot_mask = map->slot_capacity - 1;
+	unsigned hash = map->slots[slot].key_hash;
+	int base_slot = (int)(hash & (unsigned)slot_mask);
+	--map->slots[base_slot].base_count;
+	map->slots[slot].key_hash = 0;
+
+	int index = map->slots[slot].item_index;
+	int last_index = map->count - 1;
+	if (index != last_index) {
+		map->keys[index] = map->keys[last_index];
+		map->item_slots[index] = map->item_slots[last_index];
+		void* dst = (void*)((uintptr_t)map->items + index * map->item_size);
+		void* src = (void*)((uintptr_t)map->items + last_index * map->item_size);
+		SPRITEBATCH_MEMCPY(dst, src, map->item_size);
+		map->slots[map->item_slots[last_index]].item_index = index;
+	}
+	--map->count;
+}
+
+static void spritebatch_map_clear(spritebatch_map_t* map)
+{
+	map->count = 0;
+	SPRITEBATCH_MEMSET(map->slots, 0, map->slot_capacity * sizeof(*map->slots));
+}
+
+static void* spritebatch_map_find(spritebatch_map_t const* map, SPRITEBATCH_U64 key)
+{
+	int slot = spritebatch_map_find_slot(map, key);
+	if (slot < 0) return 0;
+	int index = map->slots[slot].item_index;
+	return (void*)((uintptr_t)map->items + index * map->item_size);
+}
+
+static int spritebatch_map_count(spritebatch_map_t const* map)
+{
+	return map->count;
+}
+
+static void* spritebatch_map_items(spritebatch_map_t const* map)
+{
+	return map->items;
+}
+
+static void spritebatch_map_swap(spritebatch_map_t* map, int index_a, int index_b)
+{
+	if (index_a < 0 || index_a >= map->count || index_b < 0 || index_b >= map->count) return;
+
+	int slot_a = map->item_slots[index_a];
+	int slot_b = map->item_slots[index_b];
+	map->item_slots[index_a] = slot_b;
+	map->item_slots[index_b] = slot_a;
+
+	SPRITEBATCH_U64 temp_key = map->keys[index_a];
+	map->keys[index_a] = map->keys[index_b];
+	map->keys[index_b] = temp_key;
+
+	void* item_a = (void*)((uintptr_t)map->items + index_a * map->item_size);
+	void* item_b = (void*)((uintptr_t)map->items + index_b * map->item_size);
+
+	// Use stack buffer for swap (item_size is typically small)
+	char swap_temp[256];
+	SPRITEBATCH_ASSERT(map->item_size <= (int)sizeof(swap_temp));
+	SPRITEBATCH_MEMCPY(swap_temp, item_a, map->item_size);
+	SPRITEBATCH_MEMCPY(item_a, item_b, map->item_size);
+	SPRITEBATCH_MEMCPY(item_b, swap_temp, map->item_size);
+
+	map->slots[slot_a].item_index = index_b;
+	map->slots[slot_b].item_index = index_a;
+}
 
 #include <stdbool.h>
 
@@ -1024,6 +805,7 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 {
 	// read config params
 	if (!config | !sb) return 1;
+	sb->sort_id = 0;
 	sb->pixel_stride = config->pixel_stride;
 	sb->atlas_width_in_pixels = config->atlas_width_in_pixels;
 	sb->atlas_height_in_pixels = config->atlas_height_in_pixels;
@@ -1084,9 +866,9 @@ int spritebatch_init(spritebatch_t* sb, spritebatch_config_t* config, void* udat
 	sb->pixel_buffer = SPRITEBATCH_MALLOC(sb->pixel_buffer_size * sb->pixel_stride, sb->mem_ctx);
 
 	// setup tables
-	hashtable_init(&sb->sprites_to_lonely_textures, sizeof(spritebatch_internal_lonely_texture_t), 1024, sb->mem_ctx);
-	hashtable_init(&sb->sprites_to_premades, sizeof(spritebatch_internal_premade_sprite_t), 1024 * 10, sb->mem_ctx);
-	hashtable_init(&sb->sprites_to_atlases, sizeof(spritebatch_internal_atlas_t*), 16, sb->mem_ctx);
+	spritebatch_map_init(&sb->sprites_to_lonely_textures, sizeof(spritebatch_internal_lonely_texture_t), 1024, sb->mem_ctx);
+	spritebatch_map_init(&sb->sprites_to_premades, sizeof(spritebatch_internal_premade_sprite_t), 1024 * 10, sb->mem_ctx);
+	spritebatch_map_init(&sb->sprites_to_atlases, sizeof(spritebatch_internal_atlas_t*), 16, sb->mem_ctx);
 
 	sb->atlases = 0;
 
@@ -1102,10 +884,10 @@ void spritebatch_term(spritebatch_t* sb)
 		SPRITEBATCH_FREE(sb->sprites_scratch, sb->mem_ctx);
 	}
 	SPRITEBATCH_FREE(sb->key_buffer, sb->mem_ctx);
-	SPRITEBATCH_FREE(sb->pixel_buffer, ctx->mem_ctx);
-	hashtable_term(&sb->sprites_to_lonely_textures);
-	hashtable_term(&sb->sprites_to_premades);
-	hashtable_term(&sb->sprites_to_atlases);
+	SPRITEBATCH_FREE(sb->pixel_buffer, sb->mem_ctx);
+	spritebatch_map_term(&sb->sprites_to_lonely_textures);
+	spritebatch_map_term(&sb->sprites_to_premades);
+	spritebatch_map_term(&sb->sprites_to_atlases);
 
 	if (sb->atlases)
 	{
@@ -1113,7 +895,7 @@ void spritebatch_term(spritebatch_t* sb)
 		spritebatch_internal_atlas_t* sentinel = sb->atlases;
 		do
 		{
-			hashtable_term(&atlas->sprites_to_textures);
+			spritebatch_map_term(&atlas->sprites_to_textures);
 			spritebatch_internal_atlas_t* next = atlas->next;
 			SPRITEBATCH_FREE(atlas, sb->mem_ctx);
 			atlas = next;
@@ -1172,7 +954,7 @@ int spritebatch_internal_fill_internal_sprite(spritebatch_t* sb, spritebatch_spr
 	SPRITEBATCH_CHECK_BUFFER_GROW(sb, input_count, input_capacity, input_buffer, spritebatch_internal_sprite_t);
 
 	out->image_id = sprite.image_id;
-	out->sort_bits = sprite.sort_bits;
+	out->sort_bits = sb->sort_id++;
 	out->geom = sprite.geom;
 	out->w = sprite.w;
 	out->h = sprite.h;
@@ -1198,12 +980,11 @@ void spritebatch_internal_append_sprite(spritebatch_t* sb, spritebatch_internal_
 	sb->input_buffer[sb->input_count++] = sprite;
 }
 
-int spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
+void spritebatch_push(spritebatch_t* sb, spritebatch_sprite_t sprite)
 {
 	spritebatch_internal_sprite_t sprite_out;
 	spritebatch_internal_fill_internal_sprite(sb, sprite, &sprite_out);
 	sb->input_buffer[sb->input_count++] = sprite_out;
-	return 1;
 }
 
 void spritebatch_register_premade_atlas(spritebatch_t* sb, SPRITEBATCH_U64 texture_id, int w, int h, int sprite_count, spritebatch_premade_sprite_t* sprites)
@@ -1217,11 +998,11 @@ void spritebatch_register_premade_atlas(spritebatch_t* sb, SPRITEBATCH_U64 textu
 		premade.maxx = sprites[i].maxx;
 		premade.maxy = sprites[i].maxy;
 		premade.texture_id = texture_id;
-		void* find = hashtable_find(&sb->sprites_to_premades, sprites[i].image_id);
+		void* find = spritebatch_map_find(&sb->sprites_to_premades, sprites[i].image_id);
 		if (find) {
 			SPRITEBATCH_MEMCPY(find, &premade, sizeof(premade));
 		} else {
-			hashtable_insert(&sb->sprites_to_premades, sprites[i].image_id, &premade);
+			spritebatch_map_insert(&sb->sprites_to_premades, sprites[i].image_id, &premade);
 		}
 	}
 }
@@ -1233,7 +1014,7 @@ void spritebatch_prefetch(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, in
 {
 	spritebatch_internal_premade_sprite_t* premade = spritebatch_internal_premade_sprite(sb, image_id, NULL);
 	if(!premade) {
-		void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+		void* atlas_ptr = spritebatch_map_find(&sb->sprites_to_atlases, image_id);
 		if (!atlas_ptr) spritebatch_internal_lonely_sprite(sb, image_id, w, h, NULL, 0);
 	}
 }
@@ -1243,15 +1024,15 @@ spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_
 	spritebatch_sprite_t s;
 	SPRITEBATCH_MEMSET(&s, 0, sizeof(s));
 
-	spritebatch_internal_premade_sprite_t* premade = (spritebatch_internal_premade_sprite_t*)hashtable_find(&sb->sprites_to_premades, image_id);
+	spritebatch_internal_premade_sprite_t* premade = (spritebatch_internal_premade_sprite_t*)spritebatch_map_find(&sb->sprites_to_premades, image_id);
 	if(!premade)
 	{
-		void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+		void* atlas_ptr = spritebatch_map_find(&sb->sprites_to_atlases, image_id);
 		if (atlas_ptr) {
 			spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
 			s.texture_id = atlas->texture_id;
 
-			spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, image_id);
+			spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)spritebatch_map_find(&atlas->sprites_to_textures, image_id);
 			if (tex) {
 				s.maxx = tex->maxx;
 				s.maxy = tex->maxy;
@@ -1272,9 +1053,8 @@ spritebatch_sprite_t spritebatch_fetch(spritebatch_t* sb, SPRITEBATCH_U64 image_
 
 static int spritebatch_internal_sprite_less_than_or_equal(spritebatch_sprite_t* a, spritebatch_sprite_t* b)
 {
-	if (a->sort_bits <= b->sort_bits) return 1;
-	if (a->sort_bits == b->sort_bits && a->texture_id <= b->texture_id) return 1;
-	return 0;
+	if (a->sort_bits < b->sort_bits) return 1;
+	return a->texture_id <= b->texture_id;
 }
 
 void spritebatch_internal_merge_sort_iteration(spritebatch_sprite_t* a, int lo, int split, int hi, spritebatch_sprite_t* b)
@@ -1317,9 +1097,9 @@ static inline void spritebatch_internal_get_pixels(spritebatch_t* sb, SPRITEBATC
 	int size = sb->atlas_use_border_pixels ? sb->pixel_stride * (w + 2) * (h + 2) : sb->pixel_stride * w * h;
 	if (size > sb->pixel_buffer_size)
 	{
-		SPRITEBATCH_FREE(sb->pixel_buffer, ctx->mem_ctx);
+		SPRITEBATCH_FREE(sb->pixel_buffer, sb->mem_ctx);
 		sb->pixel_buffer_size = size;
-		sb->pixel_buffer = SPRITEBATCH_MALLOC(sb->pixel_buffer_size, ctx->mem_ctx);
+		sb->pixel_buffer = SPRITEBATCH_MALLOC(sb->pixel_buffer_size, sb->mem_ctx);
 		if (!sb->pixel_buffer) return;
 	}
 
@@ -1375,12 +1155,12 @@ spritebatch_internal_lonely_texture_t* spritebatch_internal_lonelybuffer_push(sp
 	texture.h = h;
 	texture.image_id = image_id;
 	texture.texture_id = make_tex ? spritebatch_internal_generate_texture_handle(sb, image_id, w, h) : ~0;
-	return (spritebatch_internal_lonely_texture_t*)hashtable_insert(&sb->sprites_to_lonely_textures, image_id, &texture);
+	return (spritebatch_internal_lonely_texture_t*)spritebatch_map_insert(&sb->sprites_to_lonely_textures, image_id, &texture);
 }
 
 int spritebatch_internal_lonely_sprite(spritebatch_t* sb, SPRITEBATCH_U64 image_id, int w, int h, spritebatch_sprite_t* sprite_out, int skip_missing_textures)
 {
-	spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)hashtable_find(&sb->sprites_to_lonely_textures, image_id);
+	spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)spritebatch_map_find(&sb->sprites_to_lonely_textures, image_id);
 
 	if (skip_missing_textures)
 	{
@@ -1413,7 +1193,7 @@ int spritebatch_internal_lonely_sprite(spritebatch_t* sb, SPRITEBATCH_U64 image_
 
 spritebatch_internal_premade_sprite_t* spritebatch_internal_premade_sprite(spritebatch_t* sb, SPRITEBATCH_U64 image_id, spritebatch_sprite_t* sprite_out)
 {
-	spritebatch_internal_premade_sprite_t* tex = (spritebatch_internal_premade_sprite_t*)hashtable_find(&sb->sprites_to_premades, image_id);
+	spritebatch_internal_premade_sprite_t* tex = (spritebatch_internal_premade_sprite_t*)spritebatch_map_find(&sb->sprites_to_premades, image_id);
 	if (!tex) return NULL;
 	SPRITEBATCH_ASSERT(tex->texture_id != ~0);
 	if (sprite_out) {
@@ -1445,21 +1225,30 @@ int spritebatch_internal_push_sprite(spritebatch_t* sb, spritebatch_internal_spr
 
 	if(!premade)
 	{
-		void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, s->image_id);
+		void* atlas_ptr = spritebatch_map_find(&sb->sprites_to_atlases, s->image_id);
 		if (atlas_ptr)
 		{
 			spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
 			sprite.texture_id = atlas->texture_id;
 
-			spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)hashtable_find(&atlas->sprites_to_textures, s->image_id);
+			spritebatch_internal_texture_t* tex = (spritebatch_internal_texture_t*)spritebatch_map_find(&atlas->sprites_to_textures, s->image_id);
 			SPRITEBATCH_ASSERT(tex);
 			tex->timestamp = 0;
 			sprite.w = tex->w;
 			sprite.h = tex->h;
-			sprite.minx = tex->minx;
-			sprite.miny = tex->miny;
-			sprite.maxx = tex->maxx;
-			sprite.maxy = tex->maxy;
+
+			// Previously the uvs were overwritten here directly with the sprite batch texture UVs
+			// now it expects the user code to send in local texture UVs. 
+			// Default sprites should pass in minx and miny as 0 and maxx and maxy as 1 to draw the full
+			// texture, values above will creep into other textures of the atlas, between 0-1 will draw a portion
+			// and below 0 will again creep into other parts of the atlas.
+			// Example use case is to draw 9 slice sprites to be able to draw each slice with specific UVs.
+			float dx = tex->maxx - tex->minx;
+			float dy = tex->maxy - tex->miny;
+			sprite.minx = dx * sprite.minx + tex->minx;
+			sprite.miny = dy * sprite.miny + tex->miny;
+			sprite.maxx = dx * sprite.maxx + tex->minx;
+			sprite.maxy = dy * sprite.maxy + tex->miny;
 		}
 		else skipped_tex = spritebatch_internal_lonely_sprite(sb, s->image_id, s->w, s->h, &sprite, skip_missing_textures);
 	}
@@ -1516,16 +1305,16 @@ void spritebatch_tick(spritebatch_t* sb)
 		spritebatch_internal_atlas_t* sentinel = atlas;
 		do
 		{
-			int texture_count = hashtable_count(&atlas->sprites_to_textures);
-			spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)hashtable_items(&atlas->sprites_to_textures);
+			int texture_count = spritebatch_map_count(&atlas->sprites_to_textures);
+			spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)spritebatch_map_items(&atlas->sprites_to_textures);
 			for (int i = 0; i < texture_count; ++i) textures[i].timestamp += 1;
 			atlas = atlas->next;
 		}
 		while (atlas != sentinel);
 	}
 
-	int texture_count = hashtable_count(&sb->sprites_to_lonely_textures);
-	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
+	int texture_count = spritebatch_map_count(&sb->sprites_to_lonely_textures);
+	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)spritebatch_map_items(&sb->sprites_to_lonely_textures);
 	for (int i = 0; i < texture_count; ++i) lonely_textures[i].timestamp += 1;
 }
 
@@ -1537,13 +1326,18 @@ int spritebatch_flush(spritebatch_t* sb)
 	spritebatch_internal_process_input(sb, 0);
 
 	// patchup any missing lonely textures that may have come from atlases decaying and whatnot
-	int texture_count = hashtable_count(&sb->sprites_to_lonely_textures);
-	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
+	int texture_count = spritebatch_map_count(&sb->sprites_to_lonely_textures);
+	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)spritebatch_map_items(&sb->sprites_to_lonely_textures);
 	for (int i = 0; i < texture_count; ++i)
 	{
 		spritebatch_internal_lonely_texture_t* lonely = lonely_textures + i;
-		if (lonely->texture_id == ~0) lonely->texture_id = spritebatch_internal_generate_texture_handle(sb, lonely->image_id, lonely->w, lonely->h);
+		if (lonely->texture_id == ~0) {
+			lonely->texture_id = spritebatch_internal_generate_texture_handle(sb, lonely->image_id, lonely->w, lonely->h);
+		}
 	}
+
+	// Reset each flush, since it's only used to id sprites on a per-sort basis.
+	sb->sort_id = 0;
 
 	// sort internal sprite buffer and submit batches
 	spritebatch_internal_sort_sprites(sb);
@@ -1575,10 +1369,10 @@ int spritebatch_flush(spritebatch_t* sb)
 		if (batch_count)
 		{
 			int w, h;
-			spritebatch_internal_premade_sprite_t* premade = (spritebatch_internal_premade_sprite_t*)hashtable_find(&sb->sprites_to_premades, image_id);
+			spritebatch_internal_premade_sprite_t* premade = (spritebatch_internal_premade_sprite_t*)spritebatch_map_find(&sb->sprites_to_premades, image_id);
 			if (!premade)
 			{
-				void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+				void* atlas_ptr = spritebatch_map_find(&sb->sprites_to_atlases, image_id);
 
 				if (atlas_ptr)
 				{
@@ -1588,7 +1382,7 @@ int spritebatch_flush(spritebatch_t* sb)
 
 				else
 				{
-					spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)hashtable_find(&sb->sprites_to_lonely_textures, image_id);
+					spritebatch_internal_lonely_texture_t* tex = (spritebatch_internal_lonely_texture_t*)spritebatch_map_find(&sb->sprites_to_lonely_textures, image_id);
 					SPRITEBATCH_ASSERT(tex);
 					w = tex->w;
 					h = tex->h;
@@ -1617,6 +1411,12 @@ int spritebatch_flush(spritebatch_t* sb)
 	}
 
 	return count;
+}
+
+void spritebatch_clear(spritebatch_t* sb)
+{
+	sb->input_count = 0;
+	sb->sprite_count = 0;
 }
 
 typedef struct
@@ -1876,7 +1676,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 		}
 	}
 
-	hashtable_init(&atlas_out->sprites_to_textures, sizeof(spritebatch_internal_texture_t), img_count, sb->mem_ctx);
+	spritebatch_map_init(&atlas_out->sprites_to_textures, sizeof(spritebatch_internal_texture_t), img_count, sb->mem_ctx);
 	atlas_out->texture_id = sb->generate_texture_callback(atlas_pixels, atlas_width, atlas_height, sb->udata);
 
 	iw = 1.0f / (float)(atlas_width);
@@ -1920,7 +1720,7 @@ void spritebatch_make_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atl
 			SPRITEBATCH_ASSERT(!(min_y < 0));
 			SPRITEBATCH_ASSERT(!(max_y < 0));
 			texture.image_id = imgs[img->img_index].image_id;
-			hashtable_insert(&atlas_out->sprites_to_textures, texture.image_id, &texture);
+			spritebatch_map_insert(&atlas_out->sprites_to_textures, texture.image_id, &texture);
 		}
 	}
 
@@ -1946,7 +1746,7 @@ static int spritebatch_internal_lonely_pred(spritebatch_internal_lonely_texture_
 	return a->timestamp < b->timestamp;
 }
 
-static void spritebatch_internal_qsort_lonely(hashtable_t* lonely_table, spritebatch_internal_lonely_texture_t* items, int count)
+static void spritebatch_internal_qsort_lonely(spritebatch_map_t* lonely_table, spritebatch_internal_lonely_texture_t* items, int count)
 {
 	if (count <= 1) return;
 
@@ -1956,12 +1756,12 @@ static void spritebatch_internal_qsort_lonely(hashtable_t* lonely_table, spriteb
 	{
 		if (spritebatch_internal_lonely_pred(items + i, &pivot))
 		{
-			hashtable_swap(lonely_table, i, low);
+			spritebatch_map_swap(lonely_table, i, low);
 			low++;
 		}
 	}
 
-	hashtable_swap(lonely_table, low, count - 1);
+	spritebatch_map_swap(lonely_table, low, count - 1);
 	spritebatch_internal_qsort_lonely(lonely_table, items, low);
 	spritebatch_internal_qsort_lonely(lonely_table, items + low + 1, count - 1 - low);
 }
@@ -1973,17 +1773,17 @@ int spritebatch_internal_buffer_key(spritebatch_t* sb, SPRITEBATCH_U64 key)
 	return 0;
 }
 
-void spritebatch_internal_remove_table_entries(spritebatch_t* sb, hashtable_t* table)
+void spritebatch_internal_remove_table_entries(spritebatch_t* sb, spritebatch_map_t* table)
 {
-	for (int i = 0; i < sb->key_buffer_count; ++i) hashtable_remove(table, sb->key_buffer[i]);
+	for (int i = 0; i < sb->key_buffer_count; ++i) spritebatch_map_remove(table, sb->key_buffer[i]);
 	sb->key_buffer_count = 0;
 }
 
 void spritebatch_internal_flush_atlas(spritebatch_t* sb, spritebatch_internal_atlas_t* atlas, spritebatch_internal_atlas_t** sentinel, spritebatch_internal_atlas_t** next)
 {
 	int ticks_to_decay_texture = sb->ticks_to_decay_texture;
-	int texture_count = hashtable_count(&atlas->sprites_to_textures);
-	spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)hashtable_items(&atlas->sprites_to_textures);
+	int texture_count = spritebatch_map_count(&atlas->sprites_to_textures);
+	spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)spritebatch_map_items(&atlas->sprites_to_textures);
 
 	for (int i = 0; i < texture_count; ++i)
 	{
@@ -2000,7 +1800,7 @@ void spritebatch_internal_flush_atlas(spritebatch_t* sb, spritebatch_internal_at
 			spritebatch_internal_lonely_texture_t* lonely_texture = spritebatch_internal_lonelybuffer_push(sb, atlas_texture->image_id, w, h, 0);
 			lonely_texture->timestamp = atlas_texture->timestamp;
 		}
-		hashtable_remove(&sb->sprites_to_atlases, atlas_texture->image_id);
+		spritebatch_map_remove(&sb->sprites_to_atlases, atlas_texture->image_id);
 	}
 
 	if (sb->atlases == atlas)
@@ -2029,20 +1829,20 @@ void spritebatch_internal_flush_atlas(spritebatch_t* sb, spritebatch_internal_at
 
 	atlas->next->prev = atlas->prev;
 	atlas->prev->next = atlas->next;
-	hashtable_term(&atlas->sprites_to_textures);
+	spritebatch_map_term(&atlas->sprites_to_textures);
 	sb->delete_texture_callback(atlas->texture_id, sb->udata);
 	SPRITEBATCH_FREE(atlas, sb->mem_ctx);
 }
 
 void spritebatch_invalidate(spritebatch_t* sb, SPRITEBATCH_U64 image_id)
 {
-	void* atlas_ptr = hashtable_find(&sb->sprites_to_atlases, image_id);
+	void* atlas_ptr = spritebatch_map_find(&sb->sprites_to_atlases, image_id);
 	if (atlas_ptr) {
 		spritebatch_internal_atlas_t* atlas = *(spritebatch_internal_atlas_t**)atlas_ptr;
 		spritebatch_internal_flush_atlas(sb, atlas, 0, 0);
 	}
-	if (hashtable_find(&sb->sprites_to_lonely_textures, image_id)) {
-		hashtable_remove(&sb->sprites_to_lonely_textures, image_id);
+	if (spritebatch_map_find(&sb->sprites_to_lonely_textures, image_id)) {
+		spritebatch_map_remove(&sb->sprites_to_lonely_textures, image_id);
 	}
 }
 
@@ -2076,8 +1876,8 @@ int spritebatch_defrag(spritebatch_t* sb)
 		do
 		{
 			spritebatch_internal_atlas_t* next = atlas->next;
-			int texture_count = hashtable_count(&atlas->sprites_to_textures);
-			spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)hashtable_items(&atlas->sprites_to_textures);
+			int texture_count = spritebatch_map_count(&atlas->sprites_to_textures);
+			spritebatch_internal_texture_t* textures = (spritebatch_internal_texture_t*)spritebatch_map_items(&atlas->sprites_to_textures);
 			int decayed_texture_count = 0;
 			for (int i = 0; i < texture_count; ++i) if (textures[i].timestamp >= ticks_to_decay_texture) decayed_texture_count++;
 
@@ -2133,8 +1933,8 @@ int spritebatch_defrag(spritebatch_t* sb)
 
 	// remove decayed textures from the lonely buffer
 	int lonely_buffer_count_till_decay = sb->lonely_buffer_count_till_decay;
-	int lonely_count = hashtable_count(&sb->sprites_to_lonely_textures);
-	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)hashtable_items(&sb->sprites_to_lonely_textures);
+	int lonely_count = spritebatch_map_count(&sb->sprites_to_lonely_textures);
+	spritebatch_internal_lonely_texture_t* lonely_textures = (spritebatch_internal_lonely_texture_t*)spritebatch_map_items(&sb->sprites_to_lonely_textures);
 	if (lonely_count >= lonely_buffer_count_till_decay)
 	{
 		spritebatch_internal_qsort_lonely(&sb->sprites_to_lonely_textures, lonely_textures, lonely_count);
@@ -2154,12 +1954,12 @@ int spritebatch_defrag(spritebatch_t* sb)
 		}
 		spritebatch_internal_remove_table_entries(sb, &sb->sprites_to_lonely_textures);
 		lonely_count -= lonely_count - index;
-		SPRITEBATCH_ASSERT(lonely_count == hashtable_count(&sb->sprites_to_lonely_textures));
+		SPRITEBATCH_ASSERT(lonely_count == spritebatch_map_count(&sb->sprites_to_lonely_textures));
 	}
 
 	// process input, but don't make textures just yet
 	spritebatch_internal_process_input(sb, 1);
-	lonely_count = hashtable_count(&sb->sprites_to_lonely_textures);
+	lonely_count = spritebatch_map_count(&sb->sprites_to_lonely_textures);
 
 	// while greater than lonely_buffer_count_till_flush elements in lonely buffer
 	// grab lonely_buffer_count_till_flush of them and make an atlas
@@ -2186,19 +1986,19 @@ int spritebatch_defrag(spritebatch_t* sb)
 		spritebatch_make_atlas(sb, atlas, lonely_textures, lonely_count);
 		SPRITEBATCH_LOG("making atlas\n");
 
-		int tex_count_in_atlas = hashtable_count(&atlas->sprites_to_textures);
+		int tex_count_in_atlas = spritebatch_map_count(&atlas->sprites_to_textures);
 		if (tex_count_in_atlas != lonely_count)
 		{
 			int hit_count = 0;
 			for (int i = 0; i < lonely_count; ++i)
 			{
 				SPRITEBATCH_U64 key = lonely_textures[i].image_id;
-				if (hashtable_find(&atlas->sprites_to_textures, key))
+				if (spritebatch_map_find(&atlas->sprites_to_textures, key))
 				{
 					spritebatch_internal_buffer_key(sb, key);
 					SPRITEBATCH_U64 texture_id = lonely_textures[i].texture_id;
 					if (texture_id != ~0) sb->delete_texture_callback(texture_id, sb->udata);
-					hashtable_insert(&sb->sprites_to_atlases, key, &atlas);
+					spritebatch_map_insert(&sb->sprites_to_atlases, key, &atlas);
 					SPRITEBATCH_LOG("removing lonely texture for atlas%s\n", texture_id != ~0 ? "" : " (tex was ~0)" );
 				}
 				else
@@ -2210,7 +2010,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 			}
 			spritebatch_internal_remove_table_entries(sb, &sb->sprites_to_lonely_textures);
 
-			lonely_count = hashtable_count(&sb->sprites_to_lonely_textures);
+			lonely_count = spritebatch_map_count(&sb->sprites_to_lonely_textures);
 
 			if (!hit_count)
 			{
@@ -2228,10 +2028,10 @@ int spritebatch_defrag(spritebatch_t* sb)
 				SPRITEBATCH_U64 key = lonely_textures[i].image_id;
 				SPRITEBATCH_U64 texture_id = lonely_textures[i].texture_id;
 				if (texture_id != ~0) sb->delete_texture_callback(texture_id, sb->udata);
-				hashtable_insert(&sb->sprites_to_atlases, key, &atlas);
+				spritebatch_map_insert(&sb->sprites_to_atlases, key, &atlas);
 				SPRITEBATCH_LOG("(fast path) removing lonely texture for atlas%s\n", texture_id != ~0 ? "" : " (tex was ~0)" );
 			}
-			hashtable_clear(&sb->sprites_to_lonely_textures);
+			spritebatch_map_clear(&sb->sprites_to_lonely_textures);
 			lonely_count = 0;
 			break;
 		}
@@ -2248,7 +2048,7 @@ int spritebatch_defrag(spritebatch_t* sb)
 	This software is available under 2 licenses - you may choose the one you like.
 	------------------------------------------------------------------------------
 	ALTERNATIVE A - zlib license
-	Copyright (c) 2023 Randy Gaul https://randygaul.github.io/
+	Copyright (c) 2026 Randy Gaul https://randygaul.github.io/
 	This software is provided 'as-is', without any express or implied warranty.
 	In no event will the authors be held liable for any damages arising from
 	the use of this software.
