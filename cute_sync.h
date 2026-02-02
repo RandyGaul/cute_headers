@@ -12,7 +12,7 @@
 
 	SUMMARY
 
-		Collection of practical syncronization primitives for Windows/Posix/SDL2.
+		Collection of practical syncronization primitives for Windows/Posix/SDL3.
 
 		Here is a list of all supported primitives.
 
@@ -35,12 +35,15 @@
 
 	PLATFORMS
 
-		The current supported platforms are Windows/Posix/SDL. Here are the macros for
+		The current supported platforms are Windows/Posix/SDL3. Here are the macros for
 		picking each implementation.
 
 			* CUTE_SYNC_WINDOWS
 			* CUTE_SYNC_POSIX
 			* CUTE_SYNC_SDL
+
+		Note: CUTE_SYNC_SDL requires SDL3 (not SDL2). SDL3 must be included before
+		cute_sync.h when using CUTE_SYNC_IMPLEMENTATION.
 
 
 	REVISION HISTORY
@@ -151,7 +154,7 @@ cute_thread_t* cute_thread_create(cute_thread_fn func, const char* name, void* u
  * Useful for certain long-lived threads.
  * It is invalid to call `cute_thread_wait` on a detached thread.
  * It is invalid to call `cute_thread_wait` on a thread more than once.
- * Please see this link for a longer description: https://wiki.libsdl.org/SDL_DetachThread
+ * Please see this link for a longer description: https://wiki.libsdl.org/SDL3/SDL_DetachThread
  */
 void cute_thread_detach(cute_thread_t* thread);
 cute_thread_id_t cute_thread_get_id(cute_thread_t* thread);
@@ -390,42 +393,42 @@ struct cute_rw_lock_t
 #endif
 
 // Atomics implementation.
-// Use SDL2's implementation if available, otherwise WIN32 and GCC-like compilers are supported out-of-the-box.
+// Use SDL3's implementation if available, otherwise WIN32 and GCC-like compilers are supported out-of-the-box.
 #ifdef CUTE_SYNC_SDL
 
 int cute_atomic_add(cute_atomic_int_t* atomic, int addend)
 {
-	return SDL_AtomicAdd((SDL_atomic_t*)atomic, addend);
+	return SDL_AddAtomicInt((SDL_AtomicInt*)atomic, addend);
 }
 
 int cute_atomic_set(cute_atomic_int_t* atomic, int value)
 {
-	return SDL_AtomicSet((SDL_atomic_t*)atomic, value);
+	return SDL_SetAtomicInt((SDL_AtomicInt*)atomic, value);
 }
 
 int cute_atomic_get(cute_atomic_int_t* atomic)
 {
-	return SDL_AtomicGet((SDL_atomic_t*)atomic);
+	return SDL_GetAtomicInt((SDL_AtomicInt*)atomic);
 }
 
 int cute_atomic_cas(cute_atomic_int_t* atomic, int expected, int value)
 {
-	return SDL_AtomicCAS((SDL_atomic_t*)atomic, expected, value);
+	return SDL_CompareAndSwapAtomicInt((SDL_AtomicInt*)atomic, expected, value);
 }
 
 void* cute_atomic_ptr_set(void** atomic, void* value)
 {
-	return SDL_AtomicSetPtr(atomic, value);
+	return SDL_SetAtomicPointer(atomic, value);
 }
 
 void* cute_atomic_ptr_get(void** atomic)
 {
-	return SDL_AtomicGetPtr(atomic);
+	return SDL_GetAtomicPointer(atomic);
 }
 
 int cute_atomic_ptr_cas(void** atomic, void* expected, void* value)
 {
-	return SDL_AtomicCASPtr(atomic, expected, value);
+	return SDL_CompareAndSwapAtomicPointer(atomic, expected, value);
 }
 
 #elif defined(CUTE_SYNC_WINDOWS)
@@ -538,50 +541,60 @@ cute_mutex_t cute_mutex_create()
 
 int cute_lock(cute_mutex_t* mutex)
 {
-	return !SDL_LockMutex((SDL_mutex*)mutex->align);
+	// SDL3: SDL_LockMutex returns void (always succeeds or aborts).
+	SDL_LockMutex((SDL_Mutex*)mutex->align);
+	return 1;
 }
 
 int cute_unlock(cute_mutex_t* mutex)
 {
-	return !SDL_UnlockMutex((SDL_mutex*)mutex->align);
+	// SDL3: SDL_UnlockMutex returns void (always succeeds or aborts).
+	SDL_UnlockMutex((SDL_Mutex*)mutex->align);
+	return 1;
 }
 
 int cute_trylock(cute_mutex_t* mutex)
 {
-	return !SDL_TryLockMutex((SDL_mutex*)mutex->align);
+	// SDL3: SDL_TryLockMutex returns bool (true on success).
+	return SDL_TryLockMutex((SDL_Mutex*)mutex->align) ? 1 : 0;
 }
 
 void cute_mutex_destroy(cute_mutex_t* mutex)
 {
-	SDL_DestroyMutex((SDL_mutex*)mutex->align);
+	SDL_DestroyMutex((SDL_Mutex*)mutex->align);
 }
 
 cute_cv_t cute_cv_create()
 {
 	cute_cv_t cv;
-	cv.align = SDL_CreateCond();
+	cv.align = SDL_CreateCondition();
 	return cv;
 }
 
 int cute_cv_wake_all(cute_cv_t* cv)
 {
-	return !SDL_CondBroadcast((SDL_cond*)cv->align);
+	// SDL3: SDL_BroadcastCondition returns void.
+	SDL_BroadcastCondition((SDL_Condition*)cv->align);
+	return 1;
 }
 
 int cute_cv_wake_one(cute_cv_t* cv)
 {
-	return !SDL_CondSignal((SDL_cond*)cv->align);
+	// SDL3: SDL_SignalCondition returns void.
+	SDL_SignalCondition((SDL_Condition*)cv->align);
+	return 1;
 }
 
 int cute_cv_wait(cute_cv_t* cv, cute_mutex_t* mutex)
 {
-	// The SDL handle is stored in cv->align, not cv itself.
-	return !SDL_CondWait((SDL_cond*)cv->align, (SDL_mutex*)mutex->align);
+	// SDL3: SDL_WaitCondition returns void (always succeeds or aborts).
+	SDL_WaitCondition((SDL_Condition*)cv->align, (SDL_Mutex*)mutex->align);
+	return 1;
 }
 
 void cute_cv_destroy(cute_cv_t* cv)
 {
-	SDL_DestroyCond((SDL_cond*)cv->align);
+	SDL_DestroyCondition((SDL_Condition*)cv->align);
 }
 
 cute_semaphore_t cute_semaphore_create(int initial_count)
@@ -594,27 +607,32 @@ cute_semaphore_t cute_semaphore_create(int initial_count)
 
 int cute_semaphore_post(cute_semaphore_t* semaphore)
 {
-	return !SDL_SemPost((SDL_sem*)semaphore->id);
+	// SDL3: SDL_SignalSemaphore returns void.
+	SDL_SignalSemaphore((SDL_Semaphore*)semaphore->id);
+	return 1;
 }
 
 int cute_semaphore_try(cute_semaphore_t* semaphore)
 {
-	return !SDL_SemTryWait((SDL_sem*)semaphore->id);
+	// SDL3: SDL_TryWaitSemaphore returns bool (true on success).
+	return SDL_TryWaitSemaphore((SDL_Semaphore*)semaphore->id) ? 1 : 0;
 }
 
 int cute_semaphore_wait(cute_semaphore_t* semaphore)
 {
-	return !SDL_SemWait((SDL_sem*)semaphore->id);
+	// SDL3: SDL_WaitSemaphore returns void.
+	SDL_WaitSemaphore((SDL_Semaphore*)semaphore->id);
+	return 1;
 }
 
 int cute_semaphore_value(cute_semaphore_t* semaphore)
 {
-	return SDL_SemValue((SDL_sem*)semaphore->id);
+	return (int)SDL_GetSemaphoreValue((SDL_Semaphore*)semaphore->id);
 }
 
 void cute_semaphore_destroy(cute_semaphore_t* semaphore)
 {
-	SDL_DestroySemaphore((SDL_sem*)semaphore->id);
+	SDL_DestroySemaphore((SDL_Semaphore*)semaphore->id);
 }
 
 cute_thread_t* cute_thread_create(cute_thread_fn func, const char* name, void* udata)
@@ -634,7 +652,7 @@ cute_thread_id_t cute_thread_get_id(cute_thread_t* thread)
 
 cute_thread_id_t cute_thread_id()
 {
-	return SDL_ThreadID();
+	return SDL_GetCurrentThreadID();
 }
 
 int cute_thread_wait(cute_thread_t* thread)
@@ -646,7 +664,7 @@ int cute_thread_wait(cute_thread_t* thread)
 
 int cute_core_count()
 {
-	return SDL_GetCPUCount();
+	return SDL_GetNumLogicalCPUCores();
 }
 
 int cute_cacheline_size()
