@@ -3,7 +3,7 @@
 		Licensing information can be found at the end of the file.
 	------------------------------------------------------------------------------
 
-	cute_tls.h - v1.01
+	cute_tls.h - v1.02
 
 	To create implementation (the function definitions)
 		#define CUTE_TLS_IMPLEMENTATION
@@ -13,7 +13,7 @@
 	SUMMARY
 
 		cute_tls.h is a single-file header that implements some functions to
-		make a connection over TLS 1.2 and send some data back and forth over a
+		make a connection over TLS 1.2/1.3 and send some data back and forth over a
 		TCP socket. It's meant mainly for making some simple HTTPS requsts to a web
 		server, but nothing heavy-duty requiring extreme performance. It uses native
 		APIs on Windows and Apple machines to get access to highly robust TLS
@@ -21,8 +21,9 @@
 		through a TCP socket.
 
 		On Windows Secure Channel is used. On Apple machines the Network.framework is used.
-		For *Nix s2n can be used a third-party solution, since no good OS-level TLS
-		handshake is currently available on Linux.
+		On Android, Java's SSLSocket is called via JNI. For *Nix s2n can be used as a
+		third-party solution, since no good OS-level TLS handshake is currently available
+		on Linux.
 
 
 	GENERAL INFORMATION ABOUT HTTPS
@@ -49,11 +50,9 @@
 
 	LIMITATIONS
 
-		Emscripten/Android platforms are not currently supported.
+		Emscripten is not currently supported.
 
 		Client credentials are not supported.
-
-		IPv6 is not supported, though this is totally possible, just not initially in v1.00.
 
 		The server side of the connection is *not* supported. This is a client-only implementation.
 
@@ -93,11 +92,24 @@
 		doing, so follow along on the s2n docs as you see fit: https://github.com/aws/s2n-tls
 
 
-	OTHER OPERATING SYSTEMS (e.g. ANDROID/EMSCRIPTEN)
+	BUILDING ON ANDROID
 
-		Android is a bit of another story. I don't have too much Android dev experience, but the best
-		option may be to call from C into Java and use Android's on SSL socket, or their HTTPS APi
-		directly from Java: https://developer.android.com/training/articles/security-ssl
+		On Android, cute_tls uses JNI to call Java's SSLSocket API. You must call tls_init()
+		once at startup with your JavaVM pointer:
+
+			// In your JNI_OnLoad or native init:
+			extern "C" void tls_init(void* platform_data);
+
+			JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+				tls_init(vm);
+				return JNI_VERSION_1_6;
+			}
+
+		Link against the Android NDK. No additional Java code is required - cute_tls calls
+		the system SSLSocket directly via JNI.
+
+
+	OTHER OPERATING SYSTEMS (e.g. EMSCRIPTEN)
 
 		For Emscripten it looks like they have a C++ websocket wrapper that might work, though I
 		have yet to try it: https://emscripten.org/docs/porting/networking.html#emscripten-websockets-api
@@ -129,6 +141,7 @@
 	Revision history:
 		1.00 (06/17/2023) initial release
 		1.01 (06/19/2023) s2n implementation for apple/linux
+		1.02 (02/02/2026) TLS 1.3 on Windows, IPv6 support, fixed leaks and bugs, Apple callback lifetime fix, Android support via JNI
 */
 
 /*
@@ -230,7 +243,7 @@
 
 typedef struct TLS_Connection { unsigned long long id; } TLS_Connection;
 
-// Initiates a new TLS 1.2 connection.
+// Initiates a new TLS 1.2/1.3 connection.
 TLS_Connection tls_connect(const char* hostname, int port);
 
 // Frees up all resources associated with the connection.
@@ -267,6 +280,9 @@ int tls_read(TLS_Connection connection, void* data, int size);
 // Returns 0 on disconnect or -1 on error.
 int tls_send(TLS_Connection connection, const void* data, int size);
 
+// Call once at startup on Android with your JavaVM* pointer. No-op on other platforms.
+void tls_init(void* platform_data);
+
 #define TLS_1_KB 1024
 #define TLS_MAX_RECORD_SIZE (16 * TLS_1_KB)                  // TLS defines records to be up to 16kb.
 #define TLS_MAX_PACKET_SIZE (TLS_MAX_RECORD_SIZE + TLS_1_KB) // Some extra rooms for records split over two packets.
@@ -296,6 +312,8 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #		define TLS_WINDOWS
 #	elif defined(__APPLE__)
 #		define TLS_APPLE
+#	elif defined(__ANDROID__)
+#		define TLS_ANDROID
 #	elif defined(__linux__) || defined(__unix__) && !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
 #		define TLS_S2N
 #	else
@@ -325,9 +343,17 @@ int tls_send(TLS_Connection connection, const void* data, int size);
 #	pragma comment (lib, "ws2_32.lib")
 #	pragma comment (lib, "secur32.lib")
 #	pragma comment (lib, "shlwapi.lib")
+#elif defined(TLS_ANDROID)
+#	include <jni.h>
+#	include <pthread.h>
+#	include <assert.h>
+#	include <stdio.h>
+#	include <stdlib.h>
+#	include <string.h>
 #elif defined(TLS_APPLE)
 #	include <Network/Network.h>
 #	include <pthread.h>
+#	include <libkern/OSAtomic.h>
 #elif defined(TLS_S2N)
 #	include <assert.h>
 #	include <stdio.h>
@@ -449,14 +475,260 @@ typedef struct TLS_Context
 	bool tcp_connect_pending;
 	int received;
 	char incoming[TLS_MAX_PACKET_SIZE];
+#elif defined(TLS_ANDROID)
+	jobject socket;   // SSLSocket (global ref)
+	jobject input;    // InputStream (global ref)
+	jobject output;   // OutputStream (global ref)
+	jobject connect_socket;  // Socket being connected (global ref), for cancellation
+	pthread_t connect_thread;
+	int connect_done;
+	int cancel_requested;
+	int port;
 #elif defined(TLS_APPLE)
 	dispatch_queue_t dispatch;
 	nw_connection_t connection;
+	int refcount;
+	int disconnecting;
 #endif
 } TLS_Context;
 
 #ifdef TLS_S2N
 int tls_s2n_init = 0;
+#endif
+
+#ifdef TLS_ANDROID
+static JavaVM* g_tls_jvm = NULL;
+
+#define TLS_ANDROID_TIMEOUT_MS 30000
+
+// JNI C API compatibility macros - allows using C-style JNI in both C and C++ builds.
+// In C: JNIEnv is a pointer to the function table, so (*env)->Method(env, ...) works.
+// In C++: JNIEnv is a wrapper class, access C table via env->functions->Method(env, ...).
+#ifdef __cplusplus
+#define TLS_JNI(env) ((env)->functions)
+#define TLS_JVM(vm) ((vm)->functions)
+#else
+#define TLS_JNI(env) (*(env))
+#define TLS_JVM(vm) (*(vm))
+#endif
+
+// Returns JNIEnv and sets *attached=1 if we attached (caller must detach).
+static JNIEnv* tls_get_env(int* attached) {
+	JNIEnv* env = NULL;
+	jint status = TLS_JVM(g_tls_jvm)->GetEnv(g_tls_jvm, (void**)&env, JNI_VERSION_1_6);
+	if (status == JNI_EDETACHED) {
+		TLS_JVM(g_tls_jvm)->AttachCurrentThread(g_tls_jvm, &env, NULL);
+		*attached = 1;
+	} else {
+		*attached = 0;
+	}
+	return env;
+}
+
+static void tls_detach_if_needed(int attached) {
+	if (attached) {
+		TLS_JVM(g_tls_jvm)->DetachCurrentThread(g_tls_jvm);
+	}
+}
+
+// Map Java SSL exception to TLS_State. Returns TLS_STATE_UNKNOWN_ERROR if no match.
+static TLS_State tls_map_exception(JNIEnv* env, jthrowable ex) {
+	// Check exception class hierarchy for specific SSL errors.
+	jclass cert_expired = TLS_JNI(env)->FindClass(env, "java/security/cert/CertificateExpiredException");
+	jclass cert_not_yet_valid = TLS_JNI(env)->FindClass(env, "java/security/cert/CertificateNotYetValidException");
+	jclass cert_exception = TLS_JNI(env)->FindClass(env, "java/security/cert/CertificateException");
+	jclass unknown_host = TLS_JNI(env)->FindClass(env, "java/net/UnknownHostException");
+	jclass ssl_peer_unverified = TLS_JNI(env)->FindClass(env, "javax/net/ssl/SSLPeerUnverifiedException");
+	jclass ssl_handshake = TLS_JNI(env)->FindClass(env, "javax/net/ssl/SSLHandshakeException");
+	jclass socket_timeout = TLS_JNI(env)->FindClass(env, "java/net/SocketTimeoutException");
+	jclass connect_exception = TLS_JNI(env)->FindClass(env, "java/net/ConnectException");
+
+	TLS_State result = TLS_STATE_UNKNOWN_ERROR;
+
+	// Check the exception and its cause chain.
+	jthrowable current = ex;
+	jclass throwable_class = TLS_JNI(env)->FindClass(env, "java/lang/Throwable");
+	jmethodID get_cause = TLS_JNI(env)->GetMethodID(env, throwable_class, "getCause", "()Ljava/lang/Throwable;");
+
+	for (int depth = 0; depth < 5 && current; depth++) {
+		if (TLS_JNI(env)->IsInstanceOf(env, current, cert_expired) ||
+		    TLS_JNI(env)->IsInstanceOf(env, current, cert_not_yet_valid)) {
+			result = TLS_STATE_CERTIFICATE_EXPIRED;
+			break;
+		}
+		if (TLS_JNI(env)->IsInstanceOf(env, current, ssl_peer_unverified)) {
+			result = TLS_STATE_CANNOT_VERIFY_CA_CHAIN;
+			break;
+		}
+		if (TLS_JNI(env)->IsInstanceOf(env, current, cert_exception)) {
+			result = TLS_STATE_BAD_CERTIFICATE;
+			break;
+		}
+		if (TLS_JNI(env)->IsInstanceOf(env, current, unknown_host)) {
+			result = TLS_STATE_BAD_HOSTNAME;
+			break;
+		}
+		if (TLS_JNI(env)->IsInstanceOf(env, current, socket_timeout) ||
+		    TLS_JNI(env)->IsInstanceOf(env, current, connect_exception)) {
+			result = TLS_STATE_INVALID_SOCKET;
+			break;
+		}
+		// Walk to cause.
+		jthrowable cause = (jthrowable)TLS_JNI(env)->CallObjectMethod(env, current, get_cause);
+		if (depth > 0) TLS_JNI(env)->DeleteLocalRef(env, current);
+		current = cause;
+	}
+	if (current && current != ex) TLS_JNI(env)->DeleteLocalRef(env, current);
+
+	TLS_JNI(env)->DeleteLocalRef(env, cert_expired);
+	TLS_JNI(env)->DeleteLocalRef(env, cert_not_yet_valid);
+	TLS_JNI(env)->DeleteLocalRef(env, cert_exception);
+	TLS_JNI(env)->DeleteLocalRef(env, unknown_host);
+	TLS_JNI(env)->DeleteLocalRef(env, ssl_peer_unverified);
+	TLS_JNI(env)->DeleteLocalRef(env, ssl_handshake);
+	TLS_JNI(env)->DeleteLocalRef(env, socket_timeout);
+	TLS_JNI(env)->DeleteLocalRef(env, connect_exception);
+	TLS_JNI(env)->DeleteLocalRef(env, throwable_class);
+
+	return result;
+}
+
+// Background thread for non-blocking connect.
+static void* tls_connect_thread(void* arg) {
+	TLS_Context* ctx = (TLS_Context*)arg;
+	JNIEnv* env;
+	TLS_JVM(g_tls_jvm)->AttachCurrentThread(g_tls_jvm, &env, NULL);
+
+	// Create plain socket and store immediately for cancellation support.
+	jclass socket_class = TLS_JNI(env)->FindClass(env, "java/net/Socket");
+	jmethodID socket_ctor = TLS_JNI(env)->GetMethodID(env, socket_class, "<init>", "()V");
+	jobject plain_socket = TLS_JNI(env)->NewObject(env, socket_class, socket_ctor);
+	ctx->connect_socket = TLS_JNI(env)->NewGlobalRef(env, plain_socket);
+
+	// Create InetSocketAddress(hostname, port)
+	jclass addr_class = TLS_JNI(env)->FindClass(env, "java/net/InetSocketAddress");
+	jmethodID addr_ctor = TLS_JNI(env)->GetMethodID(env, addr_class, "<init>", "(Ljava/lang/String;I)V");
+	jstring jhost = TLS_JNI(env)->NewStringUTF(env, ctx->hostname);
+	jobject addr = TLS_JNI(env)->NewObject(env, addr_class, addr_ctor, jhost, ctx->port);
+
+	// Connect with timeout: socket.connect(addr, timeout)
+	jmethodID connect_method = TLS_JNI(env)->GetMethodID(env, socket_class, "connect", "(Ljava/net/SocketAddress;I)V");
+	TLS_JNI(env)->CallVoidMethod(env, plain_socket, connect_method, addr, (jint)TLS_ANDROID_TIMEOUT_MS);
+	TLS_JNI(env)->DeleteLocalRef(env, addr);
+	TLS_JNI(env)->DeleteLocalRef(env, addr_class);
+
+	if (TLS_JNI(env)->ExceptionCheck(env)) {
+		TLS_JNI(env)->ExceptionClear(env);
+		if (!ctx->cancel_requested) ctx->state = TLS_STATE_INVALID_SOCKET;
+		goto cleanup;
+	}
+
+	// Wrap with SSL: SSLSocketFactory.getDefault().createSocket(socket, host, port, autoClose)
+	{
+		jclass factory_class = TLS_JNI(env)->FindClass(env, "javax/net/ssl/SSLSocketFactory");
+		jmethodID get_default = TLS_JNI(env)->GetStaticMethodID(env, factory_class, "getDefault", "()Ljavax/net/SocketFactory;");
+		jobject factory = TLS_JNI(env)->CallStaticObjectMethod(env, factory_class, get_default);
+		jmethodID create_socket = TLS_JNI(env)->GetMethodID(env, factory_class, "createSocket", "(Ljava/net/Socket;Ljava/lang/String;IZ)Ljava/net/Socket;");
+		jobject ssl_socket = TLS_JNI(env)->CallObjectMethod(env, factory, create_socket, plain_socket, jhost, ctx->port, (jboolean)1);
+		TLS_JNI(env)->DeleteLocalRef(env, factory);
+		TLS_JNI(env)->DeleteLocalRef(env, factory_class);
+
+		if (TLS_JNI(env)->ExceptionCheck(env)) {
+			jthrowable ex = TLS_JNI(env)->ExceptionOccurred(env);
+			if (!ctx->cancel_requested) ctx->state = tls_map_exception(env, ex);
+			TLS_JNI(env)->DeleteLocalRef(env, ex);
+			TLS_JNI(env)->ExceptionClear(env);
+			goto cleanup;
+		}
+
+		// Clear connect_socket - SSL socket now owns it (autoClose=true).
+		TLS_JNI(env)->DeleteGlobalRef(env, ctx->connect_socket);
+		ctx->connect_socket = NULL;
+
+		// Set read timeout and start handshake.
+		jclass ssl_socket_class = TLS_JNI(env)->FindClass(env, "javax/net/ssl/SSLSocket");
+		jmethodID set_timeout = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "setSoTimeout", "(I)V");
+		TLS_JNI(env)->CallVoidMethod(env, ssl_socket, set_timeout, (jint)TLS_ANDROID_TIMEOUT_MS);
+
+		jmethodID start_handshake = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "startHandshake", "()V");
+		TLS_JNI(env)->CallVoidMethod(env, ssl_socket, start_handshake);
+
+		if (TLS_JNI(env)->ExceptionCheck(env)) {
+			jthrowable ex = TLS_JNI(env)->ExceptionOccurred(env);
+			if (!ctx->cancel_requested) ctx->state = tls_map_exception(env, ex);
+			TLS_JNI(env)->DeleteLocalRef(env, ex);
+			TLS_JNI(env)->ExceptionClear(env);
+			jmethodID close_method = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "close", "()V");
+			TLS_JNI(env)->CallVoidMethod(env, ssl_socket, close_method);
+			TLS_JNI(env)->ExceptionClear(env);
+			TLS_JNI(env)->DeleteLocalRef(env, ssl_socket);
+			TLS_JNI(env)->DeleteLocalRef(env, ssl_socket_class);
+			TLS_JNI(env)->DeleteLocalRef(env, plain_socket);
+			TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+			TLS_JNI(env)->DeleteLocalRef(env, jhost);
+			ctx->connect_done = 1;
+			TLS_JVM(g_tls_jvm)->DetachCurrentThread(g_tls_jvm);
+			return NULL;
+		}
+
+		// Get input/output streams and store as global refs.
+		jmethodID get_input = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "getInputStream", "()Ljava/io/InputStream;");
+		jmethodID get_output = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "getOutputStream", "()Ljava/io/OutputStream;");
+		jobject input = TLS_JNI(env)->CallObjectMethod(env, ssl_socket, get_input);
+		jobject output = TLS_JNI(env)->CallObjectMethod(env, ssl_socket, get_output);
+		TLS_JNI(env)->DeleteLocalRef(env, ssl_socket_class);
+
+		ctx->socket = TLS_JNI(env)->NewGlobalRef(env, ssl_socket);
+		ctx->input = TLS_JNI(env)->NewGlobalRef(env, input);
+		ctx->output = TLS_JNI(env)->NewGlobalRef(env, output);
+		TLS_JNI(env)->DeleteLocalRef(env, ssl_socket);
+		TLS_JNI(env)->DeleteLocalRef(env, input);
+		TLS_JNI(env)->DeleteLocalRef(env, output);
+	}
+	TLS_JNI(env)->DeleteLocalRef(env, plain_socket);
+	TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+	TLS_JNI(env)->DeleteLocalRef(env, jhost);
+
+	ctx->state = TLS_STATE_CONNECTED;
+	ctx->connect_done = 1;
+	TLS_JVM(g_tls_jvm)->DetachCurrentThread(g_tls_jvm);
+	return NULL;
+
+cleanup:
+	if (ctx->connect_socket) {
+		jmethodID close_method = TLS_JNI(env)->GetMethodID(env, socket_class, "close", "()V");
+		TLS_JNI(env)->CallVoidMethod(env, ctx->connect_socket, close_method);
+		TLS_JNI(env)->ExceptionClear(env);
+		TLS_JNI(env)->DeleteGlobalRef(env, ctx->connect_socket);
+		ctx->connect_socket = NULL;
+	}
+	TLS_JNI(env)->DeleteLocalRef(env, plain_socket);
+	TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+	TLS_JNI(env)->DeleteLocalRef(env, jhost);
+	ctx->connect_done = 1;
+	TLS_JVM(g_tls_jvm)->DetachCurrentThread(g_tls_jvm);
+	return NULL;
+}
+#endif
+
+#ifdef TLS_APPLE
+// Release a reference to the context. Frees when refcount hits 0.
+// Uses OSAtomicDecrement32 for atomic decrement-and-test.
+static void tls_ctx_release(TLS_Context* ctx)
+{
+	if (OSAtomicDecrement32(&ctx->refcount) == 0) {
+		nw_release(ctx->connection);
+		dispatch_release(ctx->dispatch);
+		while (ctx->q.count) {
+			void* packet;
+			int size;
+			tls_packet_queue_pop(&ctx->q, &packet, &size);
+			TLS_FREE(packet);
+		}
+		pthread_mutex_destroy(&ctx->q.lock);
+		TLS_FREE(ctx);
+	}
+}
 #endif
 
 // Called in a poll-style manner on Windows.
@@ -480,15 +752,19 @@ static void tls_recv(TLS_Context* ctx)
 				break;
 			} else {
 				ctx->received += r;
-				if (ctx->received == sizeof(ctx->incoming))
-					break;
 			}
 		}
 	#endif // TLS_WINDOWS
 
 	#ifdef TLS_APPLE
 		// Queue up an asynchronous receive block loop.
-		nw_connection_receive(ctx->connection, 1, TLS_MAX_PACKET_SIZE, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, 	nw_error_t receive_error) {
+		// Prevent use-after-free: hold a reference for the pending callback.
+		OSAtomicIncrement32(&ctx->refcount);
+		nw_connection_receive(ctx->connection, 1, TLS_MAX_PACKET_SIZE, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, nw_error_t receive_error) {
+			if (ctx->disconnecting) {
+				tls_ctx_release(ctx);
+				return;
+			}
 			if (content != NULL) {
 				// What a horrid API design... So over-engineered to simply memcpy a buffer.
 				int size = (int)dispatch_data_get_size(content);
@@ -501,25 +777,28 @@ static void tls_recv(TLS_Context* ctx)
 			}
 			if (is_complete && !receive_error) {
 				ctx->state = TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN;
+				tls_ctx_release(ctx);
 			} else if (receive_error) {
 				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				tls_ctx_release(ctx);
 			} else {
 				// Queue up another call to this function to receive the next packet.
+				// tls_recv increments refcount for the new callback, then we release ours.
 				tls_recv(ctx);
+				tls_ctx_release(ctx);
 			}
 		});
 	#endif // TLS_APPLE
 
 	#ifdef TLS_S2N
-		s2n_blocked_status blocked = S2N_NOT_BLOCKED;
-		int bytes_read = 0;
-		while (bytes_read < sizeof(ctx->incoming)) {
-			int r = s2n_recv(ctx->connection, ctx->incoming + bytes_read, sizeof(ctx->incoming) - bytes_read, &blocked);
+		while (ctx->received < sizeof(ctx->incoming)) {
+			s2n_blocked_status blocked = S2N_NOT_BLOCKED;
+			int r = s2n_recv(ctx->connection, ctx->incoming + ctx->received, sizeof(ctx->incoming) - ctx->received, &blocked);
 			s2n_error_type etype = (s2n_error_type)s2n_error_get_type(s2n_errno);
-			if (r == 0) {
+			if (r == 0 || blocked != S2N_NOT_BLOCKED) {
 				break;
 			} else if (r > 0) {
-				bytes_read += r;
+				ctx->received += r;
 			} else if (etype == S2N_ERR_T_CLOSED) {
 				ctx->state = TLS_STATE_DISCONNECTED;
 				break;
@@ -531,7 +810,6 @@ static void tls_recv(TLS_Context* ctx)
 				break;
 			}
 		}
-		ctx->received = bytes_read;
 	#endif // TLS_S2N
 }
 
@@ -576,13 +854,12 @@ TLS_Connection tls_connect(const char* hostname, int port)
 		hints.ai_protocol = IPPROTO_TCP;
 		struct addrinfo* addri = NULL;
 		if (getaddrinfo(hostname, sport, &hints, &addri) != 0) {
-			freeaddrinfo(addri);
 			TLS_FREE(ctx);
 			return result;
 		}
 
-		// Create a TCP IPv4 socket.
-		ctx->sock = socket(AF_INET, SOCK_STREAM, 0);
+		// Create a TCP socket.
+		ctx->sock = socket(addri->ai_family, SOCK_STREAM, 0);
 		if (ctx->sock == -1) {
 			freeaddrinfo(addri);
 			TLS_FREE(ctx);
@@ -611,26 +888,24 @@ TLS_Connection tls_connect(const char* hostname, int port)
 		}
 
 		// Startup the TCP connection.
-		if (connect(ctx->sock, addri->ai_addr, (int)addri->ai_addrlen) == -1) {
+		int connect_result = connect(ctx->sock, addri->ai_addr, (int)addri->ai_addrlen);
+		freeaddrinfo(addri);
+		addri = NULL;
+		if (connect_result == -1) {
 			#ifdef TLS_WINDOWS
 				int error = WSAGetLastError();
 				if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
-					freeaddrinfo(addri);
 					closesocket(ctx->sock);
 					TLS_FREE(ctx);
 					return result;
 				}
 			#else
 				if (errno != EWOULDBLOCK && errno != EINPROGRESS && errno != EAGAIN) {
-					freeaddrinfo(addri);
 					close(ctx->sock);
 					TLS_FREE(ctx);
 					return result;
 				}
 			#endif
-		} else {
-			freeaddrinfo(addri);
-			addri = NULL;
 		}
 
 		ctx->state = TLS_STATE_PENDING;
@@ -644,7 +919,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 			cred.dwFlags = SCH_USE_STRONG_CRYPTO          // Disable deprecated or otherwise weak algorithms (on as default).
 						 | SCH_CRED_AUTO_CRED_VALIDATION  // Automatically validate server cert (on as default), as opposed to manual verify.
 						 | SCH_CRED_NO_DEFAULT_CREDS;     // Client certs are not supported.
-			cred.grbitEnabledProtocols = SP_PROT_TLS1_2;  // Specifically pick only TLS 1.2.
+			cred.grbitEnabledProtocols = SP_PROT_TLS1_2 | SP_PROT_TLS1_3;  // TLS 1.2 minimum, 1.3 if available.
 
 			if (AcquireCredentialsHandleA(NULL, (char*)UNISP_NAME_A, SECPKG_CRED_OUTBOUND, NULL, &cred, NULL, NULL, &ctx->handle, NULL) != SEC_E_OK)
 			{
@@ -663,6 +938,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 				return result;
 			}
 			if (s2n_connection_set_fd(connection, ctx->sock) < 0) {
+				s2n_connection_free(connection);
 				close(ctx->sock);
 				TLS_FREE(ctx);
 				return result;
@@ -684,27 +960,37 @@ TLS_Connection tls_connect(const char* hostname, int port)
 		#endif
 	#endif // defined(TLS_WINDOWS) || defined(TLS_S2N)
 
+	#ifdef TLS_ANDROID
+		ctx->port = port;
+		ctx->connect_done = 0;
+		ctx->state = TLS_STATE_PENDING;
+		if (pthread_create(&ctx->connect_thread, NULL, tls_connect_thread, ctx) != 0) {
+			TLS_FREE(ctx);
+			return result;
+		}
+	#endif // TLS_ANDROID
+
 	#ifdef TLS_APPLE
 		// Used for syncing the packet queue.
 		pthread_mutex_init(&ctx->q.lock, NULL);
+
+		// Initialize refcount for preventing use-after-free from async callbacks.
+		ctx->refcount = 1;
+		ctx->disconnecting = 0;
 
 		// Turn on TLS (default config).
 		nw_endpoint_t endpoint = nw_endpoint_create_host(hostname, sport);
 		nw_parameters_configure_protocol_block_t configure_tls = NW_PARAMETERS_DEFAULT_CONFIGURATION;
 		nw_parameters_t parameters = nw_parameters_create_secure_tcp(configure_tls, NW_PARAMETERS_DEFAULT_CONFIGURATION);
 
-		// Set ipv4.
 		nw_protocol_stack_t protocol_stack = nw_parameters_copy_default_protocol_stack(parameters);
 		nw_protocol_options_t ip_options = nw_protocol_stack_copy_internet_protocol(protocol_stack);
-		nw_ip_options_set_version(ip_options, nw_ip_version_4);
 
 		// Create actual connection object.
 		ctx->connection = nw_connection_create(endpoint, parameters);
-		nw_retain(ctx->connection);
 
 		// Create an async queue for dispatching all of our connection's callbacks/blocks.
 		ctx->dispatch = dispatch_queue_create("com.tls.internal_queue", DISPATCH_QUEUE_SERIAL);
-		dispatch_retain(ctx->dispatch);
 
 		// Various calls into Network.framework are asynchronous and use a queue to dispatch callbacks (blocks).
 		nw_connection_set_queue(ctx->connection, ctx->dispatch);
@@ -866,14 +1152,24 @@ TLS_State tls_process(TLS_Connection connection)
 					while (size != 0) {
 						int d = send(ctx->sock, buffer, size, 0);
 						if (d <= 0) {
-							break;
+							#ifdef TLS_WINDOWS
+								int error = WSAGetLastError();
+								if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
+									break;
+								}
+							#else
+								if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINPROGRESS) {
+									break;
+								}
+							#endif
+						} else {
+							size -= d;
+							buffer += d;
 						}
-						size -= d;
-						buffer += d;
 					}
 					FreeContextBuffer(outbuffers[0].pvBuffer);
 					if (size != 0) {
-						// Somehow failed to send() data to server.
+						// Failed to send() data to server.
 						ctx->state = TLS_STATE_UNKNOWN_ERROR;
 						return ctx->state;
 					}
@@ -906,6 +1202,14 @@ TLS_State tls_process(TLS_Connection connection)
 			tls_recv(ctx);
 		#endif // TLS_WINDOWS
 
+		#ifdef TLS_ANDROID
+			// Check if background connect thread has finished.
+			if (ctx->connect_done) {
+				pthread_join(ctx->connect_thread, NULL);
+				// ctx->state was set by the thread (CONNECTED or error).
+			}
+		#endif // TLS_ANDROID
+
 		#ifdef TLS_APPLE
 			// Nothing needed here.
 		#endif // TLS_APPLE
@@ -919,7 +1223,7 @@ TLS_State tls_process(TLS_Connection connection)
 				s2n_error_type etype = (s2n_error_type)s2n_error_get_type(s2n_errno);
 				if (etype == S2N_ERR_T_PROTO) {
 					// For some unknown reason s2n doesn't expose their error constants, like at all.
-					// So to avoid finding the correct header and including it, we can at least us
+					// So to avoid finding the correct header and including it, we can at least use
 					// string comparisons, as that's the only way s2n has exposed error codes that aren't
 					// a nightmare to hookup, and likely won't break as they add new error types.
 					#define TLS_S2N_ERROR_MATCHES(X) (!TLS_STRCMP(s2n_strerror_name(s2n_errno), #X))
@@ -1018,6 +1322,46 @@ TLS_State tls_process(TLS_Connection connection)
 			}
 		#endif // TLS_WINDOWS
 
+		#ifdef TLS_ANDROID
+			// Check for available data and push to packet queue.
+			int attached;
+			JNIEnv* env = tls_get_env(&attached);
+			jclass input_class = TLS_JNI(env)->FindClass(env, "java/io/InputStream");
+			jmethodID available_method = TLS_JNI(env)->GetMethodID(env, input_class, "available", "()I");
+			jint available = TLS_JNI(env)->CallIntMethod(env, ctx->input, available_method);
+
+			if (TLS_JNI(env)->ExceptionCheck(env)) {
+				TLS_JNI(env)->ExceptionClear(env);
+				ctx->state = TLS_STATE_DISCONNECTED;
+				TLS_JNI(env)->DeleteLocalRef(env, input_class);
+			} else if (available > 0) {
+				jbyteArray buffer = TLS_JNI(env)->NewByteArray(env, available);
+				jmethodID read_method = TLS_JNI(env)->GetMethodID(env, input_class, "read", "([B)I");
+				jint bytes_read = TLS_JNI(env)->CallIntMethod(env, ctx->input, read_method, buffer);
+				TLS_JNI(env)->DeleteLocalRef(env, input_class);
+
+				if (TLS_JNI(env)->ExceptionCheck(env)) {
+					TLS_JNI(env)->ExceptionClear(env);
+					ctx->state = TLS_STATE_DISCONNECTED;
+					TLS_JNI(env)->DeleteLocalRef(env, buffer);
+				} else if (bytes_read > 0) {
+					void* data = TLS_MALLOC(bytes_read);
+					TLS_JNI(env)->GetByteArrayRegion(env, buffer, 0, bytes_read, (jbyte*)data);
+					TLS_JNI(env)->DeleteLocalRef(env, buffer);
+					tls_packet_queue_push(&ctx->q, data, bytes_read);
+				} else if (bytes_read < 0) {
+					// End of stream
+					ctx->state = TLS_STATE_DISCONNECTED;
+					TLS_JNI(env)->DeleteLocalRef(env, buffer);
+				} else {
+					TLS_JNI(env)->DeleteLocalRef(env, buffer);
+				}
+			} else {
+				TLS_JNI(env)->DeleteLocalRef(env, input_class);
+			}
+			tls_detach_if_needed(attached);
+		#endif // TLS_ANDROID
+
 		#ifdef TLS_APPLE
 			// Nothing on Apple.
 			// Reads are setup via chained callbacks upon connection starting.
@@ -1094,6 +1438,9 @@ void tls_disconnect(TLS_Connection connection)
 				int size = outbuffers[0].cbBuffer;
 				while (size != 0) {
 					int d = send(ctx->sock, buffer, size, 0);
+					if (d <= 0) {
+						break;
+					}
 					buffer += d;
 					size -= d;
 				}
@@ -1106,10 +1453,48 @@ void tls_disconnect(TLS_Connection connection)
 		closesocket(ctx->sock);
 	#endif
 
+	#ifdef TLS_ANDROID
+		// Cancel and wait for connect thread if still running.
+		if (!ctx->connect_done) {
+			ctx->cancel_requested = 1;
+			// Close connect_socket to interrupt blocking connect/handshake.
+			if (ctx->connect_socket) {
+				int attached;
+				JNIEnv* env = tls_get_env(&attached);
+				jclass socket_class = TLS_JNI(env)->FindClass(env, "java/net/Socket");
+				jmethodID close_method = TLS_JNI(env)->GetMethodID(env, socket_class, "close", "()V");
+				TLS_JNI(env)->CallVoidMethod(env, ctx->connect_socket, close_method);
+				TLS_JNI(env)->ExceptionClear(env);
+				TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+				tls_detach_if_needed(attached);
+			}
+			pthread_join(ctx->connect_thread, NULL);
+		}
+
+		// Clean up socket if connection succeeded.
+		if (ctx->socket) {
+			int attached;
+			JNIEnv* env = tls_get_env(&attached);
+			jclass socket_class = TLS_JNI(env)->FindClass(env, "java/net/Socket");
+			jmethodID close_method = TLS_JNI(env)->GetMethodID(env, socket_class, "close", "()V");
+			TLS_JNI(env)->CallVoidMethod(env, ctx->socket, close_method);
+			TLS_JNI(env)->ExceptionClear(env);
+			TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+
+			TLS_JNI(env)->DeleteGlobalRef(env, ctx->socket);
+			TLS_JNI(env)->DeleteGlobalRef(env, ctx->input);
+			TLS_JNI(env)->DeleteGlobalRef(env, ctx->output);
+			tls_detach_if_needed(attached);
+		}
+	#endif
+
 	#ifdef TLS_APPLE
-		dispatch_release(ctx->dispatch);
-		nw_release(ctx->connection);
-		pthread_mutex_destroy(&ctx->q.lock);
+		// Signal callbacks to stop and release owner reference.
+		// Actual cleanup happens in tls_ctx_release when refcount hits 0.
+		ctx->disconnecting = 1;
+		nw_connection_cancel(ctx->connection);
+		tls_ctx_release(ctx);
+		return;
 	#endif
 
 	#ifdef TLS_S2N
@@ -1119,6 +1504,7 @@ void tls_disconnect(TLS_Connection connection)
 		s2n_shutdown(ctx->connection, &blocked);
 
 		s2n_connection_free(ctx->connection);
+		close(ctx->sock);
 	#endif
 
 	while (ctx->q.count) {
@@ -1127,6 +1513,7 @@ void tls_disconnect(TLS_Connection connection)
 		tls_packet_queue_pop(&ctx->q, &packet, &size);
 		TLS_FREE(packet);
 	}
+
 	TLS_FREE(ctx);
 }
 
@@ -1214,20 +1601,53 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 							return -1;
 						}
 					#else
-						if (errno != EAGAIN) {
+						if (errno != EAGAIN && errno != EWOULDBLOCK) {
 							// Error sending data to socket, or server disconnected.
 							ctx->state = TLS_STATE_UNKNOWN_ERROR;
 							return -1;
 						}
 					#endif
+				} else {
+					sent += d;
 				}
-				sent += d;
 			}
 
 			data = (const void*)((uintptr_t)data + use);
 			size -= use;
 		}
 	#endif // TLS_WINDOWS
+
+	#ifdef TLS_ANDROID
+		int attached;
+		JNIEnv* env = tls_get_env(&attached);
+		jclass output_class = TLS_JNI(env)->FindClass(env, "java/io/OutputStream");
+		jmethodID write_method = TLS_JNI(env)->GetMethodID(env, output_class, "write", "([B)V");
+		jmethodID flush_method = TLS_JNI(env)->GetMethodID(env, output_class, "flush", "()V");
+
+		jbyteArray buffer = TLS_JNI(env)->NewByteArray(env, size);
+		TLS_JNI(env)->SetByteArrayRegion(env, buffer, 0, size, (const jbyte*)data);
+		TLS_JNI(env)->CallVoidMethod(env, ctx->output, write_method, buffer);
+		TLS_JNI(env)->DeleteLocalRef(env, buffer);
+
+		if (TLS_JNI(env)->ExceptionCheck(env)) {
+			TLS_JNI(env)->ExceptionClear(env);
+			TLS_JNI(env)->DeleteLocalRef(env, output_class);
+			ctx->state = TLS_STATE_UNKNOWN_ERROR;
+			tls_detach_if_needed(attached);
+			return -1;
+		}
+
+		TLS_JNI(env)->CallVoidMethod(env, ctx->output, flush_method);
+		TLS_JNI(env)->DeleteLocalRef(env, output_class);
+
+		if (TLS_JNI(env)->ExceptionCheck(env)) {
+			TLS_JNI(env)->ExceptionClear(env);
+			ctx->state = TLS_STATE_UNKNOWN_ERROR;
+			tls_detach_if_needed(attached);
+			return -1;
+		}
+		tls_detach_if_needed(attached);
+	#endif // TLS_ANDROID
 
 	#ifdef TLS_APPLE
 		// Again, so over-engineered. We just need to send a blob of bytes...
@@ -1241,6 +1661,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 				ctx->state = TLS_STATE_UNKNOWN_ERROR;
 			}
 		});
+		dispatch_release(dispatch_data);
 	#endif // TLS_APPLE
 
 	#ifdef TLS_S2N
@@ -1259,6 +1680,15 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 	#endif // TLS_S2N
 
 	return 0;
+}
+
+void tls_init(void* platform_data)
+{
+#ifdef TLS_ANDROID
+	g_tls_jvm = (JavaVM*)platform_data;
+#else
+	(void)platform_data;
+#endif
 }
 
 #endif // CUTE_TLS_IMPLEMENTATION_ONCE
