@@ -455,7 +455,7 @@ struct cute_tiled_map_t
 	uint32_t backgroundcolor;                 // Hex-formatted color (#RRGGBB or #AARRGGBB) (optional).
 	cute_tiled_string_t class_;          // The class of the map (since 1.9, optional).
 	int height;                          // Number of tile rows.
-	/* hexsidelength */                  // Not currently supported.
+	int hexsidelength;                   // Width or height (by staggered axis) of the tile’s edge, in pixels (hexagonal).
 	int infinite;                        // Whether the map has infinite dimensions.
 	cute_tiled_layer_t* layers;          // Linked list of layers. Can be NULL.
 	int nextobjectid;                    // Auto-increments for each placed object.
@@ -463,8 +463,8 @@ struct cute_tiled_map_t
 	int property_count;                  // Number of elements in the `properties` array.
 	cute_tiled_property_t* properties;   // Array of properties.
 	cute_tiled_string_t renderorder;     // Rendering direction (orthogonal maps only).
-	/* staggeraxis */                    // Not currently supported.
-	/* staggerindex */                   // Not currently supported.
+    cute_tiled_string_t staggeraxis;     // Which axis is staggered (staggered and hexagonal maps).
+	cute_tiled_string_t staggerindex;    // Whether the “even” or “odd” indexes along the staggered axis are shifted (staggered/hexagonal).
 	cute_tiled_string_t tiledversion;    // The Tiled version used to save the file.
 	int tileheight;                      // Map grid height.
 	cute_tiled_tileset_t* tilesets;      // Linked list of tilesets.
@@ -1518,6 +1518,13 @@ static int cute_tiled_try(cute_tiled_map_internal_t* m, char expect)
 		CUTE_TILED_CHECK(cute_tiled_next(m) == (expect), error); \
 	} while (0)
 
+#define cute_tiled_unknown_identifier(m, h) \
+	do { \
+		static char error[256]; \
+		CUTE_TILED_SNPRINTF(error, sizeof(error), "Unknown identifier found: %s, hash: %llu.", m->scratch, h); \
+		CUTE_TILED_CHECK(0, error); \
+    } while (0)
+
 char cute_tiled_parse_char(char c)
 {
 	switch (c)
@@ -2138,7 +2145,7 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+            cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2392,7 +2399,7 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 		break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2517,7 +2524,7 @@ cute_tiled_tile_descriptor_t* cute_tiled_read_tile_descriptor(cute_tiled_map_int
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2554,7 +2561,7 @@ int cute_tiled_read_point_internal(cute_tiled_map_internal_t* m, int* point_x, i
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2741,7 +2748,7 @@ cute_tiled_tileset_t* cute_tiled_tileset(cute_tiled_map_internal_t* m)
 			break;
 
 		default:
-			CUTE_TILED_CHECK(0, "Unknown identifier found.");
+			cute_tiled_unknown_identifier(m, h);
 		}
 
 		cute_tiled_try(m, ',');
@@ -2788,6 +2795,10 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		cute_tiled_read_int(m, &m->map.height);
 		break;
 
+    case 5684465468058326115U: // hexsidelength
+        cute_tiled_read_int(m, &m->map.hexsidelength);
+        break;
+
 	case 16529928297377797591U: // infinite
 		cute_tiled_read_bool(m, &m->map.infinite);
 		break;
@@ -2822,6 +2833,14 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 	case 16693886730115578029U: // renderorder
 		cute_tiled_intern_string(m, &m->map.renderorder);
 		break;
+
+    case 18082816309487282231U: // staggeraxis
+        cute_tiled_intern_string(m, &m->map.staggeraxis);
+        break;
+
+    case 16693286153064272296U: // staggerindex
+        cute_tiled_intern_string(m, &m->map.staggerindex);
+        break;
 
 	case 1007832939408977147U: // tiledversion
 		cute_tiled_intern_string(m, &m->map.tiledversion);
@@ -2872,7 +2891,7 @@ static int cute_tiled_dispatch_map_internal(cute_tiled_map_internal_t* m)
 		break;
 
 	default:
-		CUTE_TILED_CHECK(0, "Unknown identifier found.");
+		cute_tiled_unknown_identifier(m, h);
 	}
 
 	return 1;
@@ -2957,6 +2976,8 @@ static void cute_tiled_patch_interned_strings(cute_tiled_map_internal_t* m)
 	cute_tiled_deintern_string(m, &m->map.class_);
 	cute_tiled_deintern_string(m, &m->map.orientation);
 	cute_tiled_deintern_string(m, &m->map.renderorder);
+    cute_tiled_deintern_string(m, &m->map.staggeraxis);
+    cute_tiled_deintern_string(m, &m->map.staggerindex);
 	cute_tiled_deintern_string(m, &m->map.tiledversion);
 	cute_tiled_deintern_string(m, &m->map.type);
 	cute_tiled_deintern_properties(m, m->map.properties, m->map.property_count);
