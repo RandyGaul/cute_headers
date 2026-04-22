@@ -1002,8 +1002,8 @@ static void cp_save_data(cp_save_png_data_t* s, cp_image_t* img, long dataPos, l
 	}
 
 	cp_begin_chunk(s, "IDAT", 0);
-	cp_put8(s, 0x08); // zlib compression method
-	cp_put8(s, 0x1D); // zlib compression flags
+	cp_put8(s, 0x78); // zlib CMF: deflate, 32K window (CINFO=7)
+	cp_put8(s, 0x9C); // zlib FLG: (0x78*256+0x9C)%31==0, default compression
 	cp_put_bits(s, 3, 3); // zlib last block + fixed dictionary
 
 	cp_lz77_compress(s, filtered, pos);

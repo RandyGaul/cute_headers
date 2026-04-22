@@ -5,6 +5,8 @@
 example
 tests
 examples_cute_sound/sdl_demo/sdl_demo
+examples_cute_png/atlas.*
+examples_cute_png/main
 
 # vim
 *.swp
