@@ -116,6 +116,8 @@ void cute_aseprite_free(ase_t* aseprite);
 #include <stdint.h>
 
 typedef struct ase_color_t ase_color_t;
+typedef struct ase_grayscale_t ase_grayscale_t;
+typedef struct ase_index_t ase_index_t;
 typedef struct ase_frame_t ase_frame_t;
 typedef struct ase_layer_t ase_layer_t;
 typedef struct ase_cel_t ase_cel_t;
@@ -131,6 +133,16 @@ typedef struct ase_fixed_t ase_fixed_t;
 struct ase_color_t
 {
 	uint8_t r, g, b, a;
+};
+
+struct ase_grayscale_t
+{
+	uint8_t v, a;
+};
+
+struct ase_index_t
+{
+	uint8_t i;
 };
 
 struct ase_fixed_t
@@ -200,7 +212,7 @@ struct ase_frame_t
 {
 	ase_t* ase;
 	int duration_milliseconds;
-	ase_color_t* pixels;
+	void* pixels;
 	int cel_count;
 	ase_cel_t cels[CUTE_ASEPRITE_MAX_LAYERS];
 };
@@ -910,31 +922,6 @@ static int s_max(int a, int b)
 	return a < b ? b : a;
 }
 
-static ase_color_t s_color(ase_t* ase, void* src, int index)
-{
-	ase_color_t result;
-	if (ase->mode == ASE_MODE_RGBA) {
-		result = ((ase_color_t*)src)[index];
-	} else if (ase->mode == ASE_MODE_GRAYSCALE) {
-		uint8_t saturation = ((uint8_t*)src)[index * 2];
-		uint8_t a = ((uint8_t*)src)[index * 2 + 1];
-		result.r = result.g = result.b = saturation;
-		result.a = a;
-	} else {
-		CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
-		uint8_t palette_index = ((uint8_t*)src)[index];
-		if (palette_index == ase->transparent_palette_entry_index) {
-			result.r = 0;
-			result.g = 0;
-			result.b = 0;
-			result.a = 0;
-		} else {
-			result = ase->palette.entries[palette_index].color;
-		}
-	}
-	return result;
-}
-
 ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ctx)
 {
 	ase_t* ase = (ase_t*)CUTE_ASEPRITE_ALLOC(sizeof(ase_t), mem_ctx);
@@ -1239,9 +1226,18 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 	// Blend all cel pixels into each of their respective frames, for convenience.
 	for (int i = 0; i < ase->frame_count; ++i) {
 		ase_frame_t* frame = ase->frames + i;
-		frame->pixels = (ase_color_t*)CUTE_ASEPRITE_ALLOC((int)(sizeof(ase_color_t)) * ase->w * ase->h, mem_ctx);
-		CUTE_ASEPRITE_MEMSET(frame->pixels, 0, sizeof(ase_color_t) * (size_t)ase->w * (size_t)ase->h);
-		ase_color_t* dst = frame->pixels;
+		int size;
+		if (ase->mode == ASE_MODE_RGBA) {
+			size = (int) (sizeof(ase_color_t)) * ase->w * ase->h;
+		} else if(ase->mode == ASE_MODE_GRAYSCALE) {
+			size = (int) (sizeof(ase_grayscale_t)) * ase->w * ase->h;
+		} else {
+			CUTE_ASEPRITE_ASSERT(ase->mode == ASE_MODE_INDEXED);
+			size = (int) (sizeof(ase_index_t)) * ase->w * ase->h;
+		}
+		frame->pixels = CUTE_ASEPRITE_ALLOC(size, mem_ctx);
+		CUTE_ASEPRITE_MEMSET(frame->pixels, 0, size);
+		void* dst = frame->pixels;
 		for (int j = 0; j < frame->cel_count; ++j) {
 			ase_cel_t* cel = frame->cels + j;
 			if (!(cel->layer->flags & ASE_LAYER_FLAGS_VISIBLE)) {
@@ -1277,11 +1273,19 @@ ase_t* cute_aseprite_load_from_memory(const void* memory, int size, void* mem_ct
 			int aw = ase->w;
 			for (int dx = dl, sx = cl; dx < dr; dx++, sx++) {
 				for (int dy = dt, sy = ct; dy < db; dy++, sy++) {
-					int dst_index = aw * dy + dx;
-					ase_color_t src_color = s_color(ase, src, cw * sy + sx);
-					ase_color_t dst_color = dst[dst_index];
-					ase_color_t result = s_blend(src_color, dst_color, opacity);
-					dst[dst_index] = result;
+					if (ase->mode == ASE_MODE_RGBA) {
+						ase_color_t *d = (ase_color_t *) dst;
+						ase_color_t src_color = ((ase_color_t *) src)[cw * sy + sx];
+						ase_color_t dst_color = d[dst_index];
+						ase_color_t result = s_blend(src_color, dst_color, opacity);
+						d[dst_index] = result;
+					} else if (ase->mode == ASE_MODE_GRAYSCALE) {
+						ase_grayscale_t *d = (ase_grayscale_t *) dst;
+						d[dst_index] = ((ase_grayscale_t *) src)[cw * sy + sx];
+					} else {
+						ase_index_t *d = (ase_index_t *) dst;
+						d[dst_index] = ((ase_index_t *) src)[cw * sy + sx];
+					}
 				}
 			}
 		}
