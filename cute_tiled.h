@@ -206,6 +206,7 @@ typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
 typedef struct cute_tiled_property_t cute_tiled_property_t;
 typedef union cute_tiled_string_t cute_tiled_string_t;
+typedef struct cute_tiled_chunk_t cute_tiled_chunk_t;
 
 /*!
  * To access a string, simply do: object->name.ptr; this union is needed
