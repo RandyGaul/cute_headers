@@ -142,6 +142,7 @@ extern int cute_tiled_error_line;
 
 typedef struct cute_tiled_map_t cute_tiled_map_t;
 typedef struct cute_tiled_tileset_t cute_tiled_tileset_t;
+typedef struct cute_tiled_chunk_t cute_tiled_chunk_t;
 
 /*!
  * Load a map from disk, placed into heap allocated memory. \p mem_ctx can be
