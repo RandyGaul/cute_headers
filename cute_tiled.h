@@ -2951,6 +2951,7 @@ static void cute_tiled_patch_tileset_strings(cute_tiled_map_internal_t* m, cute_
 	{
 		cute_tiled_deintern_string(m, &tile_descriptor->image);
 		cute_tiled_deintern_string(m, &tile_descriptor->type);
+		cute_tiled_deintern_layer(m, tile_descriptor->objectgroup);
 		cute_tiled_deintern_properties(m, tile_descriptor->properties, tile_descriptor->property_count);
 		tile_descriptor = tile_descriptor->next;
 	}
