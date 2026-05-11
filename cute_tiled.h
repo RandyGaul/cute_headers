@@ -201,6 +201,7 @@ void cute_tiled_free_external_tileset(cute_tiled_tileset_t* tileset);
 #endif
 
 typedef struct cute_tiled_layer_t cute_tiled_layer_t;
+typedef struct cute_tiled_chunk_t cute_tiled_chunk_t;
 typedef struct cute_tiled_object_t cute_tiled_object_t;
 typedef struct cute_tiled_frame_t cute_tiled_frame_t;
 typedef struct cute_tiled_tile_descriptor_t cute_tiled_tile_descriptor_t;
@@ -264,6 +265,7 @@ struct cute_tiled_object_t
 	int id;                              // Incremental id - unique across all objects.
 	cute_tiled_string_t name;            // String assigned to name field in editor.
 	int point;                           // 0 or 1. Used to mark an object as a point.
+	float opacity;                       // Value between 0 and 1.
 
 	// Example to index each vert of a polygon/polyline:
 	/*
@@ -2136,6 +2138,10 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 			// This is technically different than type, but it used the same way in newer versions of Tiled
 			cute_tiled_intern_string(m, &object->type);
 			break;
+
+		case 11746902372727406098U: // opacity
+		    cute_tiled_read_float(m, &object->opacity);
+		    break;
 
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
