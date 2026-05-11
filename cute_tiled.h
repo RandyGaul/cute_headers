@@ -260,6 +260,7 @@ struct cute_tiled_property_t
 struct cute_tiled_object_t
 {
 	int ellipse;                         // 0 or 1. Used to mark an object as an ellipse.
+	int capsule;                         // 0 or 1. Used to mark an object as a capsule.
 	int gid;                             // GID, only if object comes from a Tilemap.
 	float height;                        // Height in pixels. Ignored if using a gid.
 	int id;                              // Incremental id - unique across all objects.
@@ -358,6 +359,7 @@ struct cute_tiled_layer_t
 	int height;                          // Row count. Same as map height for fixed-size maps.
 	cute_tiled_layer_t* layers;          // Linked list of layers. Only appears if `type` is `group`.
 	cute_tiled_string_t name;            // Name assigned to this layer.
+	cute_tiled_string_t mode;            // The blend mode used when rendering the layer.
 	cute_tiled_object_t* objects;        // Linked list of objects. `objectgroup` only.
 	float offsetx;                       // Horizontal layer offset.
 	float offsety;                       // Vertical layer offset.
@@ -2143,6 +2145,10 @@ cute_tiled_object_t* cute_tiled_read_object(cute_tiled_map_internal_t* m)
 		    cute_tiled_read_float(m, &object->opacity);
 		    break;
 
+		case 11745627419723200132U: // capsule
+		    cute_tiled_read_bool(m, &object->capsule);
+		    break;
+
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
 		}
@@ -2396,6 +2402,10 @@ cute_tiled_layer_t* cute_tiled_layers(cute_tiled_map_internal_t* m)
 		cute_tiled_read_hex_int(m, &layer->tintcolor);
 		cute_tiled_expect(m, '"');
 		break;
+
+    	case 11377525954796463478U: // mode
+    	    cute_tiled_intern_string(m, &layer->mode);
+    	    break;
 
 		default:
 			CUTE_TILED_CHECK(0, "Unknown identifier found.");
