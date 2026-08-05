@@ -321,6 +321,18 @@ void tls_init(void* platform_data);
 #	endif
 #endif
 
+// The C library headers every backend needs, hoisted out of the per-backend blocks below so that
+// including this file is enough on its own - it does not quietly depend on whoever includes it having
+// pulled these in first. `bool` and `uintptr_t` are used by the code below, and the rest back the
+// default TLS_MALLOC / TLS_MEMCPY / TLS_MEMSET / TLS_MEMMOVE / TLS_STRCMP / TLS_ASSERT macros. If you
+// override all of those, these still cost nothing but the parse.
+#include <stdbool.h> // bool
+#include <stdint.h>  // uintptr_t
+#include <stdlib.h>  // malloc, free
+#include <string.h>  // memcpy, memset, memmove, strcmp, strncmp
+#include <stdio.h>   // snprintf
+#include <assert.h>  // assert
+
 #ifdef TLS_WINDOWS
 #	ifndef WIN32_LEAN_AND_MEAN
 #		define WIN32_LEAN_AND_MEAN
@@ -337,8 +349,6 @@ void tls_init(void* platform_data);
 #	include <security.h>
 #	include <schannel.h>
 #	include <shlwapi.h>
-#	include <assert.h>
-#	include <stdio.h>
 
 #	pragma comment (lib, "ws2_32.lib")
 #	pragma comment (lib, "secur32.lib")
@@ -346,20 +356,13 @@ void tls_init(void* platform_data);
 #elif defined(TLS_ANDROID)
 #	include <jni.h>
 #	include <pthread.h>
-#	include <assert.h>
-#	include <stdio.h>
-#	include <stdlib.h>
-#	include <string.h>
 #elif defined(TLS_APPLE)
 #	include <Network/Network.h>
 #	include <pthread.h>
-#	include <libkern/OSAtomic.h>
+#	include <stdatomic.h>
 #elif defined(TLS_S2N)
-#	include <assert.h>
-#	include <stdio.h>
-#	include <stdlib.h>
-#	include <string.h>
 #	include <sys/socket.h>
+#	include <sys/select.h> // For select/fd_set, used while waiting on the TCP connect.
 #	include <fcntl.h>
 #	include <unistd.h>
 #	include <netdb.h>
@@ -427,6 +430,10 @@ static void tls_packet_queue_push(TLS_PacketQueue* q, void* packet, int size)
 		q->sizes[q->index1] = size;
 		q->packets[q->index1] = packet;
 		q->index1 = (q->index1 + 1) % TLS_PACKET_QUEUE_MAX_ENTRIES;
+	} else {
+		// Callers all gate on queue fullness before pushing, so this is unreachable -- but if a
+		// future caller gets that wrong, don't leak the packet on top of dropping it.
+		TLS_FREE(packet);
 	}
 	#ifdef TLS_APPLE
 		pthread_mutex_unlock(&q->lock);
@@ -449,10 +456,40 @@ void tls_packet_queue_pop(TLS_PacketQueue* q, void** packet, int* size)
 	#endif
 }
 
+/*
+	`state` is the one field a second thread touches. On Apple the Network.framework callbacks run on
+	our dispatch queue, and on Android the connect thread writes it, while the caller reads it from
+	tls_process/tls_read/tls_send - so on those two backends it is atomic, with release stores paired
+	against acquire loads. That ordering is what makes the writes a callback performs *before* setting
+	an error state visible to the caller thread that observes it.
+
+	The Windows and s2n backends never start a thread, so there it stays a plain field and no
+	<stdatomic.h> is required (older MSVC does not ship one). Define TLS_ATOMIC_STATE to 1 yourself if
+	you intend to drive a single connection from more than one thread on those backends.
+*/
+#ifndef TLS_ATOMIC_STATE
+#	if defined(TLS_APPLE) || defined(TLS_ANDROID)
+#		define TLS_ATOMIC_STATE 1
+#	else
+#		define TLS_ATOMIC_STATE 0
+#	endif
+#endif
+
+#if TLS_ATOMIC_STATE
+#	include <stdatomic.h> // tied to the flag, not the backend, so forcing it on elsewhere still builds
+#	define TLS_STATE_TYPE _Atomic TLS_State
+#	define TLS_STATE_GET(ctx) atomic_load_explicit(&(ctx)->state, memory_order_acquire)
+#	define TLS_STATE_SET(ctx, value) atomic_store_explicit(&(ctx)->state, (value), memory_order_release)
+#else
+#	define TLS_STATE_TYPE TLS_State
+#	define TLS_STATE_GET(ctx) ((ctx)->state)
+#	define TLS_STATE_SET(ctx, value) ((ctx)->state = (value))
+#endif
+
 typedef struct TLS_Context
 {
 	TLS_PacketQueue q;    // For receiving packets.
-	TLS_State state;      // Current state of the connection. Negative values are errors.
+	TLS_STATE_TYPE state; // Current state of the connection. Negative values are errors.
 	const char* hostname; // Website or address to connect to.
 	void* packet;
 	int packet_size;
@@ -482,13 +519,15 @@ typedef struct TLS_Context
 	jobject connect_socket;  // Socket being connected (global ref), for cancellation
 	pthread_t connect_thread;
 	int connect_done;
+	int connect_joined;
 	int cancel_requested;
 	int port;
 #elif defined(TLS_APPLE)
 	dispatch_queue_t dispatch;
 	nw_connection_t connection;
-	int refcount;
+	_Atomic int refcount;
 	int disconnecting;
+	int recv_stalled; // Receive chain paused because the packet queue was full; tls_process restarts it.
 #endif
 } TLS_Context;
 
@@ -619,7 +658,7 @@ static void* tls_connect_thread(void* arg) {
 
 	if (TLS_JNI(env)->ExceptionCheck(env)) {
 		TLS_JNI(env)->ExceptionClear(env);
-		if (!ctx->cancel_requested) ctx->state = TLS_STATE_INVALID_SOCKET;
+		if (!ctx->cancel_requested) TLS_STATE_SET(ctx, TLS_STATE_INVALID_SOCKET);
 		goto cleanup;
 	}
 
@@ -635,7 +674,7 @@ static void* tls_connect_thread(void* arg) {
 
 		if (TLS_JNI(env)->ExceptionCheck(env)) {
 			jthrowable ex = TLS_JNI(env)->ExceptionOccurred(env);
-			if (!ctx->cancel_requested) ctx->state = tls_map_exception(env, ex);
+			if (!ctx->cancel_requested) TLS_STATE_SET(ctx, tls_map_exception(env, ex));
 			TLS_JNI(env)->DeleteLocalRef(env, ex);
 			TLS_JNI(env)->ExceptionClear(env);
 			goto cleanup;
@@ -655,7 +694,7 @@ static void* tls_connect_thread(void* arg) {
 
 		if (TLS_JNI(env)->ExceptionCheck(env)) {
 			jthrowable ex = TLS_JNI(env)->ExceptionOccurred(env);
-			if (!ctx->cancel_requested) ctx->state = tls_map_exception(env, ex);
+			if (!ctx->cancel_requested) TLS_STATE_SET(ctx, tls_map_exception(env, ex));
 			TLS_JNI(env)->DeleteLocalRef(env, ex);
 			TLS_JNI(env)->ExceptionClear(env);
 			jmethodID close_method = TLS_JNI(env)->GetMethodID(env, ssl_socket_class, "close", "()V");
@@ -689,7 +728,7 @@ static void* tls_connect_thread(void* arg) {
 	TLS_JNI(env)->DeleteLocalRef(env, socket_class);
 	TLS_JNI(env)->DeleteLocalRef(env, jhost);
 
-	ctx->state = TLS_STATE_CONNECTED;
+	TLS_STATE_SET(ctx, TLS_STATE_CONNECTED);
 	ctx->connect_done = 1;
 	TLS_JVM(g_tls_jvm)->DetachCurrentThread(g_tls_jvm);
 	return NULL;
@@ -713,10 +752,10 @@ cleanup:
 
 #ifdef TLS_APPLE
 // Release a reference to the context. Frees when refcount hits 0.
-// Uses OSAtomicDecrement32 for atomic decrement-and-test.
+// atomic_fetch_sub returns the value *before* the decrement, so 1 means this was the last reference.
 static void tls_ctx_release(TLS_Context* ctx)
 {
-	if (OSAtomicDecrement32(&ctx->refcount) == 0) {
+	if (atomic_fetch_sub_explicit(&ctx->refcount, 1, memory_order_acq_rel) == 1) {
 		nw_release(ctx->connection);
 		dispatch_release(ctx->dispatch);
 		while (ctx->q.count) {
@@ -744,11 +783,11 @@ static void tls_recv(TLS_Context* ctx)
 			int r = recv(ctx->sock, ctx->incoming + ctx->received, sizeof(ctx->incoming) - ctx->received, 0);
 			if (r == 0) {
 				// Server disconnected the socket.
-				ctx->state = TLS_STATE_DISCONNECTED;
+				TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 				break;
 			} else if (r == SOCKET_ERROR) {
 				// Socket related error.
-				ctx->state = TLS_STATE_INVALID_SOCKET;
+				TLS_STATE_SET(ctx, TLS_STATE_INVALID_SOCKET);
 				break;
 			} else {
 				ctx->received += r;
@@ -759,8 +798,9 @@ static void tls_recv(TLS_Context* ctx)
 	#ifdef TLS_APPLE
 		// Queue up an asynchronous receive block loop.
 		// Prevent use-after-free: hold a reference for the pending callback.
-		OSAtomicIncrement32(&ctx->refcount);
+		atomic_fetch_add_explicit(&ctx->refcount, 1, memory_order_relaxed);
 		nw_connection_receive(ctx->connection, 1, TLS_MAX_PACKET_SIZE, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, nw_error_t receive_error) {
+			(void)context;
 			if (ctx->disconnecting) {
 				tls_ctx_release(ctx);
 				return;
@@ -769,44 +809,57 @@ static void tls_recv(TLS_Context* ctx)
 				// What a horrid API design... So over-engineered to simply memcpy a buffer.
 				int size = (int)dispatch_data_get_size(content);
 				void* packet = TLS_MALLOC(size);
-				dispatch_data_apply(content, ^bool(dispatch_data_t content, size_t offset, const void* buffer, size_t size) {
+				dispatch_data_apply(content, ^bool(dispatch_data_t region, size_t offset, const void* buffer, size_t size) {
+					(void)region;
 					TLS_MEMCPY((char*)packet + offset, buffer, size);
 					return true;
 				});
 				tls_packet_queue_push(&ctx->q, packet, size);
 			}
 			if (is_complete && !receive_error) {
-				ctx->state = TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN;
+				TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN);
 				tls_ctx_release(ctx);
 			} else if (receive_error) {
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				tls_ctx_release(ctx);
-			} else {
+			} else if (ctx->q.count < TLS_PACKET_QUEUE_MAX_ENTRIES) {
 				// Queue up another call to this function to receive the next packet.
 				// tls_recv increments refcount for the new callback, then we release ours.
+				// Only one receive is ever in flight and only tls_read removes entries, so a queue
+				// seen below capacity here still has room when the next callback pushes into it.
 				tls_recv(ctx);
+				tls_ctx_release(ctx);
+			} else {
+				// The queue is full: receiving more would drop packets and corrupt the stream.
+				// Pause the chain; tls_process restarts it once tls_read has made room.
+				ctx->recv_stalled = 1;
 				tls_ctx_release(ctx);
 			}
 		});
 	#endif // TLS_APPLE
 
 	#ifdef TLS_S2N
-		while (ctx->received < sizeof(ctx->incoming)) {
+		while (ctx->received < (int)sizeof(ctx->incoming)) {
 			s2n_blocked_status blocked = S2N_NOT_BLOCKED;
 			int r = s2n_recv(ctx->connection, ctx->incoming + ctx->received, sizeof(ctx->incoming) - ctx->received, &blocked);
 			s2n_error_type etype = (s2n_error_type)s2n_error_get_type(s2n_errno);
-			if (r == 0 || blocked != S2N_NOT_BLOCKED) {
+			if (r == 0) {
+				// s2n_recv returns 0 once the peer closed the connection. Without reporting this the caller
+				// can never tell that a close-delimited response (HTTP/1.0) has finished arriving.
+				TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
+				break;
+			} else if (blocked != S2N_NOT_BLOCKED) {
 				break;
 			} else if (r > 0) {
 				ctx->received += r;
 			} else if (etype == S2N_ERR_T_CLOSED) {
-				ctx->state = TLS_STATE_DISCONNECTED;
+				TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 				break;
 			} else if (etype == S2N_ERR_T_IO) {
-				ctx->state = TLS_STATE_INVALID_SOCKET;
+				TLS_STATE_SET(ctx, TLS_STATE_INVALID_SOCKET);
 				break;
 			} else if (etype != S2N_ERR_T_BLOCKED) {
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				break;
 			}
 		}
@@ -818,6 +871,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 	TLS_Connection result = { 0 };
 
 	TLS_Context* ctx = (TLS_Context*)TLS_MALLOC(sizeof(TLS_Context));
+	if (!ctx) return result;
 	TLS_MEMSET(ctx, 0, sizeof(*ctx));
 	ctx->hostname = hostname;
 
@@ -908,7 +962,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 			#endif
 		}
 
-		ctx->state = TLS_STATE_PENDING;
+		TLS_STATE_SET(ctx, TLS_STATE_PENDING);
 
 		#ifdef TLS_WINDOWS
 		// Initialize a credentials handle for Secure Channel.
@@ -963,7 +1017,7 @@ TLS_Connection tls_connect(const char* hostname, int port)
 	#ifdef TLS_ANDROID
 		ctx->port = port;
 		ctx->connect_done = 0;
-		ctx->state = TLS_STATE_PENDING;
+		TLS_STATE_SET(ctx, TLS_STATE_PENDING);
 		if (pthread_create(&ctx->connect_thread, NULL, tls_connect_thread, ctx) != 0) {
 			TLS_FREE(ctx);
 			return result;
@@ -996,51 +1050,76 @@ TLS_Connection tls_connect(const char* hostname, int port)
 		nw_connection_set_queue(ctx->connection, ctx->dispatch);
 
 		// Get notification of when the connection is ready.
+		// The handler block outlives tls_disconnect: nw delivers a final `cancelled` event after
+		// nw_connection_cancel. Hold a reference for it - like the receive callbacks do - or that
+		// final event writes into a freed context (which the next tls_connect may already reuse).
+		atomic_fetch_add_explicit(&ctx->refcount, 1, memory_order_relaxed);
 		nw_connection_set_state_changed_handler(ctx->connection, ^(nw_connection_state_t state, nw_error_t error) {
+			if (state == nw_connection_state_cancelled) {
+				// Guaranteed final invocation, only ever reached via nw_connection_cancel in
+				// tls_disconnect: drop the handler's reference and touch nothing else.
+				tls_ctx_release(ctx);
+				return;
+			}
+			if (ctx->disconnecting) {
+				return;
+			}
 			if (error) {
 				int code = nw_error_get_error_code(error);
 				nw_error_domain_t domain = nw_error_get_error_domain(error);
+
+				// `waiting` means nw could not connect on this attempt but intends to retry, and it
+				// always carries an error saying why. Whether that is worth waiting out depends on the
+				// domain. No route, or a dual-stack host whose v6 address is unreachable, can come good
+				// on a path change, so those stay PENDING and let nw retry. A TLS error cannot: it is
+				// the peer's certificate failing validation, and it fails identically on every retry.
+				// Swallowing that one leaves a bad certificate rejected only by the caller's timeout -
+				// and a caller without a timeout would never reject it at all.
+				if (state == nw_connection_state_waiting && domain != nw_error_domain_tls) {
+					return;
+				}
 				if (domain == nw_error_domain_tls) {
 					if (code == errSSLCertExpired) {
-						ctx->state = TLS_STATE_CERTIFICATE_EXPIRED;
+						TLS_STATE_SET(ctx, TLS_STATE_CERTIFICATE_EXPIRED);
 					} else if (code == errSSLNegotiation) {
-						ctx->state = TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS;
+						TLS_STATE_SET(ctx, TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS);
 					} else if (code == errSSLClientCertRequested) {
-						ctx->state = TLS_STATE_SERVER_ASKED_FOR_CLIENT_CERTS;
+						TLS_STATE_SET(ctx, TLS_STATE_SERVER_ASKED_FOR_CLIENT_CERTS);
 					} else if (code == errSSLHostNameMismatch) {
-						ctx->state = TLS_STATE_BAD_HOSTNAME;
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_HOSTNAME);
 					} else if (code == errSSLXCertChainInvalid || code == errSSLPeerUnknownCA) {
-						ctx->state = TLS_STATE_CANNOT_VERIFY_CA_CHAIN;
+						TLS_STATE_SET(ctx, TLS_STATE_CANNOT_VERIFY_CA_CHAIN);
 					} else if (code == errSSLBadCert) {
-						ctx->state = TLS_STATE_BAD_CERTIFICATE;
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_CERTIFICATE);
 					} else {
-						ctx->state = TLS_STATE_UNKNOWN_ERROR;
+						TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 					}
 					// More codes found at:
 					// https://opensource.apple.com/source/Security/Security-55471/libsecurity_ssl/lib/SecureTransport.h.auto.html
 				} else if (domain == nw_error_domain_dns) {
 					if (code == -65554) { // Could not find what fucking header this code is defined within... *Shakes head at Tim Cook*
-						ctx->state = TLS_STATE_BAD_HOSTNAME;
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_HOSTNAME);
 					} else {
-						ctx->state = TLS_STATE_UNKNOWN_ERROR;
+						TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 					}
-				} else if (domain == TLS_STATE_INVALID_SOCKET) {
-					ctx->state = TLS_STATE_INVALID_SOCKET;
+				} else if (domain == nw_error_domain_posix) {
+					TLS_STATE_SET(ctx, TLS_STATE_INVALID_SOCKET);
 				} else {
-					ctx->state = TLS_STATE_UNKNOWN_ERROR;
+					TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				}
 			} else {
 				if (state == nw_connection_state_ready) {
-					ctx->state = TLS_STATE_CONNECTED;
+					TLS_STATE_SET(ctx, TLS_STATE_CONNECTED);
 				} else if (state > nw_connection_state_ready) {
-					ctx->state = TLS_STATE_DISCONNECTED;
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 				}
 			}
 		});
 
-		// Asynchronously start the connection.
+		// Asynchronously start the connection. PENDING is set *before* the start: the handler runs on
+		// the dispatch queue and can fire immediately, and its state write must not be overwritten.
+		TLS_STATE_SET(ctx, TLS_STATE_PENDING);
 		nw_connection_start(ctx->connection);
-		ctx->state = TLS_STATE_PENDING;
 
 		// Accept incoming packets.
 		tls_recv(ctx);
@@ -1058,9 +1137,19 @@ TLS_Connection tls_connect(const char* hostname, int port)
 TLS_State tls_process(TLS_Connection connection)
 {
 	TLS_Context* ctx = (TLS_Context*)connection.id;
-	if (ctx->state < 0) {
-		return ctx->state;
-	} else if (ctx->state == TLS_STATE_PENDING) {
+
+	#ifdef TLS_ANDROID
+		// Reap the background connect thread as soon as it finishes. This must happen regardless of
+		// which state it left the connection in (CONNECTED, or an error), and exactly once.
+		if (ctx->connect_done && !ctx->connect_joined) {
+			pthread_join(ctx->connect_thread, NULL);
+			ctx->connect_joined = 1;
+		}
+	#endif
+
+	if (TLS_STATE_GET(ctx) < 0) {
+		return TLS_STATE_GET(ctx);
+	} else if (TLS_STATE_GET(ctx) == TLS_STATE_PENDING) {
 		#if defined(TLS_WINDOWS) || defined(TLS_S2N)
 			// Wait for TCP to connect.
 			if (ctx->tcp_connect_pending) {
@@ -1076,7 +1165,7 @@ TLS_State tls_process(TLS_Connection connection)
 					}
 				}
 				if (ctx->tcp_connect_pending) {
-					return ctx->state;
+					return TLS_STATE_GET(ctx);
 				}
 			}
 		#endif // defined(TLS_WINDOWS) || defined(TLS_S2N)
@@ -1139,12 +1228,12 @@ TLS_State tls_process(TLS_Connection connection)
 				if (sec == SEC_E_OK) {
 					// Successfully completed handshake. TLS tunnel is now operational.
 					QueryContextAttributes(&ctx->context, SECPKG_ATTR_STREAM_SIZES, &ctx->sizes);
-					ctx->state = TLS_STATE_CONNECTED;
-					return ctx->state;
+					TLS_STATE_SET(ctx, TLS_STATE_CONNECTED);
+					return TLS_STATE_GET(ctx);
 				} else if (sec == SEC_I_INCOMPLETE_CREDENTIALS) {
 					// Client certs are not supported.
-					ctx->state = TLS_STATE_SERVER_ASKED_FOR_CLIENT_CERTS;
-					return ctx->state;
+					TLS_STATE_SET(ctx, TLS_STATE_SERVER_ASKED_FOR_CLIENT_CERTS);
+					return TLS_STATE_GET(ctx);
 				} else if (sec == SEC_I_CONTINUE_NEEDED) {
 					// Continue sending data to the server.
 					char* buffer = (char*)outbuffers[0].pvBuffer;
@@ -1170,22 +1259,22 @@ TLS_State tls_process(TLS_Connection connection)
 					FreeContextBuffer(outbuffers[0].pvBuffer);
 					if (size != 0) {
 						// Failed to send() data to server.
-						ctx->state = TLS_STATE_UNKNOWN_ERROR;
-						return ctx->state;
+						TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
+						return TLS_STATE_GET(ctx);
 					}
 				} else if (sec != SEC_E_INCOMPLETE_MESSAGE) {
 					if (sec == SEC_E_CERT_EXPIRED) {
-						ctx->state = TLS_STATE_CERTIFICATE_EXPIRED;
+						TLS_STATE_SET(ctx, TLS_STATE_CERTIFICATE_EXPIRED);
 					} else if (sec == SEC_E_WRONG_PRINCIPAL) {
-						ctx->state = TLS_STATE_BAD_HOSTNAME;
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_HOSTNAME);
 					} else if (sec == SEC_E_UNTRUSTED_ROOT) {
-						ctx->state = TLS_STATE_CANNOT_VERIFY_CA_CHAIN;
+						TLS_STATE_SET(ctx, TLS_STATE_CANNOT_VERIFY_CA_CHAIN);
 					} else if (sec == SEC_E_ILLEGAL_MESSAGE || sec == SEC_E_ALGORITHM_MISMATCH) {
-						ctx->state = TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS;
+						TLS_STATE_SET(ctx, TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS);
 					} else {
-						ctx->state = TLS_STATE_UNKNOWN_ERROR;
+						TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 					}
-					return ctx->state;
+					return TLS_STATE_GET(ctx);
 				} else {
 					TLS_ASSERT(sec == SEC_E_INCOMPLETE_MESSAGE);
 					// Need to read more bytes.
@@ -1194,8 +1283,8 @@ TLS_State tls_process(TLS_Connection connection)
 	
 			if (ctx->received == sizeof(ctx->incoming)) {
 				// Server is sending too much data instead of proper handshake?
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
-				return ctx->state;
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
+				return TLS_STATE_GET(ctx);
 			}
 	
 			// 4. Read data from the server (recv).
@@ -1203,11 +1292,8 @@ TLS_State tls_process(TLS_Connection connection)
 		#endif // TLS_WINDOWS
 
 		#ifdef TLS_ANDROID
-			// Check if background connect thread has finished.
-			if (ctx->connect_done) {
-				pthread_join(ctx->connect_thread, NULL);
-				// ctx->state was set by the thread (CONNECTED or error).
-			}
+			// Nothing to do while the background connect thread runs; it sets TLS_STATE_GET(ctx)
+			// (CONNECTED or an error) itself, and is joined at the top of this function.
 		#endif // TLS_ANDROID
 
 		#ifdef TLS_APPLE
@@ -1231,24 +1317,31 @@ TLS_State tls_process(TLS_Connection connection)
 					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_REVOKED) ||
 					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_TYPE_UNSUPPORTED) ||
 					    TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_INVALID)) {
-						ctx->state = TLS_STATE_BAD_CERTIFICATE;
-					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_EXPIRED)) {
-						ctx->state = TLS_STATE_CERTIFICATE_EXPIRED;
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_CERTIFICATE);
+					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_EXPIRED) ||
+					           TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_NOT_YET_VALID)) {
+						TLS_STATE_SET(ctx, TLS_STATE_CERTIFICATE_EXPIRED);
+					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_CERT_INVALID_HOSTNAME)) {
+						TLS_STATE_SET(ctx, TLS_STATE_BAD_HOSTNAME);
 					} else if (TLS_S2N_ERROR_MATCHES(S2N_ERR_NO_APPLICATION_PROTOCOL)) {
-						ctx->state = TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS;
+						TLS_STATE_SET(ctx, TLS_STATE_NO_MATCHING_ENCRYPTION_ALGORITHMS);
+					} else {
+						// Any other protocol error is just as fatal; without this the connection
+						// would sit in PENDING until a later negotiate call happened to fail.
+						TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 					}
 				} else if (etype == S2N_ERR_T_IO) {
-					ctx->state = TLS_STATE_INVALID_SOCKET;
+					TLS_STATE_SET(ctx, TLS_STATE_INVALID_SOCKET);
 				} else if (etype != S2N_ERR_T_BLOCKED) {
-					ctx->state = TLS_STATE_UNKNOWN_ERROR;
+					TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				} else {
 					// Continue calling s2n_negotiate...
 				}
 			} else {
-				ctx->state = TLS_STATE_CONNECTED;
+				TLS_STATE_SET(ctx, TLS_STATE_CONNECTED);
 			}
 		#endif // TLS_S2N
-	} else if (ctx->state >= 0) {
+	} else if (TLS_STATE_GET(ctx) >= 0) {
 		// Stall if the packet queue is full.
 		if (ctx->q.count == TLS_PACKET_QUEUE_MAX_ENTRIES) {
 			// User needs to call tls_read.
@@ -1285,15 +1378,15 @@ TLS_State tls_process(TLS_Connection connection)
 					ctx->used = ctx->received - (buffers[3].BufferType == SECBUFFER_EXTRA ? buffers[3].cbBuffer : 0);
 				} else if (sec == SEC_I_CONTEXT_EXPIRED) {
 					// Server closed TLS connection (but socket is still open).
-					ctx->state = TLS_STATE_DISCONNECTED;
-					return ctx->state;
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
+					return TLS_STATE_GET(ctx);
 				} else if (sec == SEC_I_RENEGOTIATE) {
 					// Server wants to renegotiate TLS connection, not implemented here.
-					ctx->state = TLS_STATE_UNKNOWN_ERROR;
-					return ctx->state;
+					TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
+					return TLS_STATE_GET(ctx);
 				} else if (sec != SEC_E_INCOMPLETE_MESSAGE) {
-					ctx->state = TLS_STATE_UNKNOWN_ERROR;
-					return ctx->state;
+					TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
+					return TLS_STATE_GET(ctx);
 				} else {
 					TLS_ASSERT(sec == SEC_E_INCOMPLETE_MESSAGE);
 					// More data needs to be read.
@@ -1316,8 +1409,8 @@ TLS_State tls_process(TLS_Connection connection)
 
 				tls_packet_queue_push(&ctx->q, data, size);
 
-				if (ctx->state == TLS_STATE_DISCONNECTED) {
-					ctx->state = TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN;
+				if (TLS_STATE_GET(ctx) == TLS_STATE_DISCONNECTED) {
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN);
 				}
 			}
 		#endif // TLS_WINDOWS
@@ -1332,7 +1425,7 @@ TLS_State tls_process(TLS_Connection connection)
 
 			if (TLS_JNI(env)->ExceptionCheck(env)) {
 				TLS_JNI(env)->ExceptionClear(env);
-				ctx->state = TLS_STATE_DISCONNECTED;
+				TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 				TLS_JNI(env)->DeleteLocalRef(env, input_class);
 			} else if (available > 0) {
 				jbyteArray buffer = TLS_JNI(env)->NewByteArray(env, available);
@@ -1342,7 +1435,7 @@ TLS_State tls_process(TLS_Connection connection)
 
 				if (TLS_JNI(env)->ExceptionCheck(env)) {
 					TLS_JNI(env)->ExceptionClear(env);
-					ctx->state = TLS_STATE_DISCONNECTED;
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 					TLS_JNI(env)->DeleteLocalRef(env, buffer);
 				} else if (bytes_read > 0) {
 					void* data = TLS_MALLOC(bytes_read);
@@ -1351,7 +1444,7 @@ TLS_State tls_process(TLS_Connection connection)
 					tls_packet_queue_push(&ctx->q, data, bytes_read);
 				} else if (bytes_read < 0) {
 					// End of stream
-					ctx->state = TLS_STATE_DISCONNECTED;
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 					TLS_JNI(env)->DeleteLocalRef(env, buffer);
 				} else {
 					TLS_JNI(env)->DeleteLocalRef(env, buffer);
@@ -1363,8 +1456,14 @@ TLS_State tls_process(TLS_Connection connection)
 		#endif // TLS_ANDROID
 
 		#ifdef TLS_APPLE
-			// Nothing on Apple.
-			// Reads are setup via chained callbacks upon connection starting.
+			// Reads are setup via chained callbacks upon connection starting. The chain pauses itself
+			// when the packet queue fills up; restart it now that the queue has room again (the queue-full
+			// early-out above guarantees it does). No callback is in flight while stalled, so this does
+			// not race with the receive block.
+			if (ctx->recv_stalled) {
+				ctx->recv_stalled = 0;
+				tls_recv(ctx);
+			}
 		#endif
 
 		#ifdef TLS_S2N
@@ -1382,14 +1481,14 @@ TLS_State tls_process(TLS_Connection connection)
 
 				tls_packet_queue_push(&ctx->q, data, size);
 
-				if (ctx->state == TLS_STATE_DISCONNECTED) {
-					ctx->state = TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN;
+				if (TLS_STATE_GET(ctx) == TLS_STATE_DISCONNECTED) {
+					TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN);
 				}
 			}
 		#endif // TLS_S2N
 	}
 
-	return ctx->state;
+	return TLS_STATE_GET(ctx);
 }
 
 const char* tls_state_string(TLS_State state)
@@ -1416,8 +1515,8 @@ void tls_disconnect(TLS_Connection connection)
 {
 	TLS_Context* ctx = (TLS_Context*)connection.id;
 
-	#ifdef _WIN32
-		if (ctx->state >= 0) {
+	#ifdef TLS_WINDOWS
+		if (TLS_STATE_GET(ctx) >= 0) {
 			DWORD type = SCHANNEL_SHUTDOWN;
 
 			SecBuffer inbuffers[1];
@@ -1454,21 +1553,25 @@ void tls_disconnect(TLS_Connection connection)
 	#endif
 
 	#ifdef TLS_ANDROID
-		// Cancel and wait for connect thread if still running.
-		if (!ctx->connect_done) {
-			ctx->cancel_requested = 1;
-			// Close connect_socket to interrupt blocking connect/handshake.
-			if (ctx->connect_socket) {
-				int attached;
-				JNIEnv* env = tls_get_env(&attached);
-				jclass socket_class = TLS_JNI(env)->FindClass(env, "java/net/Socket");
-				jmethodID close_method = TLS_JNI(env)->GetMethodID(env, socket_class, "close", "()V");
-				TLS_JNI(env)->CallVoidMethod(env, ctx->connect_socket, close_method);
-				TLS_JNI(env)->ExceptionClear(env);
-				TLS_JNI(env)->DeleteLocalRef(env, socket_class);
-				tls_detach_if_needed(attached);
+		// The connect thread must always be joined exactly once, even when it finished long ago and
+		// tls_process already observed that. Cancel it first if it is still running.
+		if (!ctx->connect_joined) {
+			if (!ctx->connect_done) {
+				ctx->cancel_requested = 1;
+				// Close connect_socket to interrupt blocking connect/handshake.
+				if (ctx->connect_socket) {
+					int attached;
+					JNIEnv* env = tls_get_env(&attached);
+					jclass socket_class = TLS_JNI(env)->FindClass(env, "java/net/Socket");
+					jmethodID close_method = TLS_JNI(env)->GetMethodID(env, socket_class, "close", "()V");
+					TLS_JNI(env)->CallVoidMethod(env, ctx->connect_socket, close_method);
+					TLS_JNI(env)->ExceptionClear(env);
+					TLS_JNI(env)->DeleteLocalRef(env, socket_class);
+					tls_detach_if_needed(attached);
+				}
 			}
 			pthread_join(ctx->connect_thread, NULL);
+			ctx->connect_joined = 1;
 		}
 
 		// Clean up socket if connection succeeded.
@@ -1520,7 +1623,7 @@ void tls_disconnect(TLS_Connection connection)
 int tls_read(TLS_Connection connection, void* data, int size)
 {
 	TLS_Context* ctx = (TLS_Context*)connection.id;
-	if (ctx->state < 0) {
+	if (TLS_STATE_GET(ctx) < 0) {
 		return -1;
 	}
 
@@ -1528,8 +1631,8 @@ int tls_read(TLS_Connection connection, void* data, int size)
 		tls_packet_queue_pop(&ctx->q, &ctx->packet, &ctx->packet_size);
 	}
 
-	if (ctx->state == TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN && ctx->q.count == 0) {
-		ctx->state = TLS_STATE_DISCONNECTED;
+	if (TLS_STATE_GET(ctx) == TLS_STATE_DISCONNECTED_BUT_PACKETS_STILL_REMAIN && ctx->q.count == 0) {
+		TLS_STATE_SET(ctx, TLS_STATE_DISCONNECTED);
 	}
 
 	if (ctx->packet) {
@@ -1558,7 +1661,10 @@ int tls_read(TLS_Connection connection, void* data, int size)
 int tls_send(TLS_Connection connection, const void* data, int size)
 {
 	TLS_Context* ctx = (TLS_Context*)connection.id;
-	if (ctx->state <= 0) return -1;
+	// Reject errors and both disconnected states, but also a still-pending handshake: sending
+	// application data before the tunnel is up is never valid (and on Windows the encryption
+	// sizes are not even queried yet, so the send loop below could not make progress).
+	if (TLS_STATE_GET(ctx) <= 0 || TLS_STATE_GET(ctx) == TLS_STATE_PENDING) return -1;
 
 	#ifdef TLS_WINDOWS
 		while (size != 0) {
@@ -1584,7 +1690,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 			SECURITY_STATUS sec = EncryptMessage(&ctx->context, 0, &desc, 0);
 			if (sec != SEC_E_OK) {
 				// This should not happen, but just in case check it.
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				return -1;
 			}
 
@@ -1597,13 +1703,13 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 						int error = WSAGetLastError();
 						if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS) {
 							// Error sending data to socket, or server disconnected.
-							ctx->state = TLS_STATE_UNKNOWN_ERROR;
+							TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 							return -1;
 						}
 					#else
 						if (errno != EAGAIN && errno != EWOULDBLOCK) {
 							// Error sending data to socket, or server disconnected.
-							ctx->state = TLS_STATE_UNKNOWN_ERROR;
+							TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 							return -1;
 						}
 					#endif
@@ -1632,7 +1738,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 		if (TLS_JNI(env)->ExceptionCheck(env)) {
 			TLS_JNI(env)->ExceptionClear(env);
 			TLS_JNI(env)->DeleteLocalRef(env, output_class);
-			ctx->state = TLS_STATE_UNKNOWN_ERROR;
+			TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 			tls_detach_if_needed(attached);
 			return -1;
 		}
@@ -1642,7 +1748,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 
 		if (TLS_JNI(env)->ExceptionCheck(env)) {
 			TLS_JNI(env)->ExceptionClear(env);
-			ctx->state = TLS_STATE_UNKNOWN_ERROR;
+			TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 			tls_detach_if_needed(attached);
 			return -1;
 		}
@@ -1654,12 +1760,18 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 		void* copy = TLS_MALLOC(size);
 		TLS_MEMCPY(copy, data, size);
 		dispatch_data_t dispatch_data = dispatch_data_create(copy, size, ctx->dispatch, DISPATCH_DATA_DESTRUCTOR_FREE);
-		nw_connection_send(ctx->connection, dispatch_data, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, ^(nw_error_t error) {
-			if (error) {
-				int code = nw_error_get_error_code(error);
-				(void)code;
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+		// is_complete must be false: with the default (stream) message context, marking a send complete
+		// closes the connection's write side, i.e. it sends a FIN right after the payload. Servers that
+		// treat a half-closed client as gone (nginx among them) then drop the connection instead of
+		// responding, and any follow-up send (a POST body after the header) would be impossible.
+		// The completion block can fire after tls_disconnect, so it holds a reference like the
+		// receive callbacks do.
+		atomic_fetch_add_explicit(&ctx->refcount, 1, memory_order_relaxed);
+		nw_connection_send(ctx->connection, dispatch_data, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, false, ^(nw_error_t error) {
+			if (error && !ctx->disconnecting) {
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 			}
+			tls_ctx_release(ctx);
 		});
 		dispatch_release(dispatch_data);
 	#endif // TLS_APPLE
@@ -1673,7 +1785,7 @@ int tls_send(TLS_Connection connection, const void* data, int size)
 				bytes_written += w;
 			} else if (s2n_error_get_type(s2n_errno) != S2N_ERR_T_BLOCKED) {
 				// Error sending data to socket, or server disconnected.
-				ctx->state = TLS_STATE_UNKNOWN_ERROR;
+				TLS_STATE_SET(ctx, TLS_STATE_UNKNOWN_ERROR);
 				return -1;
 			}
 		}
