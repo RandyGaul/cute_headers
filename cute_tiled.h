@@ -1928,6 +1928,11 @@ int cute_tiled_read_properties_internal(cute_tiled_map_internal_t* m, cute_tiled
 		// Read in the property name.
 		cute_tiled_skip_until_after(m, ':');
 		cute_tiled_intern_string(m, &prop.name);
+		
+		// If the field "propertytype" exists, skip it.
+		cute_tiled_skip_until_after(m, '"');
+		if (cute_tiled_next(m) == 'p')
+			cute_tiled_skip_until_after(m, ',');
 
 		// Read in the property type. The value type is deduced while parsing, this is only used for float because the JSON format omits decimals on round floats.
 		cute_tiled_skip_until_after(m, ':');
