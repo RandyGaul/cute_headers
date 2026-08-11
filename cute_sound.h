@@ -915,9 +915,9 @@ typedef struct cs_context_t
 	float music_volume /* = 1.0f */;
 	float music_pitch /* = 1.0f */;
 	float sound_volume /* = 1.0f */;
-	void (*on_finish)(cs_playing_sound_t, void*); /* = NULL */;
+	void (*on_finish)(cs_playing_sound_t, void*); /* = NULL */
 	void* on_finish_udata /* = NULL */;
-	void (*on_music_finish)(void*); /* = NULL */;
+	void (*on_music_finish)(void*); /* = NULL */
 	void* on_music_finish_udata /* = NULL */;
 
 	bool music_paused /* = false */;
