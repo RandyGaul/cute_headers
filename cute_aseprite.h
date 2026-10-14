@@ -753,7 +753,7 @@ typedef struct ase_state_t
 
 static uint8_t s_read_uint8(ase_state_t* s)
 {
-	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint8_t));
+	CUTE_ASEPRITE_ASSERT((size_t)(s->end - s->in) >= sizeof(uint8_t));
 	uint8_t** p = &s->in;
 	uint8_t value = **p;
 	++(*p);
@@ -762,7 +762,7 @@ static uint8_t s_read_uint8(ase_state_t* s)
 
 static uint16_t s_read_uint16(ase_state_t* s)
 {
-	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint16_t));
+	CUTE_ASEPRITE_ASSERT((size_t)(s->end - s->in) >= sizeof(uint16_t));
 	uint8_t** p = &s->in;
 	uint16_t value;
 	value = (*p)[0];
@@ -781,7 +781,7 @@ static ase_fixed_t s_read_fixed(ase_state_t* s)
 
 static uint32_t s_read_uint32(ase_state_t* s)
 {
-	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint32_t));
+	CUTE_ASEPRITE_ASSERT((size_t)(s->end - s->in) >= sizeof(uint32_t));
 	uint8_t** p = &s->in;
 	uint32_t value;
 	value  = (*p)[0];
@@ -796,7 +796,7 @@ static uint32_t s_read_uint32(ase_state_t* s)
 // s_read_uint64() is not currently used.
 static uint64_t s_read_uint64(ase_state_t* s)
 {
-	CUTE_ASEPRITE_ASSERT(s->in <= s->end + sizeof(uint64_t));
+	CUTE_ASEPRITE_ASSERT((size_t)(s->end - s->in) >= sizeof(uint64_t));
 	uint8_t** p = &s->in;
 	uint64_t value;
 	value  = (*p)[0];
@@ -838,7 +838,7 @@ static const char* s_read_string(ase_state_t* s)
 
 static void s_skip(ase_state_t* ase, int num_bytes)
 {
-	CUTE_ASEPRITE_ASSERT(ase->in <= ase->end + num_bytes);
+	CUTE_ASEPRITE_ASSERT(num_bytes >= 0 && (ase->end - ase->in) >= num_bytes);
 	ase->in += num_bytes;
 }
 
