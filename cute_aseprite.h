@@ -572,7 +572,8 @@ static int s_stored(deflate_t* s)
 	uint16_t NLEN = (uint16_t)s_read_bits(s, 16);
 	uint16_t TILDE_NLEN = ~NLEN;
 	CUTE_ASEPRITE_CHECK(LEN == TILDE_NLEN, "Failed to find LEN and NLEN as complements within stored (uncompressed) stream.");
-	CUTE_ASEPRITE_CHECK(s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream.");
+	CUTE_ASEPRITE_CHECK((int)LEN <= s->bits_left / 8, "Stored block extends beyond end of input stream.");
+	CUTE_ASEPRITE_CHECK(s->out + LEN <= s->out_end, "Attempted to overwrite out buffer while outputting a stored block.");
 	p = s_ptr(s);
 	CUTE_ASEPRITE_MEMCPY(s->out, p, LEN);
 	s->out += LEN;

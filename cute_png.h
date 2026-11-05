@@ -541,7 +541,8 @@ static int cp_stored(cp_state_t* s)
 	uint16_t LEN = (uint16_t)cp_read_bits(s, 16);
 	uint16_t NLEN = (uint16_t)cp_read_bits(s, 16);
 	CUTE_PNG_CHECK(LEN == (uint16_t)(~NLEN), "Failed to find LEN and NLEN as complements within stored (uncompressed) stream.");
-	CUTE_PNG_CHECK(s->bits_left / 8 <= (int)LEN, "Stored block extends beyond end of input stream.");
+	CUTE_PNG_CHECK((int)LEN <= s->bits_left / 8, "Stored block extends beyond end of input stream.");
+	CUTE_PNG_CHECK(s->out + LEN <= s->out_end, "Attempted to overwrite out buffer while outputting a stored block.");
 	p = cp_ptr(s);
 	CUTE_PNG_MEMCPY(s->out, p, LEN);
 	s->out += LEN;
